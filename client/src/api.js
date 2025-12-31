@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Get token from localStorage
 const getToken = () => localStorage.getItem('token');
@@ -12,7 +12,7 @@ const authFetch = async (url, options = {}) => {
     ...options.headers
   };
 
-  const response = await fetch(`${API_BASE}${url}`, {
+  const response = await fetch(`${API_URL}${url}`, {
     ...options,
     headers
   });
@@ -29,7 +29,7 @@ const authFetch = async (url, options = {}) => {
 // Auth API
 export const authAPI = {
   requestCode: async (phone) => {
-    const res = await fetch(`${API_BASE}/auth/request-code`, {
+    const res = await fetch(`${API_URL}/auth/request-code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone })
@@ -38,7 +38,7 @@ export const authAPI = {
   },
 
   verifyCode: async (phone, code) => {
-    const res = await fetch(`${API_BASE}/auth/verify-code`, {
+    const res = await fetch(`${API_URL}/auth/verify-code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, code })
@@ -176,12 +176,12 @@ export const picksAPI = {
 // NFL API
 export const nflAPI = {
   getSeason: async () => {
-    const res = await fetch(`${API_BASE}/nfl/season`);
+    const res = await fetch(`${API_URL}/nfl/season`);
     return res.json();
   },
 
   getTeams: async () => {
-    const res = await fetch(`${API_BASE}/nfl/teams`);
+    const res = await fetch(`${API_URL}/nfl/teams`);
     return res.json();
   },
 
@@ -190,12 +190,12 @@ export const nflAPI = {
     if (season) params.append('season', season);
     if (seasonType) params.append('seasonType', seasonType);
     const queryString = params.toString();
-    const res = await fetch(`${API_BASE}/nfl/schedule${week ? `/${week}` : ''}${queryString ? `?${queryString}` : ''}`);
+    const res = await fetch(`${API_URL}/nfl/schedule${week ? `/${week}` : ''}${queryString ? `?${queryString}` : ''}`);
     return res.json();
   },
 
   getGameDetails: async (gameId) => {
-    const res = await fetch(`${API_BASE}/nfl/game/${gameId}`);
+    const res = await fetch(`${API_URL}/nfl/game/${gameId}`);
     return res.json();
   }
 };

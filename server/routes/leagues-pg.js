@@ -353,6 +353,7 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
         lm.strikes,
         lm.status,
         lm.joined_at,
+        lm.has_paid,
         u.display_name,
         u.phone
       FROM league_members lm
@@ -375,6 +376,7 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
         isCommissioner: league.commissioner_id === user.id,
         inviteCode: league.invite_code,
         doublePickWeeks: league.double_pick_weeks || [],
+        entryFee: parseFloat(league.entry_fee) || 0,
         myStrikes: membership.strikes,
         myStatus: membership.status,
         members: members.map(m => ({
@@ -384,6 +386,7 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
           strikes: m.strikes,
           status: m.status,
           joinedAt: m.joined_at,
+          hasPaid: m.has_paid || false,
           isMe: m.user_id === user.id
         }))
       }
@@ -401,7 +404,7 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const { leagueId } = req.params;
-    const { maxStrikes, startWeek, doublePickWeeks } = req.body;
+    const { maxStrikes, startWeek, doublePickWeeks, entryFee } = req.body;
 
     const league = await db.getOne('SELECT * FROM leagues WHERE id = $1', [leagueId]);
     
@@ -459,6 +462,17 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
       }
     }
 
+    // Handle entry fee
+    if (entryFee !== undefined) {
+      const newFee = parseFloat(entryFee) || 0;
+      const oldFee = parseFloat(league.entry_fee) || 0;
+      if (newFee !== oldFee) {
+        updates.push(`entry_fee = $${paramIndex++}`);
+        params.push(newFee);
+        changes.push(`Entry fee: $${oldFee} → $${newFee}`);
+      }
+    }
+
     if (updates.length === 0) {
       return res.json({ success: true, message: 'No changes made' });
     }
@@ -488,6 +502,60 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Update settings error:', error);
     res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// Toggle member payment status (commissioner only)
+router.post('/:leagueId/members/:memberId/payment', authMiddleware, async (req, res) => {
+  try {
+    const user = await getUser(req);
+    const { leagueId, memberId } = req.params;
+    const { hasPaid } = req.body;
+
+    const league = await db.getOne('SELECT * FROM leagues WHERE id = $1', [leagueId]);
+    if (!league) {
+      return res.status(404).json({ error: 'League not found' });
+    }
+    if (league.commissioner_id !== user.id) {
+      return res.status(403).json({ error: 'Only the commissioner can update payment status' });
+    }
+
+    const member = await db.getOne(`
+      SELECT lm.*, u.display_name 
+      FROM league_members lm 
+      LEFT JOIN users u ON lm.user_id = u.id 
+      WHERE lm.id = $1 AND lm.league_id = $2
+    `, [memberId, leagueId]);
+    
+    if (!member) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    await db.run(`
+      UPDATE league_members 
+      SET has_paid = $1, paid_at = $2
+      WHERE id = $3 AND league_id = $4
+    `, [hasPaid, hasPaid ? new Date().toISOString() : null, memberId, leagueId]);
+
+    try {
+      await db.run(`
+        INSERT INTO commissioner_actions (id, league_id, performed_by, action, reason, created_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+      `, [
+        require('uuid').v4(),
+        leagueId,
+        user.id,
+        hasPaid ? 'payment_received' : 'payment_removed',
+        `${member.display_name || 'Member'}: marked as ${hasPaid ? 'paid' : 'unpaid'}`
+      ]);
+    } catch (logError) {
+      console.log('Could not log action:', logError.message);
+    }
+
+    res.json({ success: true, hasPaid });
+  } catch (error) {
+    console.error('Update payment error:', error);
+    res.status(500).json({ error: 'Failed to update payment status' });
   }
 });
 
@@ -863,6 +931,7 @@ router.get('/:leagueId/standings', authMiddleware, async (req, res) => {
         lm.user_id,
         lm.strikes,
         lm.status,
+        lm.has_paid,
         u.display_name
       FROM league_members lm
       LEFT JOIN users u ON lm.user_id = u.id
@@ -957,6 +1026,7 @@ router.get('/:leagueId/standings', authMiddleware, async (req, res) => {
         displayName: member.display_name || `User-${member.user_id.slice(0, 6)}`,
         strikes: member.strikes,
         status: member.status,
+        hasPaid: member.has_paid || false,
         isMe: member.user_id === user.id,
         picks
       };

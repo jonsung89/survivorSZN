@@ -4,7 +4,7 @@ import {
   Trophy, Users, Settings, ChevronLeft, ChevronRight, 
   Crown, Plus, Minus, Check, X, Calendar, Loader2,
   AlertCircle, Eye, EyeOff, History, AlertTriangle, Edit3,
-  Pencil, CalendarCheck
+  Pencil, CalendarCheck, DollarSign
 } from 'lucide-react';
 import { leagueAPI, nflAPI, picksAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -61,7 +61,7 @@ export default function LeagueDetail() {
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [settings, setSettings] = useState({ maxStrikes: 1, doublePickWeeks: [] });
+  const [settings, setSettings] = useState({ maxStrikes: 1, doublePickWeeks: [], entryFee: 0 });
   const [savingSettings, setSavingSettings] = useState(false);
   const [modifyingStrike, setModifyingStrike] = useState(null);
   const [myPicks, setMyPicks] = useState([]);
@@ -73,6 +73,7 @@ export default function LeagueDetail() {
   const [selectedTeamsForPick, setSelectedTeamsForPick] = useState([]); // array of teamIds
   const [savingPick, setSavingPick] = useState(false);
   const [pickReason, setPickReason] = useState('');
+  const [togglingPayment, setTogglingPayment] = useState(null);
 
   const isCommissioner = league?.commissionerId === user?.id;
 
@@ -95,7 +96,8 @@ export default function LeagueDetail() {
         setLeague(leagueResult.league);
         setSettings({ 
           maxStrikes: leagueResult.league.maxStrikes,
-          doublePickWeeks: leagueResult.league.doublePickWeeks || []
+          doublePickWeeks: leagueResult.league.doublePickWeeks || [],
+          entryFee: leagueResult.league.entryFee || 0
         });
       } else if (leagueResult.error) {
         showToast(leagueResult.error, 'error');
@@ -160,7 +162,8 @@ export default function LeagueDetail() {
         setLeague({ 
           ...league, 
           maxStrikes: settings.maxStrikes,
-          doublePickWeeks: settings.doublePickWeeks 
+          doublePickWeeks: settings.doublePickWeeks,
+          entryFee: settings.entryFee
         });
         setShowSettings(false);
         showToast('Settings updated', 'success');
@@ -208,6 +211,30 @@ export default function LeagueDetail() {
     setModifyingStrike(null);
     setStrikeDialog(null);
     setStrikeReason('');
+  };
+
+  const handleTogglePayment = async (member) => {
+    setTogglingPayment(member.id);
+    try {
+      const result = await leagueAPI.togglePayment(leagueId, member.id, !member.hasPaid);
+      if (result.success) {
+        setLeague(prev => ({
+          ...prev,
+          members: prev.members.map(m => 
+            m.id === member.id ? { ...m, hasPaid: result.hasPaid } : m
+          )
+        }));
+        setStandings(prev => 
+          prev.map(m => 
+            m.memberId === member.id ? { ...m, hasPaid: result.hasPaid } : m
+          )
+        );
+        showToast(`${member.displayName} marked as ${result.hasPaid ? 'paid' : 'unpaid'}`, 'success');
+      }
+    } catch (error) {
+      showToast('Failed to update payment status', 'error');
+    }
+    setTogglingPayment(null);
   };
 
   // Get teams already used by a member
@@ -396,6 +423,67 @@ export default function LeagueDetail() {
         </div>
       </div>
 
+      {/* Prize Pot Display */}
+      {league.entryFee > 0 && (
+        <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 animate-in" style={{ animationDelay: '25ms' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-white/60 text-sm">Prize Pot</p>
+                <p className="text-2xl sm:text-3xl font-bold text-white">
+                  ${(league.entryFee * (league.members?.length || 0)).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap gap-4 sm:gap-6">
+              <div className="text-center">
+                <p className="text-white/60 text-xs sm:text-sm">Entry Fee</p>
+                <p className="text-lg sm:text-xl font-semibold text-white">${league.entryFee}</p>
+              </div>
+              {isCommissioner && (
+                <div className="text-center">
+                  <p className="text-white/60 text-xs sm:text-sm">Paid</p>
+                  <p className="text-lg sm:text-xl font-semibold text-green-400">
+                    {league.members?.filter(m => m.hasPaid).length || 0}/{league.members?.length || 0}
+                  </p>
+                </div>
+              )}
+              <div className="text-center">
+                <p className="text-white/60 text-xs sm:text-sm">Alive</p>
+                <p className="text-lg sm:text-xl font-semibold text-green-400">
+                  {league.members?.filter(m => m.status === 'active').length || 0}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-white/60 text-xs sm:text-sm">Eliminated</p>
+                <p className="text-lg sm:text-xl font-semibold text-red-400">
+                  {league.members?.filter(m => m.status === 'eliminated').length || 0}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-white/60 text-xs sm:text-sm">Weeks Left</p>
+                <p className="text-lg sm:text-xl font-semibold text-white">
+                  {currentWeek <= 18 
+                    ? `${Math.max(0, 18 - currentWeek + 1)}+4`
+                    : Math.max(0, 22 - currentWeek + 1)
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <p className="text-white/50 text-sm">
+              💰 Pot splits evenly among all survivors at season end, or winner-takes-all if one remains.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Week Selector */}
       <div className="glass-card rounded-xl sm:rounded-2xl p-2 sm:p-4 mb-4 sm:mb-6 animate-in" style={{ animationDelay: '50ms' }}>
         <div className="flex items-center justify-between">
@@ -547,6 +635,9 @@ export default function LeagueDetail() {
                 <th className="text-left px-4 py-3 text-white/60 text-sm font-medium">Player</th>
                 <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">Strikes</th>
                 <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">Status</th>
+                {isCommissioner && league.entryFee > 0 && (
+                  <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">Paid</th>
+                )}
                 <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">
                   Week {selectedWeek} Pick{(league.doublePickWeeks || []).includes(selectedWeek) ? 's' : ''}
                   {(league.doublePickWeeks || []).includes(selectedWeek) && (
@@ -618,59 +709,118 @@ export default function LeagueDetail() {
                         {member.status}
                       </span>
                     </td>
+                    {isCommissioner && league.entryFee > 0 && (
+                      <td className="text-center px-4 py-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTogglePayment(member);
+                          }}
+                          disabled={togglingPayment === member.memberId}
+                          className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                            member.hasPaid
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                          }`}
+                        >
+                          {togglingPayment === member.memberId ? (
+                            <Loader2 className="w-3 h-3 animate-spin inline" />
+                          ) : member.hasPaid ? (
+                            '✓ Paid'
+                          ) : (
+                            'Unpaid'
+                          )}
+                        </button>
+                      </td>
+                    )}
                     <td className="px-4 py-4">
                       <div className="flex items-center justify-center">
                         {displayPicks.length > 0 ? (
-                          <div className={`flex ${isDoublePick ? 'gap-3' : 'gap-2'} items-center`}>
-                            {displayPicks.map((pick, idx) => {
-                              if (pick.visible === false) {
+                          isDoublePick ? (
+                            // Double pick layout: each team as a card with logo, name, W/L
+                            <div className="flex items-center gap-4">
+                              {displayPicks.map((pick, idx) => {
+                                if (pick.visible === false) {
+                                  return (
+                                    <div key={idx} className="flex flex-col items-center">
+                                      <EyeOff className="w-7 h-7 text-white/40" />
+                                      <span className="text-white/40 text-xs mt-1">???</span>
+                                    </div>
+                                  );
+                                }
+                                const team = NFL_TEAMS[String(pick.teamId)];
                                 return (
-                                  <div key={idx} className="flex items-center gap-2 text-white/40">
-                                    <EyeOff className="w-4 h-4" />
-                                    {!isDoublePick && <span className="text-sm">Hidden</span>}
+                                  <div key={idx} className="flex flex-col items-center">
+                                    {team?.logo ? (
+                                      <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />
+                                    ) : (
+                                      <div 
+                                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                        style={{ backgroundColor: team?.color || '#666' }}
+                                      >
+                                        {team?.abbreviation}
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <span className="text-white/70 text-xs">{team?.abbreviation}</span>
+                                      {pick.result && pick.result !== 'pending' && (
+                                        <span className={`text-xs font-bold ${
+                                          pick.result === 'win' ? 'text-green-400' : 'text-red-400'
+                                        }`}>
+                                          {pick.result === 'win' ? 'W' : 'L'}
+                                        </span>
+                                      )}
+                                      {pick.result === 'pending' && pick.gameStatus === 'STATUS_IN_PROGRESS' && (
+                                        <span className="text-yellow-400 text-xs font-bold">●</span>
+                                      )}
+                                    </div>
                                   </div>
                                 );
-                              }
-                              const team = NFL_TEAMS[String(pick.teamId)];
-                              return (
-                                <div key={idx} className="flex items-center gap-2">
-                                  {team?.logo ? (
-                                    <img 
-                                      src={team.logo} 
-                                      alt={team.name}
-                                      className={`${isDoublePick ? 'w-6 h-6' : 'w-8 h-8'} object-contain`}
-                                    />
-                                  ) : (
-                                    <div 
-                                      className={`${isDoublePick ? 'w-6 h-6' : 'w-8 h-8'} rounded-full flex items-center justify-center text-white text-xs font-bold`}
-                                      style={{ backgroundColor: team?.color || '#666' }}
-                                    >
-                                      {team?.abbreviation || pick.teamId}
+                              })}
+                            </div>
+                          ) : (
+                            // Single pick layout - same vertical style
+                            <div className="flex items-center gap-4">
+                              {displayPicks.map((pick, idx) => {
+                                if (pick.visible === false) {
+                                  return (
+                                    <div key={idx} className="flex flex-col items-center">
+                                      <EyeOff className="w-7 h-7 text-white/40" />
+                                      <span className="text-white/40 text-xs mt-1">???</span>
                                     </div>
-                                  )}
-                                  <div className="text-left">
-                                    {!isDoublePick && <p className="text-white text-sm font-medium">{team?.name || pick.teamId}</p>}
-                                    {pick.result && pick.result !== 'pending' && (
-                                      <span className={`text-xs font-bold ${
-                                        pick.result === 'win' ? 'text-green-400' : 'text-red-400'
-                                      }`}>
-                                        {isDoublePick ? (pick.result === 'win' ? 'W' : 'L') : pick.result.toUpperCase()}
-                                      </span>
+                                  );
+                                }
+                                const team = NFL_TEAMS[String(pick.teamId)];
+                                return (
+                                  <div key={idx} className="flex flex-col items-center">
+                                    {team?.logo ? (
+                                      <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />
+                                    ) : (
+                                      <div 
+                                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                        style={{ backgroundColor: team?.color || '#666' }}
+                                      >
+                                        {team?.abbreviation}
+                                      </div>
                                     )}
-                                    {pick.result === 'pending' && pick.gameStatus === 'STATUS_IN_PROGRESS' && (
-                                      <span className="badge badge-pending text-xs live-pulse">LIVE</span>
-                                    )}
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <span className="text-white/70 text-xs">{team?.abbreviation}</span>
+                                      {pick.result && pick.result !== 'pending' && (
+                                        <span className={`text-xs font-bold ${
+                                          pick.result === 'win' ? 'text-green-400' : 'text-red-400'
+                                        }`}>
+                                          {pick.result === 'win' ? 'W' : 'L'}
+                                        </span>
+                                      )}
+                                      {pick.result === 'pending' && pick.gameStatus === 'STATUS_IN_PROGRESS' && (
+                                        <span className="text-yellow-400 text-xs font-bold">●</span>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
-                            {/* Show team names in a row for double pick weeks */}
-                            {isDoublePick && displayPicks.length > 0 && displayPicks.every(p => p.visible !== false) && (
-                              <span className="text-white/50 text-xs">
-                                {displayPicks.map(p => NFL_TEAMS[String(p.teamId)]?.abbreviation).join(' & ')}
-                              </span>
-                            )}
-                          </div>
+                                );
+                              })}
+                            </div>
+                          )
                         ) : selectedWeek >= league.startWeek ? (
                           <span className="text-white/40 text-sm">No pick{isDoublePick ? 's' : ''}</span>
                         ) : (
@@ -942,6 +1092,79 @@ export default function LeagueDetail() {
                   }
                 </p>
               </div>
+
+              {/* Entry Fee */}
+              <div>
+                <label className="block text-white/80 text-sm font-medium mb-2">
+                  Entry Fee per Member
+                </label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={settings.entryFee || ''}
+                    onChange={(e) => setSettings({ ...settings, entryFee: parseFloat(e.target.value) || 0 })}
+                    placeholder="0"
+                    className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue"
+                  />
+                </div>
+                <p className="text-white/40 text-xs mt-2">
+                  Total pot: ${((settings.entryFee || 0) * (league.members?.length || 0)).toLocaleString()}
+                </p>
+              </div>
+
+              {/* Payment Status - Members List */}
+              {settings.entryFee > 0 && (
+                <div>
+                  <label className="block text-white/80 text-sm font-medium mb-2">
+                    Payment Status
+                  </label>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {league.members?.map(member => (
+                      <div 
+                        key={member.id}
+                        className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+                            member.isMe ? 'bg-nfl-blue' : 'bg-white/10'
+                          }`}>
+                            <span className="text-white font-semibold">
+                              {member.displayName?.charAt(0)?.toUpperCase() || '?'}
+                            </span>
+                          </div>
+                          <span className="text-white text-sm">{member.displayName}</span>
+                        </div>
+                        <button
+                          onClick={() => handleTogglePayment(member)}
+                          disabled={togglingPayment === member.id}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+                            member.hasPaid
+                              ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                              : 'bg-white/10 text-white/60 hover:bg-white/15'
+                          }`}
+                        >
+                          {togglingPayment === member.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : member.hasPaid ? (
+                            <>
+                              <Check className="w-4 h-4" />
+                              Paid
+                            </>
+                          ) : (
+                            <>
+                              <DollarSign className="w-4 h-4" />
+                              Mark Paid
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <button

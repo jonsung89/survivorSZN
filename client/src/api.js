@@ -149,6 +149,15 @@ export const leagueAPI = {
       method: 'POST'
     });
     return res.json();
+  },
+
+  // Toggle member payment status (commissioner only)
+  togglePayment: async (leagueId, memberId, hasPaid) => {
+    const res = await authFetch(`/leagues/${leagueId}/members/${memberId}/payment`, {
+      method: 'POST',
+      body: JSON.stringify({ hasPaid })
+    });
+    return res.json();
   }
 };
 

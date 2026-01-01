@@ -277,6 +277,16 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
     const user = await getUser(req);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // Get current NFL week
+    let currentWeek = 1;
+    try {
+      const espnRes = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
+      const espnData = await espnRes.json();
+      currentWeek = espnData.week?.number || 1;
+    } catch (e) {
+      console.error('Failed to get current week:', e);
+    }
+
     const leagues = await db.getAll(`
       SELECT 
         l.id, 
@@ -288,13 +298,30 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
         l.commissioner_id,
         lm.strikes,
         lm.status as member_status,
-        COUNT(DISTINCT lm2.id) as member_count
+        COUNT(DISTINCT lm2.id) as member_count,
+        COUNT(DISTINCT CASE WHEN lm2.status = 'active' THEN lm2.id END) as active_count
       FROM leagues l
       INNER JOIN league_members lm ON l.id = lm.league_id AND lm.user_id = $1
       LEFT JOIN league_members lm2 ON l.id = lm2.league_id
       GROUP BY l.id, lm.strikes, lm.status
       ORDER BY l.created_at DESC
     `, [user.id]);
+
+    // Get current week picks
+    let pickMap = {};
+    try {
+      const picks = await db.getAll(`
+        SELECT league_id, team_id
+        FROM picks
+        WHERE user_id = $1 AND week = $2
+      `, [user.id, currentWeek]);
+      
+      picks.forEach(p => {
+        pickMap[p.league_id] = p.team_id;
+      });
+    } catch (pickError) {
+      console.error('Failed to get picks:', pickError);
+    }
 
     res.json({
       success: true,
@@ -308,7 +335,9 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
         strikes: l.strikes,
         memberStatus: l.member_status,
         memberCount: parseInt(l.member_count),
-        isCommissioner: l.commissioner_id === user.id
+        activeCount: parseInt(l.active_count),
+        isCommissioner: l.commissioner_id === user.id,
+        currentPickTeamId: pickMap[l.id] || null
       }))
     });
   } catch (error) {

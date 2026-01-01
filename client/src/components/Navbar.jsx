@@ -89,9 +89,9 @@ export default function Navbar() {
               </div>
               <div className="hidden sm:block">
                 <h1 className="font-display font-bold text-xl text-white tracking-wide">
-                  SURVIVOR
+                  SurvivorSZN
                 </h1>
-                <p className="text-[10px] text-white/50 -mt-1 tracking-widest">POOL</p>
+                <p className="text-[10px] text-white/50 -mt-1 tracking-widest">NFL Survivor Pool</p>
               </div>
             </Link>
 

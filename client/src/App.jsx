@@ -60,7 +60,7 @@ function AppLayout({ children }) {
   return (
     <div className="min-h-screen">
       <Navbar />
-      <main className="sm:pt-16">
+      <main className="pt-4">
         {children}
       </main>
     </div>

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Trophy, User, ArrowRight, Check, Loader2, Zap, Shield, Users } from 'lucide-react';
+import { Trophy, User, ArrowRight, Check, Loader2, Zap, Shield, Users, Mail } from 'lucide-react';
 
 export default function Onboarding() {
-  const { user, updateDisplayName, completeOnboarding } = useAuth();
+  const { user, updateDisplayName, updateEmail, completeOnboarding } = useAuth();
   const [step, setStep] = useState(1);
   const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -32,6 +33,28 @@ export default function Onboarding() {
     setSaving(false);
   };
 
+  const handleSaveEmail = async () => {
+    // Email is optional, but validate if provided
+    if (email.trim() && !email.includes('@')) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      if (email.trim()) {
+        await updateEmail(email.trim());
+      }
+      setStep(3);
+    } catch (err) {
+      setError('Something went wrong');
+    }
+
+    setSaving(false);
+  };
+
   const handleComplete = () => {
     completeOnboarding();
   };
@@ -43,6 +66,7 @@ export default function Onboarding() {
         <div className="flex justify-center gap-2 mb-8">
           <div className={`w-2 h-2 rounded-full transition-all ${step >= 1 ? 'bg-nfl-blue w-8' : 'bg-white/20'}`} />
           <div className={`w-2 h-2 rounded-full transition-all ${step >= 2 ? 'bg-nfl-blue w-8' : 'bg-white/20'}`} />
+          <div className={`w-2 h-2 rounded-full transition-all ${step >= 3 ? 'bg-nfl-blue w-8' : 'bg-white/20'}`} />
         </div>
 
         {step === 1 && (
@@ -103,6 +127,67 @@ export default function Onboarding() {
         )}
 
         {step === 2 && (
+          <div className="animate-in text-center">
+            {/* Email Header */}
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Mail className="w-10 h-10 text-white" />
+            </div>
+            
+            <h1 className="text-3xl font-display font-bold text-white mb-2">
+              Add Your Email
+            </h1>
+            <p className="text-white/60 mb-8">
+              Help commissioners identify you and receive updates
+            </p>
+
+            {/* Email Input */}
+            <div className="glass-card rounded-2xl p-6 text-left mb-6">
+              <label className="block text-white/80 text-sm font-medium mb-2">
+                <Mail className="w-4 h-4 inline mr-2" />
+                Email address (optional)
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError('');
+                }}
+                placeholder="your@email.com"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-nfl-blue text-lg"
+                autoFocus
+              />
+              {error && (
+                <p className="text-red-400 text-sm mt-2">{error}</p>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep(3)}
+                className="flex-1 py-4 px-4 rounded-xl bg-white/5 text-white/70 hover:bg-white/10 transition-colors"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleSaveEmail}
+                disabled={saving}
+                className="flex-1 btn-primary flex items-center justify-center gap-2 text-lg py-4"
+              >
+                {saving ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    Continue
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
           <div className="animate-in text-center">
             {/* Success Header */}
             <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6">

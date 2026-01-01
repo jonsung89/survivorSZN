@@ -8,16 +8,17 @@ import Dashboard from './pages/Dashboard';
 import Leagues from './pages/Leagues';
 import CreateLeague from './pages/CreateLeague';
 import JoinLeague from './pages/JoinLeague';
-import JoinByInvite from './pages/JoinByInvite';
+import JoinByInvite from './components/JoinByInvite';
 import LeagueDetail from './pages/LeagueDetail';
 import MakePick from './pages/MakePick';
 import Schedule from './pages/Schedule';
 import Loading from './components/Loading';
 import Onboarding from './components/Onboarding';
+import EmailPrompt from './components/EmailPrompt';
 
 // Protected route wrapper
 function ProtectedRoute({ children }) {
-  const { user, loading, showOnboarding } = useAuth();
+  const { user, loading, showOnboarding, showEmailPrompt } = useAuth();
   
   if (loading) {
     return <Loading fullScreen />;
@@ -32,7 +33,12 @@ function ProtectedRoute({ children }) {
     return <Onboarding />;
   }
   
-  return children;
+  return (
+    <>
+      {children}
+      {showEmailPrompt && <EmailPrompt />}
+    </>
+  );
 }
 
 // Public route (redirect to dashboard if logged in)
@@ -61,7 +67,7 @@ function AppLayout({ children }) {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="pt-4 flex-1">
+      <main className="sm:pt-16 flex-1">
         {children}
       </main>
       <Footer />

@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 import { leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { useToast } from '../components/Toast';
-import Loading from '../components/Loading';
+import { useToast } from './Toast';
+import Loading from './Loading';
 
 export default function JoinByInvite() {
   const { inviteCode } = useParams();

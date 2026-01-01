@@ -15,20 +15,19 @@ router.post('/sync', authMiddleware, async (req, res) => {
     let isNewUser = false;
     
     if (user) {
-      // Update existing user - ONLY update phone/email if provided
-      // NEVER touch display_name - user controls that themselves
+      // Update existing user - only update email if provided and not already set
       await db.run(`
         UPDATE users 
         SET phone = COALESCE($1, phone), 
-            email = COALESCE($2, email), 
+            email = COALESCE(NULLIF($2, ''), email), 
+            display_name = COALESCE(NULLIF($3, ''), display_name), 
             updated_at = NOW()
-        WHERE firebase_uid = $3
-      `, [phone, email, firebaseUid]);
+        WHERE firebase_uid = $4
+      `, [phone, email, displayName, firebaseUid]);
       
-      // Re-fetch to get the actual stored values
       user = await db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [firebaseUid]);
     } else {
-      // Create new user - set display_name from OAuth provider initially
+      // Create new user
       isNewUser = true;
       const id = uuidv4();
       await db.run(`
@@ -39,7 +38,6 @@ router.post('/sync', authMiddleware, async (req, res) => {
       user = await db.getOne('SELECT * FROM users WHERE id = $1', [id]);
     }
 
-    // Return user data - displayName from database is the source of truth
     res.json({
       id: user.id,
       phone: user.phone,
@@ -60,38 +58,49 @@ router.put('/display-name', authMiddleware, async (req, res) => {
     const { displayName } = req.body;
     
     if (!displayName || displayName.trim().length < 2) {
-      return res.status(400).json({ success: false, error: 'Display name must be at least 2 characters' });
+      return res.status(400).json({ error: 'Display name must be at least 2 characters' });
     }
 
-    // Check if user exists
-    const existingUser = await db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
-    
-    if (!existingUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-
-    // Update the display name
-    const updateResult = await db.getOne(`
+    await db.run(`
       UPDATE users SET display_name = $1, updated_at = NOW()
       WHERE firebase_uid = $2
-      RETURNING id, display_name
     `, [displayName.trim(), req.firebaseUser.uid]);
 
-    if (!updateResult) {
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Update failed - check RLS policies in Supabase' 
-      });
-    }
+    const user = await db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
 
     res.json({
-      success: true,
-      id: updateResult.id,
-      displayName: updateResult.display_name
+      id: user.id,
+      displayName: user.display_name
     });
   } catch (error) {
     console.error('Update display name error:', error);
-    res.status(500).json({ success: false, error: 'Failed to update display name' });
+    res.status(500).json({ error: 'Failed to update display name' });
+  }
+});
+
+// Update email
+router.put('/email', authMiddleware, async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    await db.run(`
+      UPDATE users SET email = $1, updated_at = NOW()
+      WHERE firebase_uid = $2
+    `, [email.trim().toLowerCase(), req.firebaseUser.uid]);
+
+    const user = await db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
+
+    res.json({
+      success: true,
+      email: user.email
+    });
+  } catch (error) {
+    console.error('Update email error:', error);
+    res.status(500).json({ error: 'Failed to update email' });
   }
 });
 
@@ -134,7 +143,6 @@ router.get('/pending-picks', authMiddleware, async (req, res) => {
     }
 
     res.json({
-      success: true,
       currentWeek: week,
       pendingPicks
     });

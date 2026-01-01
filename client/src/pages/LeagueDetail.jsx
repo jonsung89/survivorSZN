@@ -571,6 +571,9 @@ export default function LeagueDetail() {
                         {member.displayName}
                         {member.isMe && <span className="text-xs text-nfl-blue">(You)</span>}
                       </p>
+                      {member.email && (
+                        <p className="text-white/40 text-xs truncate max-w-[150px]">{member.email}</p>
+                      )}
                     </div>
                   </div>
                   <span className={`badge text-xs ${member.status === 'active' ? 'badge-active' : 'badge-eliminated'}`}>
@@ -687,6 +690,9 @@ export default function LeagueDetail() {
                               <span className="text-xs text-nfl-blue">(You)</span>
                             )}
                           </p>
+                          {member.email && (
+                            <p className="text-white/40 text-xs">{member.email}</p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -1166,7 +1172,12 @@ export default function LeagueDetail() {
                               {member.displayName?.charAt(0)?.toUpperCase() || '?'}
                             </span>
                           </div>
-                          <span className="text-white text-sm">{member.displayName}</span>
+                          <div>
+                            <span className="text-white text-sm">{member.displayName}</span>
+                            {member.email && (
+                              <p className="text-white/40 text-xs">{member.email}</p>
+                            )}
+                          </div>
                         </div>
                         <button
                           onClick={() => handleTogglePayment(member)}

@@ -227,6 +227,14 @@ export const userAPI = {
     return res.json();
   },
 
+  updateEmail: async (email) => {
+    const res = await authFetch('/users/email', {
+      method: 'PUT',
+      body: JSON.stringify({ email })
+    });
+    return res.json();
+  },
+
   getPendingPicks: async () => {
     const res = await authFetch('/users/pending-picks');
     return res.json();

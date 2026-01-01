@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showEmailPrompt, setShowEmailPrompt] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -24,11 +25,18 @@ export function AuthProvider({ children }) {
             displayName: firebaseUser.displayName
           });
           
+          console.log('User data from sync:', userData);
+          console.log('Email value:', userData.email, '| Is falsy:', !userData.email);
+          
           setUser({ ...userData, firebaseUser });
           
           // Show onboarding for new users
           if (userData.isNewUser) {
             setShowOnboarding(true);
+          } else if (!userData.email) {
+            // Show email prompt for existing users without email
+            console.log('Showing email prompt - no email found');
+            setShowEmailPrompt(true);
           }
         } catch (err) {
           console.error('Failed to sync user:', err);
@@ -38,6 +46,7 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('token');
         setUser(null);
         setShowOnboarding(false);
+        setShowEmailPrompt(false);
       }
       setLoading(false);
     });
@@ -49,6 +58,7 @@ export function AuthProvider({ children }) {
     await firebaseSignOut(auth);
     setUser(null);
     setShowOnboarding(false);
+    setShowEmailPrompt(false);
   };
 
   const updateDisplayName = async (displayName) => {
@@ -59,8 +69,25 @@ export function AuthProvider({ children }) {
     return result;
   };
 
+  const updateEmail = async (email) => {
+    const result = await userAPI.updateEmail(email);
+    if (result.success) {
+      setUser(prev => ({ ...prev, email: result.email }));
+      setShowEmailPrompt(false);
+    }
+    return result;
+  };
+
   const completeOnboarding = () => {
     setShowOnboarding(false);
+    // Show email prompt if they still don't have one after onboarding
+    if (!user?.email) {
+      setShowEmailPrompt(true);
+    }
+  };
+
+  const dismissEmailPrompt = () => {
+    setShowEmailPrompt(false);
   };
 
   const refreshToken = async () => {
@@ -75,10 +102,13 @@ export function AuthProvider({ children }) {
       user, 
       loading, 
       signOut, 
-      updateDisplayName, 
+      updateDisplayName,
+      updateEmail,
       refreshToken,
       showOnboarding,
-      completeOnboarding
+      completeOnboarding,
+      showEmailPrompt,
+      dismissEmailPrompt
     }}>
       {children}
     </AuthContext.Provider>

@@ -377,6 +377,7 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
         inviteCode: league.invite_code,
         doublePickWeeks: league.double_pick_weeks || [],
         entryFee: parseFloat(league.entry_fee) || 0,
+        prizePotOverride: league.prize_pot_override ? parseFloat(league.prize_pot_override) : null,
         myStrikes: membership.strikes,
         myStatus: membership.status,
         members: members.map(m => ({
@@ -404,7 +405,7 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const { leagueId } = req.params;
-    const { maxStrikes, startWeek, doublePickWeeks, entryFee } = req.body;
+    const { maxStrikes, startWeek, doublePickWeeks, entryFee, prizePotOverride } = req.body;
 
     const league = await db.getOne('SELECT * FROM leagues WHERE id = $1', [leagueId]);
     
@@ -442,7 +443,7 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     if (doublePickWeeks !== undefined) {
       // Validate weeks array
       const validWeeks = Array.isArray(doublePickWeeks) 
-        ? doublePickWeeks.filter(w => w >= 1 && w <= 18)
+        ? doublePickWeeks.filter(w => w >= 1 && w <= 22)
         : [];
       const currentWeeks = league.double_pick_weeks || [];
       
@@ -454,7 +455,7 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
         
         if (validWeeks.length === 0) {
           changes.push('Double pick weeks: disabled');
-        } else if (validWeeks.length === 18) {
+        } else if (validWeeks.length === 22) {
           changes.push('Double pick weeks: all weeks');
         } else {
           changes.push(`Double pick weeks: ${validWeeks.sort((a,b) => a-b).join(', ')}`);
@@ -470,6 +471,21 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
         updates.push(`entry_fee = $${paramIndex++}`);
         params.push(newFee);
         changes.push(`Entry fee: $${oldFee} → $${newFee}`);
+      }
+    }
+
+    // Handle prize pot override (null to use calculated, number to override)
+    if (prizePotOverride !== undefined) {
+      const newOverride = prizePotOverride === null || prizePotOverride === '' ? null : parseFloat(prizePotOverride);
+      const oldOverride = league.prize_pot_override ? parseFloat(league.prize_pot_override) : null;
+      if (newOverride !== oldOverride) {
+        updates.push(`prize_pot_override = $${paramIndex++}`);
+        params.push(newOverride);
+        if (newOverride === null) {
+          changes.push(`Prize pot: manual override removed (using calculated)`);
+        } else {
+          changes.push(`Prize pot: manually set to $${newOverride}`);
+        }
       }
     }
 

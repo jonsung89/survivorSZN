@@ -61,7 +61,7 @@ export default function LeagueDetail() {
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [settings, setSettings] = useState({ maxStrikes: 1, doublePickWeeks: [], entryFee: 0 });
+  const [settings, setSettings] = useState({ maxStrikes: 1, doublePickWeeks: [], entryFee: 0, prizePotOverride: null });
   const [savingSettings, setSavingSettings] = useState(false);
   const [modifyingStrike, setModifyingStrike] = useState(null);
   const [myPicks, setMyPicks] = useState([]);
@@ -97,7 +97,8 @@ export default function LeagueDetail() {
         setSettings({ 
           maxStrikes: leagueResult.league.maxStrikes,
           doublePickWeeks: leagueResult.league.doublePickWeeks || [],
-          entryFee: leagueResult.league.entryFee || 0
+          entryFee: leagueResult.league.entryFee || 0,
+          prizePotOverride: leagueResult.league.prizePotOverride
         });
       } else if (leagueResult.error) {
         showToast(leagueResult.error, 'error');
@@ -163,7 +164,8 @@ export default function LeagueDetail() {
           ...league, 
           maxStrikes: settings.maxStrikes,
           doublePickWeeks: settings.doublePickWeeks,
-          entryFee: settings.entryFee
+          entryFee: settings.entryFee,
+          prizePotOverride: settings.prizePotOverride
         });
         setShowSettings(false);
         showToast('Settings updated', 'success');
@@ -424,7 +426,7 @@ export default function LeagueDetail() {
       </div>
 
       {/* Prize Pot Display */}
-      {league.entryFee > 0 && (
+      {(league.entryFee > 0 || league.prizePotOverride) && (
         <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 animate-in" style={{ animationDelay: '25ms' }}>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -432,18 +434,20 @@ export default function LeagueDetail() {
                 <DollarSign className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="text-white/60 text-sm">Prize Pot</p>
+                <p className="text-white/60 text-sm">Prize Pot{isCommissioner && league.prizePotOverride ? ' (Manual)' : ''}</p>
                 <p className="text-2xl sm:text-3xl font-bold text-white">
-                  ${(league.entryFee * (league.members?.length || 0)).toLocaleString()}
+                  ${(league.prizePotOverride || (league.entryFee * (league.members?.length || 0))).toLocaleString()}
                 </p>
               </div>
             </div>
             
             <div className="flex flex-wrap gap-4 sm:gap-6">
-              <div className="text-center">
-                <p className="text-white/60 text-xs sm:text-sm">Entry Fee</p>
-                <p className="text-lg sm:text-xl font-semibold text-white">${league.entryFee}</p>
-              </div>
+              {league.entryFee > 0 && (
+                <div className="text-center">
+                  <p className="text-white/60 text-xs sm:text-sm">Entry Fee</p>
+                  <p className="text-lg sm:text-xl font-semibold text-white">${league.entryFee}</p>
+                </div>
+              )}
               {isCommissioner && (
                 <div className="text-center">
                   <p className="text-white/60 text-xs sm:text-sm">Paid</p>
@@ -1052,10 +1056,10 @@ export default function LeagueDetail() {
                     <button
                       onClick={() => setSettings({ 
                         ...settings, 
-                        doublePickWeeks: Array.from({ length: 18 - league.startWeek + 1 }, (_, i) => league.startWeek + i)
+                        doublePickWeeks: Array.from({ length: 22 - league.startWeek + 1 }, (_, i) => league.startWeek + i)
                       })}
                       className={`px-2 py-1 text-xs rounded-lg transition-all ${
-                        settings.doublePickWeeks.length === (18 - league.startWeek + 1)
+                        settings.doublePickWeeks.length === (22 - league.startWeek + 1)
                           ? 'bg-nfl-blue text-white'
                           : 'bg-white/10 text-white/60 hover:bg-white/15'
                       }`}
@@ -1065,7 +1069,7 @@ export default function LeagueDetail() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {Array.from({ length: 18 - league.startWeek + 1 }, (_, i) => league.startWeek + i).map(weekNum => (
+                  {Array.from({ length: 22 - league.startWeek + 1 }, (_, i) => league.startWeek + i).map(weekNum => (
                     <button
                       key={weekNum}
                       onClick={() => {
@@ -1078,8 +1082,10 @@ export default function LeagueDetail() {
                       className={`w-10 h-10 rounded-lg font-medium text-sm transition-all ${
                         (settings.doublePickWeeks || []).includes(weekNum)
                           ? 'bg-orange-500 text-white'
+                          : weekNum > 18
+                          ? 'bg-purple-500/20 text-white/60 hover:bg-purple-500/30'
                           : 'bg-white/10 text-white/60 hover:bg-white/15'
-                      }`}
+                      } ${(settings.doublePickWeeks || []).includes(weekNum) ? '' : ''}`}
                     >
                       {weekNum}
                     </button>
@@ -1111,12 +1117,37 @@ export default function LeagueDetail() {
                   />
                 </div>
                 <p className="text-white/40 text-xs mt-2">
-                  Total pot: ${((settings.entryFee || 0) * (league.members?.length || 0)).toLocaleString()}
+                  Calculated pot: ${((settings.entryFee || 0) * (league.members?.length || 0)).toLocaleString()}
+                </p>
+              </div>
+
+              {/* Manual Pot Override */}
+              <div>
+                <label className="block text-white/80 text-sm font-medium mb-2">
+                  Manual Prize Pot Override
+                </label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={settings.prizePotOverride || ''}
+                    onChange={(e) => setSettings({ ...settings, prizePotOverride: e.target.value ? parseFloat(e.target.value) : null })}
+                    placeholder="Leave empty to use calculated"
+                    className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue"
+                  />
+                </div>
+                <p className="text-white/40 text-xs mt-2">
+                  {settings.prizePotOverride 
+                    ? `Using manual pot: $${settings.prizePotOverride.toLocaleString()}`
+                    : 'Leave empty to calculate from entry fee × members'
+                  }
                 </p>
               </div>
 
               {/* Payment Status - Members List */}
-              {settings.entryFee > 0 && (
+              {(settings.entryFee > 0 || settings.prizePotOverride) && (
                 <div>
                   <label className="block text-white/80 text-sm font-medium mb-2">
                     Payment Status

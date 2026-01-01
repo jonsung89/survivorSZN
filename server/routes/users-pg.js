@@ -15,15 +15,39 @@ router.post('/sync', authMiddleware, async (req, res) => {
     let isNewUser = false;
     
     if (user) {
-      // Update existing user - only update email if provided and not already set
+      // Update existing user - DON'T overwrite display_name or email if already set
+      const updates = ['updated_at = NOW()'];
+      const values = [];
+      let paramCount = 0;
+      
+      // Always update phone if provided
+      if (phone) {
+        paramCount++;
+        updates.push(`phone = $${paramCount}`);
+        values.push(phone);
+      }
+      
+      // Only update email if not already set in DB
+      if (email && !user.email) {
+        paramCount++;
+        updates.push(`email = $${paramCount}`);
+        values.push(email);
+      }
+      
+      // Only update display_name if not already set in DB
+      if (displayName && !user.display_name) {
+        paramCount++;
+        updates.push(`display_name = $${paramCount}`);
+        values.push(displayName);
+      }
+      
+      paramCount++;
+      values.push(firebaseUid);
+      
       await db.run(`
-        UPDATE users 
-        SET phone = COALESCE($1, phone), 
-            email = COALESCE(NULLIF($2, ''), email), 
-            display_name = COALESCE(NULLIF($3, ''), display_name), 
-            updated_at = NOW()
-        WHERE firebase_uid = $4
-      `, [phone, email, displayName, firebaseUid]);
+        UPDATE users SET ${updates.join(', ')}
+        WHERE firebase_uid = $${paramCount}
+      `, values);
       
       user = await db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [firebaseUid]);
     } else {

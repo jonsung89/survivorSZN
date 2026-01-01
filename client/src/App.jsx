@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
 import Navbar from './components/Navbar';
+import Footer from './components/Footer';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Leagues from './pages/Leagues';
@@ -55,14 +56,15 @@ function PublicRoute({ children }) {
   return children;
 }
 
-// Main layout with navbar
+// Main layout with navbar and footer
 function AppLayout({ children }) {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="pt-4">
+      <main className="pt-4 flex-1">
         {children}
       </main>
+      <Footer />
     </div>
   );
 }

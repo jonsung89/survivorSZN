@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Trophy, Lock, Users, Loader2 } from 'lucide-react';
+import { Search, Trophy, Lock, Users, Loader2, Check } from 'lucide-react';
 import { leagueAPI } from '../api';
 import { useToast } from '../components/Toast';
 
@@ -70,6 +70,12 @@ export default function JoinLeague() {
   };
 
   const handleSelectLeague = (league) => {
+    // If already joined, navigate to the league
+    if (league.isJoined) {
+      navigate(`/league/${league.id}`);
+      return;
+    }
+    
     if (selectedLeague?.id === league.id) {
       setSelectedLeague(null);
       setPassword('');
@@ -129,7 +135,9 @@ export default function JoinLeague() {
               <div
                 key={league.id}
                 className={`p-4 rounded-lg border transition-all ${
-                  selectedLeague?.id === league.id
+                  league.isJoined
+                    ? 'bg-green-500/10 border-green-500/30'
+                    : selectedLeague?.id === league.id
                     ? 'bg-nfl-blue/10 border-nfl-blue'
                     : 'bg-white/5 border-white/10 hover:border-white/20'
                 }`}
@@ -139,13 +147,27 @@ export default function JoinLeague() {
                   onClick={() => handleSelectLeague(league)}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-nfl-blue to-blue-700 flex items-center justify-center flex-shrink-0">
-                      <Trophy className="w-5 h-5 text-white" />
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      league.isJoined 
+                        ? 'bg-gradient-to-br from-green-600 to-green-700'
+                        : 'bg-gradient-to-br from-nfl-blue to-blue-700'
+                    }`}>
+                      {league.isJoined ? (
+                        <Check className="w-5 h-5 text-white" />
+                      ) : (
+                        <Trophy className="w-5 h-5 text-white" />
+                      )}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-white truncate">{league.name}</h3>
-                        {league.hasPassword && (
+                        {league.isJoined && (
+                          <span className="flex items-center gap-1 text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
+                            <Check className="w-3 h-3" />
+                            Joined
+                          </span>
+                        )}
+                        {!league.isJoined && league.hasPassword && (
                           <span className="flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">
                             <Lock className="w-3 h-3" />
                             Private
@@ -165,16 +187,18 @@ export default function JoinLeague() {
                   
                   <button
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      selectedLeague?.id === league.id
+                      league.isJoined
+                        ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                        : selectedLeague?.id === league.id
                         ? 'bg-white/10 text-white'
                         : 'bg-white/5 text-white/70 hover:bg-white/10'
                     }`}
                   >
-                    {selectedLeague?.id === league.id ? 'Cancel' : 'Join'}
+                    {league.isJoined ? 'View' : selectedLeague?.id === league.id ? 'Cancel' : 'Join'}
                   </button>
                 </div>
 
-                {selectedLeague?.id === league.id && (
+                {!league.isJoined && selectedLeague?.id === league.id && (
                   <div className="flex gap-3 mt-4 pt-4 border-t border-white/10">
                     <div className="relative flex-1">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />

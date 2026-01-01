@@ -140,16 +140,17 @@ router.get('/available', authMiddleware, async (req, res) => {
         l.status,
         l.password_hash IS NOT NULL as has_password,
         COUNT(lm.id) as member_count,
-        u.display_name as commissioner_name
+        u.display_name as commissioner_name,
+        CASE WHEN my_membership.user_id IS NOT NULL THEN true ELSE false END as is_joined
       FROM leagues l
       LEFT JOIN league_members lm ON l.id = lm.league_id
       LEFT JOIN users u ON l.commissioner_id = u.id
+      LEFT JOIN league_members my_membership ON l.id = my_membership.league_id AND my_membership.user_id = $1
       WHERE l.status = 'active'
-        AND l.id NOT IN (
-          SELECT league_id FROM league_members WHERE user_id = $1
-        )
-      GROUP BY l.id, u.display_name
-      ORDER BY COUNT(lm.id) DESC
+      GROUP BY l.id, u.display_name, my_membership.user_id
+      ORDER BY 
+        CASE WHEN my_membership.user_id IS NOT NULL THEN 0 ELSE 1 END,
+        COUNT(lm.id) DESC
       LIMIT 50
     `, [user.id]);
 
@@ -163,7 +164,8 @@ router.get('/available', authMiddleware, async (req, res) => {
         season: l.season,
         memberCount: parseInt(l.member_count),
         commissionerName: l.commissioner_name || 'Unknown',
-        hasPassword: l.has_password
+        hasPassword: l.has_password,
+        isJoined: l.is_joined
       }))
     });
   } catch (error) {

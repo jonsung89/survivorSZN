@@ -67,7 +67,7 @@ function AppLayout({ children }) {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="sm:pt-16 flex-1">
+      <main className="pt-4 flex-1">
         {children}
       </main>
       <Footer />

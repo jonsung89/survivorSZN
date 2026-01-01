@@ -343,6 +343,21 @@ export default function LeagueDetail() {
     return currentPicks.length < requiredPicks;
   };
 
+  // Check if user can edit their current pick (has pick but game hasn't started)
+  const canEditPick = () => {
+    if (!league) return false;
+    const myMember = league.members?.find(m => m.userId === user?.id);
+    if (myMember?.status === 'eliminated') return false;
+    if (currentWeek < league.startWeek) return false;
+    
+    const currentPicks = getPicksForWeek(currentWeek);
+    if (currentPicks.length === 0) return false;
+    
+    // Check if any pick's game hasn't started yet (user can edit on the pick page)
+    // We'll just show the button and let MakePick.jsx handle the locked state
+    return true;
+  };
+
   if (loading) {
     return <Loading fullScreen />;
   }
@@ -381,13 +396,21 @@ export default function LeagueDetail() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {needsPickThisWeek() && (
+          {needsPickThisWeek() ? (
             <Link
               to={`/league/${leagueId}/pick`}
               className="btn-primary flex items-center gap-2 text-sm sm:text-base py-2.5 sm:py-3 flex-1 sm:flex-none justify-center animate-pulse-glow"
             >
               <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
               Make Pick
+            </Link>
+          ) : canEditPick() && (
+            <Link
+              to={`/league/${leagueId}/pick`}
+              className="btn-secondary flex items-center gap-2 text-sm sm:text-base py-2.5 sm:py-3 flex-1 sm:flex-none justify-center"
+            >
+              <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" />
+              Edit Pick
             </Link>
           )}
           

@@ -21,6 +21,7 @@ export default function MakePick() {
   const [games, setGames] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [currentPick, setCurrentPick] = useState(null);
+  const [currentPickLocked, setCurrentPickLocked] = useState(false);
   const [usedTeams, setUsedTeams] = useState([]);
 
   useEffect(() => {
@@ -92,7 +93,7 @@ export default function MakePick() {
             ...item.team,
             isLocked: item.isLocked,
             isUsed: item.isUsed || usedTeams.includes(item.team?.id),
-            isCurrentPick: item.isCurrentPick
+            isCurrentPick: item.isPickedThisWeek || false
           };
           
           if (item.game.isHome) {
@@ -107,16 +108,36 @@ export default function MakePick() {
           .sort((a, b) => new Date(a.date) - new Date(b.date));
         
         setGames(gamesArray);
+        
+        // Check if current pick's game is locked
+        if (data.currentPicks && data.currentPicks.length > 0) {
+          const pick = data.currentPicks[0];
+          setCurrentPick(pick);
+          setSelectedTeam(pick.teamId);
+          
+          // Find if the current pick's team game is locked
+          const currentPickTeam = data.teams.find(t => t.team?.id === pick.teamId);
+          if (currentPickTeam?.isLocked) {
+            setCurrentPickLocked(true);
+          } else {
+            setCurrentPickLocked(false);
+          }
+        } else if (data.currentPick) {
+          // Backward compatibility
+          setCurrentPick(data.currentPick);
+          setSelectedTeam(data.currentPick.teamId);
+          const currentPickTeam = data.teams.find(t => t.team?.id === data.currentPick.teamId);
+          setCurrentPickLocked(currentPickTeam?.isLocked || false);
+        } else {
+          setCurrentPick(null);
+          setSelectedTeam(null);
+          setCurrentPickLocked(false);
+        }
       } else {
         setGames([]);
-      }
-      
-      if (data.currentPick) {
-        setCurrentPick(data.currentPick);
-        setSelectedTeam(data.currentPick.teamId);
-      } else {
         setCurrentPick(null);
         setSelectedTeam(null);
+        setCurrentPickLocked(false);
       }
     } catch (error) {
       console.error('Load teams error:', error);
@@ -176,7 +197,9 @@ export default function MakePick() {
           <ArrowLeft className="w-5 h-5 text-white" />
         </Link>
         <div className="min-w-0">
-          <h1 className="font-display text-xl sm:text-2xl font-bold text-white">Make Your Pick</h1>
+          <h1 className="font-display text-xl sm:text-2xl font-bold text-white">
+            {currentPick ? 'Change Your Pick' : 'Make Your Pick'}
+          </h1>
           <p className="text-white/50 text-sm truncate">{league.name}</p>
         </div>
       </div>
@@ -206,6 +229,38 @@ export default function MakePick() {
         </button>
       </div>
 
+      {/* Current Pick Display */}
+      {currentPick && (
+        <div className={`rounded-xl p-3 sm:p-4 mb-3 sm:mb-4 border ${
+          currentPickLocked 
+            ? 'bg-red-500/10 border-red-500/20' 
+            : 'bg-amber-500/10 border-amber-500/20'
+        }`}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div className={`text-sm font-medium ${currentPickLocked ? 'text-red-400' : 'text-amber-400'}`}>
+                {currentPickLocked ? 'Pick Locked:' : 'Current Pick:'}
+              </div>
+              {games.map(g => {
+                const team = g.homeTeam?.id === currentPick.teamId ? g.homeTeam : 
+                             g.awayTeam?.id === currentPick.teamId ? g.awayTeam : null;
+                if (!team) return null;
+                return (
+                  <div key={team.id} className="flex items-center gap-2">
+                    {team.logo && <img src={team.logo} alt="" className="w-6 h-6 object-contain" />}
+                    <span className="text-white font-medium">{team.name || team.abbreviation}</span>
+                    {currentPickLocked && <Lock className="w-4 h-4 text-red-400" />}
+                  </div>
+                );
+              })}
+            </div>
+            <div className={`text-xs ${currentPickLocked ? 'text-red-400' : 'text-white/50'}`}>
+              {currentPickLocked ? 'Game has started - cannot change' : 'Select a new team to change'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Games */}
       {games.length === 0 ? (
         <div className="text-center py-12">
@@ -226,20 +281,25 @@ export default function MakePick() {
       )}
 
       {/* Fixed Bottom Bar */}
-      {selectedTeam && (
+      {selectedTeam && !(selectedTeam === currentPick?.teamId && currentPickLocked) && (
         <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-gray-900/95 border-t border-white/10">
           <div className="max-w-2xl mx-auto">
             <button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || getSelectedTeam()?.isLocked}
               className="w-full bg-green-600 hover:bg-green-500 text-white py-3 sm:py-4 flex items-center justify-center gap-2 text-base font-semibold disabled:opacity-50 rounded-xl transition-colors"
             >
               {submitting ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
+              ) : getSelectedTeam()?.isLocked ? (
+                <>
+                  <Lock className="w-5 h-5" />
+                  <span>Game Started - Locked</span>
+                </>
               ) : (
                 <>
                   <Check className="w-5 h-5" />
-                  <span>Confirm</span>
+                  <span>{currentPick ? 'Update Pick' : 'Confirm Pick'}</span>
                   {getSelectedTeam()?.logo ? (
                     <img src={getSelectedTeam().logo} alt="" className="w-6 h-6 object-contain" />
                   ) : (

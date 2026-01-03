@@ -222,6 +222,16 @@ export const nflAPI = {
   getTeamInfo: async (teamId) => {
     const res = await fetch(`${API_URL}/nfl/teams/${teamId}/info`);
     return res.json();
+  },
+
+  // Get team's game status for a specific week (scores, live info, recent plays)
+  getTeamGameStatus: async (teamId, week, season = null) => {
+    const params = new URLSearchParams();
+    if (week) params.append('week', week);
+    if (season) params.append('season', season);
+    const queryString = params.toString();
+    const res = await fetch(`${API_URL}/nfl/teams/${teamId}/game${queryString ? `?${queryString}` : ''}`);
+    return res.json();
   }
 };
 

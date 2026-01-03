@@ -8,7 +8,8 @@ const {
   getGameDetails,
   getTeamInjuries,
   getInjuriesForTeams,
-  getTeamInfo
+  getTeamInfo,
+  getTeamGameStatus
 } = require('../services/nfl');
 
 // Get current season info
@@ -52,7 +53,36 @@ router.get('/teams/:teamId/info', async (req, res) => {
   }
 });
 
+// Get live game status for a team in a specific week
+// IMPORTANT: This must come BEFORE /teams/:teamId to avoid route conflicts
+router.get('/teams/:teamId/game', async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const { week, season } = req.query;
+    
+    if (!week) {
+      return res.status(400).json({ error: 'Week is required' });
+    }
+    
+    const gameStatus = await getTeamGameStatus(
+      teamId, 
+      parseInt(week), 
+      season ? parseInt(season) : null
+    );
+    
+    if (!gameStatus) {
+      return res.status(404).json({ error: 'Game not found for this team and week' });
+    }
+    
+    res.json(gameStatus);
+  } catch (error) {
+    console.error('Get team game status error:', error);
+    res.status(500).json({ error: 'Failed to get game status' });
+  }
+});
+
 // Get single team (basic info)
+// IMPORTANT: This must come AFTER more specific /teams/:teamId/* routes
 router.get('/teams/:teamId', (req, res) => {
   try {
     const team = getTeam(req.params.teamId);

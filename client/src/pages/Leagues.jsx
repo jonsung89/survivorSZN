@@ -92,7 +92,7 @@ export default function Leagues() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base sm:text-xl font-semibold text-white group-hover:text-nfl-blue transition-colors truncate">
+                    <h2 className="text-base sm:text-xl font-semibold text-white/90 group-hover:text-white transition-colors truncate">
                       {league.name}
                     </h2>
                     {league.isCommissioner && (

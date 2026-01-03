@@ -462,6 +462,8 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
         shortName: event.shortName,
         status: competition?.status?.type?.name || 'STATUS_SCHEDULED',
         statusDetail: competition?.status?.type?.shortDetail || '',
+        period: competition?.status?.period || null,
+        clock: competition?.status?.displayClock || null,
         venue: competition?.venue?.fullName,
         broadcast: competition?.broadcasts?.[0]?.names?.[0] || '',
         homeTeam: buildTeamData(homeCompetitor, true),
@@ -1185,20 +1187,10 @@ const getTeamInfo = async (teamId) => {
           // Check injury status
           const injury = injuryMap.get(player.name.toLowerCase());
           
-          // For QBs, estimate games started based on passing yards
-          // A QB with <150 passing yards likely never started a full game
-          // (just garbage time/mop-up duty)
-          let gamesStarted = 0;
-          if (player.position === 'QB') {
-            const passingYards = parseStatNumber(rawStats.passingYards) || 0;
-            const gamesPlayed = parseStatNumber(rawStats.gamesPlayed) || 0;
-            // If they have significant passing yards (150+ = at least one full game's worth), 
-            // consider them to have started games
-            if (passingYards >= 150) {
-              // Estimate starts based on yards - roughly 200 yards per start
-              gamesStarted = Math.max(1, Math.min(gamesPlayed, Math.ceil(passingYards / 200)));
-            }
-          }
+          // For QBs, track games started using actual gamesPlayed from core API
+          const gamesStarted = player.position === 'QB' 
+            ? parseStatNumber(rawStats.gamesPlayed) || 0
+            : 0;
           
           return {
             ...player,
@@ -1246,7 +1238,7 @@ const getTeamInfo = async (teamId) => {
       const qbCandidates = candidatesWithStats.filter(p => p.position === 'QB');
       qbCandidates.sort((a, b) => b.primaryStat - a.primaryStat);
       const qbsWhoStarted = qbCandidates.filter(p => p.gamesStarted >= 1);
-      console.log('QBs with estimated starts:', qbsWhoStarted.map(q => `${q.name} (${q.gamesStarted} GS, ${q.rawStats?.passingYards || 0} yds)`));
+      console.log('QBs with games played:', qbsWhoStarted.map(q => `${q.name} (${q.gamesStarted} GP)`));
       
       if (qbsWhoStarted.length >= 2) {
         // Multiple QBs started - show top 2
@@ -1430,6 +1422,112 @@ const getTeamInfo = async (teamId) => {
   }
 };
 
+/**
+ * Get current game status for a team in a specific week
+ * Returns score, period, clock, situation, and recent plays
+ */
+const getTeamGameStatus = async (teamId, week, season = null) => {
+  try {
+    // Get current season if not provided
+    if (!season) {
+      const { season: currentSeason } = await getCurrentSeason();
+      season = currentSeason;
+    }
+    
+    // Get week schedule
+    const games = await getWeekSchedule(season, week);
+    
+    // Find the game for this team
+    const game = games.find(g => 
+      String(g.homeTeam?.id) === String(teamId) || 
+      String(g.awayTeam?.id) === String(teamId)
+    );
+    
+    if (!game) {
+      return null; // Team not playing this week (bye)
+    }
+    
+    const isHome = String(game.homeTeam?.id) === String(teamId);
+    const team = isHome ? game.homeTeam : game.awayTeam;
+    const opponent = isHome ? game.awayTeam : game.homeTeam;
+    
+    // Determine game state
+    let state = 'pre';
+    if (game.status === 'STATUS_FINAL') {
+      state = 'post';
+    } else if (game.status === 'STATUS_IN_PROGRESS') {
+      state = 'in';
+    }
+    
+    const result = {
+      gameId: game.id,
+      gameDate: game.date,
+      state,
+      status: game.status,
+      statusDetail: game.statusDetail,
+      period: game.period || null,
+      clock: game.clock || null,
+      venue: game.venue,
+      broadcast: game.broadcast,
+      team: {
+        id: team.id,
+        name: team.name,
+        abbreviation: team.abbreviation,
+        logo: team.logo,
+        score: team.score ?? 0,
+        isHome,
+        record: team.record || null,
+        streak: team.streak || null,
+        avgPointsFor: team.avgPointsFor || null,
+        avgPointsAgainst: team.avgPointsAgainst || null
+      },
+      opponent: {
+        id: opponent.id,
+        name: opponent.name,
+        abbreviation: opponent.abbreviation,
+        logo: opponent.logo,
+        score: opponent.score ?? 0,
+        record: opponent.record || null,
+        streak: opponent.streak || null,
+        avgPointsFor: opponent.avgPointsFor || null,
+        avgPointsAgainst: opponent.avgPointsAgainst || null
+      },
+      odds: game.odds || null
+    };
+    
+    // For live games, fetch additional details
+    if (state === 'in') {
+      try {
+        const details = await getGameDetails(game.id);
+        if (details) {
+          // Add situation info
+          if (details.situation) {
+            result.situation = {
+              possession: details.situation.possession,
+              down: details.situation.down,
+              distance: details.situation.distance,
+              yardLine: details.situation.yardLine,
+              isRedZone: details.situation.isRedZone
+            };
+          }
+          
+          // Add recent plays
+          if (details.recentPlays) {
+            result.recentPlays = details.recentPlays.slice(0, 5);
+          }
+        }
+      } catch (e) {
+        console.log('Failed to get live game details:', e.message);
+      }
+    }
+    
+    return result;
+  } catch (error) {
+    console.error(`Get team game status error for team ${teamId}:`, error);
+    return null;
+  }
+};
+
 module.exports = {
   getCurrentSeason,
   getWeekSchedule,
@@ -1441,5 +1539,6 @@ module.exports = {
   getGameDetails,
   getTeamInjuries,
   getInjuriesForTeams,
-  getTeamInfo
+  getTeamInfo,
+  getTeamGameStatus
 };

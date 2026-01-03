@@ -74,6 +74,8 @@ export default function LeagueDetail() {
   const [savingPick, setSavingPick] = useState(false);
   const [pickReason, setPickReason] = useState('');
   const [togglingPayment, setTogglingPayment] = useState(null);
+  const [gameStatuses, setGameStatuses] = useState({}); // { teamId: gameStatus }
+  const [loadingGameStatuses, setLoadingGameStatuses] = useState(false);
 
   const isCommissioner = league?.commissionerId === user?.id;
 
@@ -147,13 +149,81 @@ export default function LeagueDetail() {
       const result = await leagueAPI.getStandings(leagueId, week);
       if (result.success && result.standings) {
         setStandings(result.standings);
+        // Fetch game statuses for all picked teams
+        fetchGameStatuses(result.standings, week);
       } else if (Array.isArray(result.standings)) {
         setStandings(result.standings);
+        fetchGameStatuses(result.standings, week);
       }
     } catch (error) {
       console.error('Failed to load standings:', error);
     }
   };
+
+  // Fetch game status for all picked teams in the selected week
+  const fetchGameStatuses = async (standingsData, week) => {
+    // Collect all unique team IDs from picks
+    const teamIds = new Set();
+    standingsData.forEach(member => {
+      const weekData = member.picks?.[week];
+      const weekPicks = weekData?.picks || [];
+      const displayPicks = weekPicks.length > 0 
+        ? weekPicks 
+        : (weekData?.teamId ? [{ teamId: weekData.teamId }] : []);
+      
+      displayPicks.forEach(pick => {
+        if (pick.teamId && pick.visible !== false) {
+          teamIds.add(String(pick.teamId));
+        }
+      });
+    });
+
+    if (teamIds.size === 0) return;
+
+    setLoadingGameStatuses(true);
+    
+    try {
+      // Fetch game status for each team in parallel
+      const statusPromises = Array.from(teamIds).map(async (teamId) => {
+        try {
+          const status = await nflAPI.getTeamGameStatus(teamId, week);
+          return { teamId, status };
+        } catch (e) {
+          console.log(`Failed to get game status for team ${teamId}:`, e);
+          return { teamId, status: null };
+        }
+      });
+
+      const results = await Promise.all(statusPromises);
+      const newStatuses = {};
+      results.forEach(({ teamId, status }) => {
+        if (status) {
+          newStatuses[teamId] = status;
+        }
+      });
+      setGameStatuses(newStatuses);
+    } catch (error) {
+      console.error('Failed to fetch game statuses:', error);
+    }
+    
+    setLoadingGameStatuses(false);
+  };
+
+  // Auto-refresh game statuses for live games
+  useEffect(() => {
+    // Check if any games are live
+    const hasLiveGames = Object.values(gameStatuses).some(g => g?.state === 'in');
+    
+    if (hasLiveGames) {
+      const interval = setInterval(() => {
+        if (standings.length > 0 && selectedWeek) {
+          fetchGameStatuses(standings, selectedWeek);
+        }
+      }, 30000); // Refresh every 30 seconds for live games
+      
+      return () => clearInterval(interval);
+    }
+  }, [gameStatuses, standings, selectedWeek]);
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
@@ -537,7 +607,7 @@ export default function LeagueDetail() {
               >
                 <span className="hidden sm:inline">Week </span>{week}
                 {week === currentWeek && selectedWeek !== week && (
-                  <span className="ml-1 text-xs text-nfl-blue">●</span>
+                  <span className="ml-1.5 w-2 h-2 bg-emerald-400 rounded-full inline-block animate-pulse"></span>
                 )}
               </button>
             ))}
@@ -552,6 +622,245 @@ export default function LeagueDetail() {
           </button>
         </div>
       </div>
+
+      {/* Your Pick Card - Prominent Game Display */}
+      {(() => {
+        // Find current user's pick for selected week
+        const myStanding = standings.find(m => m.isMe);
+        const weekData = myStanding?.picks?.[selectedWeek];
+        const weekPicks = weekData?.picks || [];
+        const displayPicks = weekPicks.length > 0 
+          ? weekPicks 
+          : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result }] : []);
+        
+        if (displayPicks.length === 0 && selectedWeek >= league.startWeek && selectedWeek <= currentWeek) {
+          // No pick made yet for current/past week
+          return (
+            <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 animate-in" style={{ animationDelay: '75ms' }}>
+              <div className="text-center py-4">
+                <AlertCircle className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
+                <p className="text-white font-medium">No pick for Week {selectedWeek}</p>
+                {selectedWeek === currentWeek && (
+                  <Link
+                    to={`/league/${leagueId}/pick`}
+                    className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-nfl-blue rounded-lg text-white font-medium hover:bg-nfl-blue/80 transition-colors"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    Make Pick
+                  </Link>
+                )}
+              </div>
+            </div>
+          );
+        }
+        
+        if (displayPicks.length === 0) return null;
+        
+        return (
+          <div className="mb-4 sm:mb-6 animate-in" style={{ animationDelay: '75ms' }}>
+            <h3 className="text-sm font-medium text-white/60 mb-3">Your Week {selectedWeek} Pick{displayPicks.length > 1 ? 's' : ''}</h3>
+            
+            <div className={`grid gap-4 ${displayPicks.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+              {displayPicks.map((pick, idx) => {
+                const team = NFL_TEAMS[String(pick.teamId)];
+                const gameStatus = gameStatuses[String(pick.teamId)];
+                
+                if (!gameStatus) {
+                  // Loading or no game data
+                  return (
+                    <div key={idx} className="bg-white/5 rounded-xl p-4">
+                      <div className="flex items-center gap-3">
+                        {team?.logo && <img src={team.logo} alt={team.name} className="w-12 h-12" />}
+                        <div>
+                          <p className="text-white font-semibold text-lg">{team?.city} {team?.name}</p>
+                          <p className="text-white/40 text-sm">Loading game info...</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                const isLive = gameStatus.state === 'in';
+                const isFinal = gameStatus.state === 'post';
+                const isScheduled = gameStatus.state === 'pre';
+                const isWinning = gameStatus.team.score > gameStatus.opponent.score;
+                const isLosing = gameStatus.team.score < gameStatus.opponent.score;
+                
+                // Calculate countdown
+                const getCountdown = () => {
+                  if (!gameStatus.gameDate) return null;
+                  const now = new Date();
+                  const gameTime = new Date(gameStatus.gameDate);
+                  const diff = gameTime - now;
+                  if (diff <= 0) return null;
+                  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                  if (days > 0) return `${days}d ${hours}h`;
+                  if (hours > 0) return `${hours}h ${minutes}m`;
+                  return `${minutes}m`;
+                };
+                
+                const formatGameTime = () => {
+                  if (!gameStatus.gameDate) return '';
+                  const date = new Date(gameStatus.gameDate);
+                  return date.toLocaleString('en-US', { 
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true 
+                  });
+                };
+                
+                // SCHEDULED GAMES - keep exactly as is
+                if (isScheduled) {
+                  return (
+                    <div key={idx} className="rounded-xl overflow-hidden bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 border border-white/10">
+                      <div className="flex items-center">
+                        {/* Left team (your pick) */}
+                        <div className="flex-1 flex items-center gap-3 p-4">
+                          <div className="relative flex-shrink-0">
+                            {team?.logo && <img src={team.logo} alt={team.name} className="w-14 h-14" />}
+                            <div className="absolute -top-1 -right-1 bg-emerald-500 rounded-full p-0.5" title="Your Pick">
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-white font-semibold text-sm">{team?.abbreviation}</span>
+                            {gameStatus.team.record && (
+                              <span className="text-white/40 text-xs">{gameStatus.team.record}</span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Center - Game time */}
+                        <div className="flex-shrink-0 px-4 py-6 text-center min-w-[100px]">
+                          <p className="text-white/60 text-xs">{formatGameTime()}</p>
+                          {getCountdown() && (
+                            <p className="text-emerald-400 text-lg font-bold mt-1">{getCountdown()}</p>
+                          )}
+                        </div>
+                        
+                        {/* Right team (opponent) */}
+                        {(() => {
+                          const oppTeamData = NFL_TEAMS[String(gameStatus.opponent.id)];
+                          return (
+                            <div className="flex-1 flex items-center justify-end gap-3 p-4">
+                              <div className="flex flex-col items-end">
+                                <span className="text-white/70 font-semibold text-sm">{oppTeamData?.abbreviation || gameStatus.opponent.abbreviation}</span>
+                                {gameStatus.opponent.record && (
+                                  <span className="text-white/40 text-xs">{gameStatus.opponent.record}</span>
+                                )}
+                              </div>
+                              <div className="flex-shrink-0">
+                                {gameStatus.opponent.logo && (
+                                  <img src={gameStatus.opponent.logo} alt={oppTeamData?.name} className="w-14 h-14 opacity-70" />
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // LIVE/FINAL GAMES - ESPN style with team name under logo, record under score
+                const oppTeamData = NFL_TEAMS[String(gameStatus.opponent.id)];
+                const oppWinning = gameStatus.opponent.score > gameStatus.team.score;
+                
+                return (
+                  <div key={idx} className="rounded-xl overflow-hidden bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 border border-white/10">
+                    <div className="flex items-center">
+                      {/* Left team (your pick) */}
+                      <div className={`flex items-center gap-4 p-4 ${
+                        isWinning ? 'bg-gradient-to-r from-emerald-500/10 to-transparent' :
+                        isLosing ? 'bg-gradient-to-r from-red-500/10 to-transparent' : ''
+                      }`}>
+                        {/* Logo with name under */}
+                        <div className="flex flex-col items-center">
+                          <div className="relative">
+                            {team?.logo && <img src={team.logo} alt={team.name} className="w-12 h-12" />}
+                            <div className={`absolute -top-1 -right-1 ${isLosing ? 'bg-red-500' : 'bg-emerald-500'} rounded-full p-0.5`} title="Your Pick">
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                          </div>
+                          <span className="text-white font-medium text-sm mt-1">{team?.abbreviation}</span>
+                        </div>
+                        
+                        {/* Score with record under */}
+                        <div className="flex flex-col items-center">
+                          <span className={`text-4xl font-bold ${isWinning ? 'text-white' : 'text-white/40'}`}>
+                            {gameStatus.team.score}
+                          </span>
+                          {gameStatus.team.record && (
+                            <span className="text-white/40 text-xs">{gameStatus.team.record}</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Center - Status */}
+                      <div className="flex-1 text-center px-2">
+                        {isLive ? (
+                          <div>
+                            <p className="text-white text-lg font-bold">{gameStatus.clock}</p>
+                            <div className="flex items-center justify-center gap-1.5 text-red-400">
+                              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                              <span className="text-xs font-bold uppercase">{gameStatus.period}Q</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-white/50 text-sm font-medium">Final</p>
+                        )}
+                      </div>
+                      
+                      {/* Right team (opponent) */}
+                      <div className={`flex items-center gap-4 p-4 ${
+                        oppWinning ? 'bg-gradient-to-l from-white/5 to-transparent' : ''
+                      }`}>
+                        {/* Score with record under */}
+                        <div className="flex flex-col items-center">
+                          <span className={`text-4xl font-bold ${oppWinning ? 'text-white' : 'text-white/40'}`}>
+                            {gameStatus.opponent.score}
+                          </span>
+                          {gameStatus.opponent.record && (
+                            <span className="text-white/40 text-xs">{gameStatus.opponent.record}</span>
+                          )}
+                        </div>
+                        
+                        {/* Logo with name under */}
+                        <div className="flex flex-col items-center">
+                          {gameStatus.opponent.logo && (
+                            <img src={gameStatus.opponent.logo} alt={oppTeamData?.name} className={`w-12 h-12 ${oppWinning ? '' : 'opacity-60'}`} />
+                          )}
+                          <span className="text-white/70 font-medium text-sm mt-1">{oppTeamData?.abbreviation || gameStatus.opponent.abbreviation}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Live game situation */}
+                    {isLive && gameStatus.situation && (
+                      <div className="px-4 pb-3 border-t border-white/5">
+                        <div className={`flex items-center justify-center gap-2 text-xs pt-2 ${
+                          gameStatus.situation.isRedZone ? 'text-red-400' : 'text-white/50'
+                        }`}>
+                          <span>
+                            {gameStatus.situation.possession && `${gameStatus.situation.possession} ball`}
+                            {gameStatus.situation.down && ` • ${gameStatus.situation.down}${['st','nd','rd','th'][gameStatus.situation.down-1] || 'th'} & ${gameStatus.situation.distance}`}
+                            {gameStatus.situation.yardLine && ` at ${gameStatus.situation.yardLine}`}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Standings Table */}
       <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden animate-in" style={{ animationDelay: '100ms' }}>
@@ -688,7 +997,7 @@ export default function LeagueDetail() {
                 // For backward compatibility, if no picks array but has teamId, create one
                 const displayPicks = weekPicks.length > 0 
                   ? weekPicks 
-                  : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result, visible: weekData.visible, gameStatus: weekData.gameStatus }] : []);
+                  : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result, visible: weekData.visible, gameStatus: weekData.gameStatus, game: weekData.game }] : []);
                 
                 return (
                   <tr 
@@ -803,16 +1112,13 @@ export default function LeagueDetail() {
                                           {pick.result === 'win' ? 'W' : 'L'}
                                         </span>
                                       )}
-                                      {pick.result === 'pending' && pick.gameStatus === 'STATUS_IN_PROGRESS' && (
-                                        <span className="text-yellow-400 text-xs font-bold">●</span>
-                                      )}
                                     </div>
                                   </div>
                                 );
                               })}
                             </div>
                           ) : (
-                            // Single pick layout - same vertical style
+                            // Single pick layout
                             <div className="flex items-center gap-4">
                               {displayPicks.map((pick, idx) => {
                                 if (pick.visible === false) {
@@ -844,9 +1150,6 @@ export default function LeagueDetail() {
                                         }`}>
                                           {pick.result === 'win' ? 'W' : 'L'}
                                         </span>
-                                      )}
-                                      {pick.result === 'pending' && pick.gameStatus === 'STATUS_IN_PROGRESS' && (
-                                        <span className="text-yellow-400 text-xs font-bold">●</span>
                                       )}
                                     </div>
                                   </div>

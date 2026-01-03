@@ -141,14 +141,14 @@ export default function TeamInfoDialog({ team, onClose, data: externalData, load
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-sm font-medium text-white">{player.name}</span>
           {showPosition && (
-            <span className="text-xs text-white/30">({player.position})</span>
+            <span className="text-xs text-white/50">({player.position})</span>
           )}
           <InjuryBadge injury={player.injury} />
         </div>
-        <div className="text-sm text-white/50 mt-0.5">
+        <div className="text-sm text-white/70 mt-0.5">
           {Object.entries(player.stats || {}).map(([k, v]) => `${v} ${k}`).join(', ')}
           {player.perGameStats && Object.keys(player.perGameStats).length > 0 && (
-            <span className="text-white/30 ml-1">
+            <span className="text-white/60 ml-1">
               ({Object.entries(player.perGameStats).map(([k, v]) => `${v} ${k}`).join(', ')})
             </span>
           )}

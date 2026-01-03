@@ -224,7 +224,9 @@ export default function Schedule() {
   };
 
   const isGameLive = (game) => {
-    return game.status === 'STATUS_IN_PROGRESS' || game.status === 'in_progress';
+    // Include halftime and other mid-game statuses
+    const liveStatuses = ['STATUS_IN_PROGRESS', 'STATUS_HALFTIME', 'STATUS_END_PERIOD', 'in_progress'];
+    return liveStatuses.includes(game.status);
   };
 
   const getStatusDisplay = (game) => {
@@ -232,7 +234,7 @@ export default function Schedule() {
       return (
         <span className="flex items-center gap-1.5 text-xs font-semibold text-red-400 bg-red-500/20 px-2 py-1 rounded-full">
           <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-          LIVE
+          {game.statusDetail || 'LIVE'}
         </span>
       );
     }
@@ -958,7 +960,7 @@ export default function Schedule() {
               {isLive ? (
                 <span className="flex items-center justify-end gap-1.5 text-xs font-semibold text-red-400">
                   <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                  LIVE
+                  {game.statusDetail || 'LIVE'}
                 </span>
               ) : isPast ? (
                 <span className="text-xs font-medium text-white/50">Final</span>
@@ -975,7 +977,7 @@ export default function Schedule() {
           
           {/* Expanded Content - Mobile */}
           {isExpanded && (
-            isPast ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
+            (isPast || isLive) ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
           )}
         </div>
 
@@ -1075,7 +1077,7 @@ export default function Schedule() {
           
           {/* Expanded Content - Desktop */}
           {isExpanded && (
-            isPast ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
+            (isPast || isLive) ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
           )}
         </div>
       </div>

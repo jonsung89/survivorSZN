@@ -3,9 +3,12 @@ const router = express.Router();
 const { 
   getCurrentSeason, 
   getWeekSchedule, 
-  getAllTeams, 
+  getTeams, 
   getTeam,
-  getGameDetails
+  getGameDetails,
+  getTeamInjuries,
+  getInjuriesForTeams,
+  getTeamInfo
 } = require('../services/nfl');
 
 // Get current season info
@@ -22,7 +25,7 @@ router.get('/season', async (req, res) => {
 // Get all teams
 router.get('/teams', (req, res) => {
   try {
-    const teams = getAllTeams();
+    const teams = getTeams();
     res.json(teams);
   } catch (error) {
     console.error('Get teams error:', error);
@@ -30,7 +33,26 @@ router.get('/teams', (req, res) => {
   }
 });
 
-// Get single team
+// Get comprehensive team info (news, stats, roster, schedule)
+router.get('/teams/:teamId/info', async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    console.log('Fetching comprehensive team info for:', teamId);
+    
+    const info = await getTeamInfo(teamId);
+    
+    if (!info) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+    
+    res.json(info);
+  } catch (error) {
+    console.error('Get team info error:', error);
+    res.status(500).json({ error: 'Failed to get team info' });
+  }
+});
+
+// Get single team (basic info)
 router.get('/teams/:teamId', (req, res) => {
   try {
     const team = getTeam(req.params.teamId);
@@ -134,6 +156,46 @@ router.get('/game/:gameId', async (req, res) => {
   } catch (error) {
     console.error('Get game details error:', error);
     res.status(500).json({ error: 'Failed to get game details' });
+  }
+});
+
+// Get injuries for a specific team
+router.get('/injuries/:teamId', async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    console.log('Fetching injuries for team:', teamId);
+    
+    const injuries = await getTeamInjuries(teamId);
+    
+    res.json({
+      teamId,
+      injuries,
+      count: injuries.length
+    });
+  } catch (error) {
+    console.error('Get injuries error:', error);
+    res.status(500).json({ error: 'Failed to get injuries' });
+  }
+});
+
+// Get injuries for multiple teams (comma-separated IDs)
+router.get('/injuries', async (req, res) => {
+  try {
+    const { teams } = req.query;
+    
+    if (!teams) {
+      return res.status(400).json({ error: 'teams query parameter required (comma-separated team IDs)' });
+    }
+    
+    const teamIds = teams.split(',').map(id => id.trim());
+    console.log('Fetching injuries for teams:', teamIds);
+    
+    const injuries = await getInjuriesForTeams(teamIds);
+    
+    res.json(injuries);
+  } catch (error) {
+    console.error('Get injuries for teams error:', error);
+    res.status(500).json({ error: 'Failed to get injuries' });
   }
 });
 

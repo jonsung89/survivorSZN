@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Tv, Trophy, TrendingUp, Users, Target } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, TrendingUp, Users, Target, AlertTriangle } from 'lucide-react';
 import { nflAPI } from '../api';
 import Loading from '../components/Loading';
+import TeamInfoDialog from '../components/TeamInfoDialog';
 
 // Playoff round names
 const PLAYOFF_ROUNDS = {
@@ -25,8 +26,10 @@ export default function Schedule() {
   const [currentYear, setCurrentYear] = useState(2024);
   const [expandedGame, setExpandedGame] = useState(null);
   const [gameDetails, setGameDetails] = useState({});
+  const [gameInjuries, setGameInjuries] = useState({});
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [teamInfoDialog, setTeamInfoDialog] = useState({ open: false, team: null });
   
   const weekTabsRef = useRef(null);
   const weekButtonRefs = useRef({});
@@ -166,7 +169,7 @@ export default function Schedule() {
     setSelectedSeasonType(2);
   };
 
-  const toggleGameExpand = async (gameId) => {
+  const toggleGameExpand = async (gameId, game = null) => {
     if (expandedGame === gameId) {
       setExpandedGame(null);
       return;
@@ -187,6 +190,23 @@ export default function Schedule() {
         setGameDetails(prev => ({ ...prev, [gameId]: {} }));
       }
       setDetailsLoading(false);
+    }
+    
+    // Fetch injuries if we don't have them and have team info
+    if (!gameInjuries[gameId] && game) {
+      try {
+        const teamIds = [];
+        if (game.homeTeam?.id) teamIds.push(game.homeTeam.id);
+        if (game.awayTeam?.id) teamIds.push(game.awayTeam.id);
+        
+        if (teamIds.length > 0) {
+          const injuries = await nflAPI.getInjuriesForTeams(teamIds);
+          setGameInjuries(prev => ({ ...prev, [gameId]: injuries }));
+        }
+      } catch (error) {
+        console.log('Could not fetch injuries:', error);
+        setGameInjuries(prev => ({ ...prev, [gameId]: {} }));
+      }
     }
   };
 
@@ -234,6 +254,131 @@ export default function Schedule() {
       </span>
     );
   };
+
+  // Helper to get broadcast network logo
+  const getBroadcastInfo = (broadcast) => {
+    if (!broadcast) return null;
+    
+    const broadcastUpper = broadcast.toUpperCase();
+    
+    // Map of networks to their logo URLs
+    const networks = {
+      'ESPN': {
+        logo: 'https://a.espncdn.com/favicon.ico',
+        color: 'text-red-400'
+      },
+      'ESPN+': {
+        logo: 'https://a.espncdn.com/favicon.ico',
+        color: 'text-red-400'
+      },
+      'ABC': {
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ABC-2021-LOGO.svg/120px-ABC-2021-LOGO.svg.png',
+        color: 'text-yellow-400'
+      },
+      'CBS': {
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/CBS_logo.svg/100px-CBS_logo.svg.png',
+        color: 'text-blue-400',
+        invert: true
+      },
+      'FOX': {
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Fox_Broadcasting_Company_logo_%282019%29.svg/100px-Fox_Broadcasting_Company_logo_%282019%29.svg.png',
+        color: 'text-blue-300',
+        invert: true
+      },
+      'NBC': {
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/NBC_logo.svg/100px-NBC_logo.svg.png',
+        color: 'text-purple-400'
+      },
+      'PEACOCK': {
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/NBC_logo.svg/100px-NBC_logo.svg.png',
+        color: 'text-purple-400'
+      },
+      'NFL NETWORK': {
+        logo: 'https://static.www.nfl.com/league/apps/clubs/icons/NFL_favicon.ico',
+        color: 'text-blue-400'
+      },
+      'NFLN': {
+        logo: 'https://static.www.nfl.com/league/apps/clubs/icons/NFL_favicon.ico',
+        color: 'text-blue-400'
+      },
+      'AMAZON': {
+        logo: 'https://images-na.ssl-images-amazon.com/images/G/01/primevideo/seo/primevideo-seo-logo.png',
+        color: 'text-cyan-400'
+      },
+      'PRIME': {
+        logo: 'https://images-na.ssl-images-amazon.com/images/G/01/primevideo/seo/primevideo-seo-logo.png',
+        color: 'text-cyan-400'
+      },
+      'PRIME VIDEO': {
+        logo: 'https://images-na.ssl-images-amazon.com/images/G/01/primevideo/seo/primevideo-seo-logo.png',
+        color: 'text-cyan-400'
+      },
+      'NETFLIX': {
+        logo: 'https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2016.ico',
+        color: 'text-red-500'
+      }
+    };
+    
+    // Find matching network
+    for (const [key, value] of Object.entries(networks)) {
+      if (broadcastUpper.includes(key)) {
+        return { name: broadcast, ...value };
+      }
+    }
+    
+    // Default - no logo
+    return { name: broadcast, logo: null, color: 'text-white/40' };
+  };
+
+  // Render broadcast with logo (text only as fallback)
+  const BroadcastIcon = ({ broadcast }) => {
+    const [imgError, setImgError] = useState(false);
+    const info = getBroadcastInfo(broadcast);
+    if (!info) return null;
+    
+    if (info.logo && !imgError) {
+      return (
+        <img 
+          src={info.logo} 
+          alt={info.name}
+          title={info.name}
+          className={`w-5 h-5 object-contain ${info.invert ? 'invert' : ''}`}
+          onError={() => setImgError(true)}
+        />
+      );
+    }
+    
+    // Fallback to text only
+    return <span className={`text-xs ${info.color}`}>{info.name}</span>;
+  };
+
+  // Open team info dialog
+  const openTeamInfo = (team, e) => {
+    e?.stopPropagation();
+    if (team?.id) {
+      setTeamInfoDialog({ 
+        open: true, 
+        team: {
+          id: team.id,
+          name: team.displayName || team.name,
+          abbreviation: team.abbreviation,
+          logo: team.logo,
+          record: team.record,
+          color: team.color
+        }
+      });
+    }
+  };
+
+  // Clickable team component
+  const ClickableTeam = ({ team, children, className = '' }) => (
+    <button
+      onClick={(e) => openTeamInfo(team, e)}
+      className={`hover:opacity-80 transition-opacity cursor-pointer ${className}`}
+    >
+      {children}
+    </button>
+  );
 
   const getScore = (team) => {
     if (!team?.score && team?.score !== 0) return null;
@@ -400,6 +545,99 @@ export default function Schedule() {
             </div>
           </div>
         </div>
+        
+        {/* Injuries */}
+        {(() => {
+          const injuriesData = gameInjuries[game.id] || {};
+          
+          // Position priority for sorting
+          const positionPriority = ['QB', 'RB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT', 'OL', 'DE', 'DT', 'DL', 'LB', 'CB', 'S', 'DB', 'K', 'P'];
+          const sortByPosition = (a, b) => {
+            const aIdx = positionPriority.indexOf(a.player.position);
+            const bIdx = positionPriority.indexOf(b.player.position);
+            return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
+          };
+          
+          const getTeamInjuries = (teamId) => {
+            const teamInjuries = injuriesData[teamId] || [];
+            return teamInjuries
+              .filter(i => {
+                const status = (i.status || '').toLowerCase();
+                return status.includes('out') || status.includes('doubtful') || status.includes('ir') || status.includes('injured reserve');
+              })
+              .sort(sortByPosition)
+              .map(i => {
+                let status = i.status || '';
+                if (status.toLowerCase().includes('injured reserve')) status = 'IR';
+                else if (status.toLowerCase() === 'out') status = 'Out';
+                else if (status.toLowerCase() === 'doubtful') status = 'Doubtful';
+                return { ...i, displayStatus: status };
+              });
+          };
+          
+          const awayInjuries = getTeamInjuries(game.awayTeam?.id);
+          const homeInjuries = getTeamInjuries(game.homeTeam?.id);
+          
+          if (awayInjuries.length === 0 && homeInjuries.length === 0) return null;
+          
+          const InjuryList = ({ injuries: injList, teamName }) => {
+            const [expanded, setExpanded] = useState(false);
+            const keyInjuries = injList.slice(0, 3);
+            const hasMore = injList.length > 3;
+            const displayList = expanded ? injList : keyInjuries;
+            
+            return (
+              <div className="text-xs text-white/60 space-y-0.5">
+                {displayList.map((inj, i) => (
+                  <div key={i}>
+                    <span className={inj.displayStatus === 'Doubtful' ? 'text-yellow-400' : 'text-red-400'}>
+                      {inj.displayStatus}
+                    </span>
+                    {' '}{inj.player.name} <span className="text-white/40">({inj.player.position})</span>
+                  </div>
+                ))}
+                {hasMore && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+                    className="text-white/40 hover:text-white/60 mt-1"
+                  >
+                    {expanded ? '← Show less' : `+${injList.length - 3} more`}
+                  </button>
+                )}
+              </div>
+            );
+          };
+          
+          return (
+            <div className="space-y-3">
+              <h4 className="text-xs font-medium text-white/40 uppercase tracking-wide">
+                Injuries
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Away Team */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    {game.awayTeam?.logo && <img src={game.awayTeam.logo} alt="" className="w-4 h-4" />}
+                    <span className="text-xs text-white/50">{game.awayTeam?.abbreviation}</span>
+                  </div>
+                  {awayInjuries.length > 0 ? <InjuryList injuries={awayInjuries} /> : (
+                    <span className="text-xs text-white/30">None</span>
+                  )}
+                </div>
+                {/* Home Team */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    {game.homeTeam?.logo && <img src={game.homeTeam.logo} alt="" className="w-4 h-4" />}
+                    <span className="text-xs text-white/50">{game.homeTeam?.abbreviation}</span>
+                  </div>
+                  {homeInjuries.length > 0 ? <InjuryList injuries={homeInjuries} /> : (
+                    <span className="text-xs text-white/30">None</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -643,7 +881,7 @@ export default function Schedule() {
           ${isLive ? 'ring-2 ring-red-500/50 bg-red-500/5' : ''}
           ${isExpanded ? 'ring-1 ring-white/20' : ''}
         `}
-        onClick={() => toggleGameExpand(game.id)}
+        onClick={() => toggleGameExpand(game.id, game)}
       >
         {/* Mobile Layout - Vertical Stack */}
         <div className="sm:hidden">
@@ -652,23 +890,25 @@ export default function Schedule() {
             <div className="flex-1 space-y-2">
               {/* Away Team */}
               <div className={`flex items-center gap-2.5 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
-                {game.awayTeam?.logo ? (
-                  <img 
-                    src={game.awayTeam.logo} 
-                    alt={game.awayTeam.abbreviation}
-                    className="w-7 h-7 object-contain flex-shrink-0"
-                  />
-                ) : (
-                  <div 
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
-                    style={{ backgroundColor: game.awayTeam?.color || '#666' }}
-                  >
-                    {game.awayTeam?.abbreviation || '?'}
-                  </div>
-                )}
-                <span className="text-white font-medium text-sm">
-                  {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
-                </span>
+                <ClickableTeam team={game.awayTeam} className="flex items-center gap-2.5">
+                  {game.awayTeam?.logo ? (
+                    <img 
+                      src={game.awayTeam.logo} 
+                      alt={game.awayTeam.abbreviation}
+                      className="w-7 h-7 object-contain flex-shrink-0"
+                    />
+                  ) : (
+                    <div 
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
+                      style={{ backgroundColor: game.awayTeam?.color || '#666' }}
+                    >
+                      {game.awayTeam?.abbreviation || '?'}
+                    </div>
+                  )}
+                  <span className="text-white font-medium text-sm">
+                    {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
+                  </span>
+                </ClickableTeam>
                 {isPast || isLive ? (
                   <span className={`ml-auto font-bold text-base ${
                     isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-400' : 'text-white'
@@ -682,23 +922,25 @@ export default function Schedule() {
               
               {/* Home Team */}
               <div className={`flex items-center gap-2.5 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
-                {game.homeTeam?.logo ? (
-                  <img 
-                    src={game.homeTeam.logo} 
-                    alt={game.homeTeam.abbreviation}
-                    className="w-7 h-7 object-contain flex-shrink-0"
-                  />
-                ) : (
-                  <div 
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
-                    style={{ backgroundColor: game.homeTeam?.color || '#666' }}
-                  >
-                    {game.homeTeam?.abbreviation || '?'}
-                  </div>
-                )}
-                <span className="text-white font-medium text-sm">
-                  {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
-                </span>
+                <ClickableTeam team={game.homeTeam} className="flex items-center gap-2.5">
+                  {game.homeTeam?.logo ? (
+                    <img 
+                      src={game.homeTeam.logo} 
+                      alt={game.homeTeam.abbreviation}
+                      className="w-7 h-7 object-contain flex-shrink-0"
+                    />
+                  ) : (
+                    <div 
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
+                      style={{ backgroundColor: game.homeTeam?.color || '#666' }}
+                    >
+                      {game.homeTeam?.abbreviation || '?'}
+                    </div>
+                  )}
+                  <span className="text-white font-medium text-sm">
+                    {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
+                  </span>
+                </ClickableTeam>
                 {isPast || isLive ? (
                   <span className={`ml-auto font-bold text-base ${
                     isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-400' : 'text-white'
@@ -724,9 +966,7 @@ export default function Schedule() {
                 <>
                   <span className="text-xs text-white/70 font-medium">{dateStr}</span>
                   <span className="text-xs text-white/50">{timeStr}</span>
-                  {game.broadcast && (
-                    <span className="text-xs text-white/40">{game.broadcast}</span>
-                  )}
+                  {game.broadcast && <BroadcastIcon broadcast={game.broadcast} />}
                 </>
               )}
               <ChevronDown className={`w-4 h-4 text-white/30 mt-1 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -745,12 +985,7 @@ export default function Schedule() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               {getStatusDisplay(game)}
-              {game.broadcast && !isPast && (
-                <span className="flex items-center gap-1 text-xs text-white/40">
-                  <Tv className="w-3 h-3" />
-                  {game.broadcast}
-                </span>
-              )}
+              {game.broadcast && !isPast && <BroadcastIcon broadcast={game.broadcast} />}
             </div>
             <div className="flex items-center gap-2">
               {game.venue && (
@@ -765,7 +1000,7 @@ export default function Schedule() {
           {/* Teams */}
           <div className="flex items-center gap-4">
             {/* Away Team */}
-            <div className={`flex-1 flex items-center gap-3 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
+            <ClickableTeam team={game.awayTeam} className={`flex-1 flex items-center gap-3 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
               {game.awayTeam?.logo ? (
                 <img 
                   src={game.awayTeam.logo} 
@@ -780,7 +1015,7 @@ export default function Schedule() {
                   {game.awayTeam?.abbreviation || '?'}
                 </div>
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 text-left">
                 <div className="text-white font-medium text-base truncate">
                   {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
                 </div>
@@ -788,7 +1023,7 @@ export default function Schedule() {
                   <div className="text-xs text-white/40">{game.awayTeam.record}</div>
                 )}
               </div>
-            </div>
+            </ClickableTeam>
 
             {/* Score / VS */}
             <div className="flex-shrink-0 text-center min-w-[80px]">
@@ -812,7 +1047,7 @@ export default function Schedule() {
             </div>
 
             {/* Home Team */}
-            <div className={`flex-1 flex items-center justify-end gap-3 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
+            <ClickableTeam team={game.homeTeam} className={`flex-1 flex items-center justify-end gap-3 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
               <div className="min-w-0 text-right">
                 <div className="text-white font-medium text-base truncate">
                   {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
@@ -835,7 +1070,7 @@ export default function Schedule() {
                   {game.homeTeam?.abbreviation || '?'}
                 </div>
               )}
-            </div>
+            </ClickableTeam>
           </div>
           
           {/* Expanded Content - Desktop */}
@@ -1081,6 +1316,13 @@ export default function Schedule() {
         </div>
       )}
 
+      {/* Team Info Dialog */}
+      {teamInfoDialog.open && (
+        <TeamInfoDialog 
+          team={teamInfoDialog.team}
+          onClose={() => setTeamInfoDialog({ open: false, team: null })}
+        />
+      )}
     </div>
   );
 }

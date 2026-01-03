@@ -206,6 +206,22 @@ export const nflAPI = {
   getGameDetails: async (gameId) => {
     const res = await fetch(`${API_URL}/nfl/game/${gameId}`);
     return res.json();
+  },
+
+  getTeamInjuries: async (teamId) => {
+    const res = await fetch(`${API_URL}/nfl/injuries/${teamId}`);
+    return res.json();
+  },
+
+  getInjuriesForTeams: async (teamIds) => {
+    const res = await fetch(`${API_URL}/nfl/injuries?teams=${teamIds.join(',')}`);
+    return res.json();
+  },
+
+  // Get comprehensive team info (news, stats, roster, schedule)
+  getTeamInfo: async (teamId) => {
+    const res = await fetch(`${API_URL}/nfl/teams/${teamId}/info`);
+    return res.json();
   }
 };
 

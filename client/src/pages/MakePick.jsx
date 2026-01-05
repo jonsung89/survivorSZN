@@ -1,18 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Check, Lock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Loader2, TrendingUp, TrendingDown
+  Loader2, TrendingUp, TrendingDown, AlertTriangle, X, ExternalLink, Newspaper,
+  BarChart3, MapPin, Trophy
 } from 'lucide-react';
 import { leagueAPI, picksAPI, nflAPI } from '../api';
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
-import TeamInfoDialog from '../components/TeamInfoDialog';
 
 export default function MakePick() {
   const { leagueId } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const [searchParams] = useSearchParams();
+  const weekParam = searchParams.get('week');
   
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -63,9 +65,12 @@ export default function MakePick() {
       setLeague(leagueData);
 
       const seasonResult = await nflAPI.getSeason();
-      const week = seasonResult.week || 18;
-      setCurrentWeek(week);
-      setSelectedWeek(week);
+      const apiWeek = seasonResult.week || 18;
+      setCurrentWeek(apiWeek);
+      
+      // Use week from URL param if provided, otherwise use current week
+      const targetWeek = weekParam ? parseInt(weekParam) : apiWeek;
+      setSelectedWeek(targetWeek);
 
       const picksResult = await picksAPI.getLeaguePicks(leagueId);
       if (picksResult.usedTeams) {
@@ -220,6 +225,16 @@ export default function MakePick() {
 
   const startWeek = league.startWeek || league.start_week || 1;
 
+  // Helper to get week label for display
+  const getWeekLabel = (week) => {
+    if (week <= 18) return `Week ${week}`;
+    if (week === 19) return 'Wild Card';
+    if (week === 20) return 'Divisional';
+    if (week === 21) return 'Conference';
+    if (week === 22) return 'Super Bowl';
+    return `Week ${week}`;
+  };
+
   return (
     <div className="max-w-2xl mx-auto px-2 sm:px-4 py-3 sm:py-6 pb-24">
       {/* Header */}
@@ -246,14 +261,14 @@ export default function MakePick() {
         </button>
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-white/50 hidden sm:block" />
-          <span className="text-white font-semibold text-base sm:text-lg">Week {selectedWeek}</span>
+          <span className="text-white font-semibold text-base sm:text-lg">{getWeekLabel(selectedWeek)}</span>
           {selectedWeek === currentWeek && (
             <span className="bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full">Current</span>
           )}
         </div>
         <button
-          onClick={() => setSelectedWeek(Math.min(18, selectedWeek + 1))}
-          disabled={selectedWeek >= 18}
+          onClick={() => setSelectedWeek(Math.min(22, selectedWeek + 1))}
+          disabled={selectedWeek >= 22}
           className="p-2 sm:p-3 hover:bg-white/10 rounded-lg disabled:opacity-30"
         >
           <ChevronRight className="w-5 h-5 text-white" />
@@ -300,7 +315,7 @@ export default function MakePick() {
       {games.length === 0 ? (
         <div className="text-center py-12">
           <Calendar className="w-10 h-10 text-white/20 mx-auto mb-3" />
-          <p className="text-white/50">No games scheduled for Week {selectedWeek}</p>
+          <p className="text-white/50">No games scheduled for {getWeekLabel(selectedWeek)}</p>
         </div>
       ) : (
         <div className="space-y-2 sm:space-y-3">
@@ -358,6 +373,549 @@ export default function MakePick() {
           onClose={() => setTeamInfoDialog({ open: false, team: null, data: null, loading: false })}
         />
       )}
+    </div>
+  );
+}
+
+// Team Info Dialog Component
+function TeamInfoDialog({ team, data, loading, onClose }) {
+  const [activeTab, setActiveTab] = useState('stats');
+  
+  // Reset to stats tab when team changes
+  useEffect(() => {
+    setActiveTab('stats');
+  }, [team?.id]);
+  
+  if (!team) return null;
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffHours = Math.floor((now - date) / (1000 * 60 * 60));
+    if (diffHours < 1) return 'Just now';
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const formatGameDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  const tabs = [
+    { id: 'news', label: 'News', icon: Newspaper },
+    { id: 'stats', label: 'Stats', icon: BarChart3 },
+    { id: 'schedule', label: 'Schedule', icon: Calendar }
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div 
+        className="bg-gray-900 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div 
+          className="p-4 flex items-center gap-4 border-b border-white/10"
+          style={{ background: `linear-gradient(135deg, ${team.color || '#374151'}22, transparent)` }}
+        >
+          {team.logo ? (
+            <img src={team.logo} alt="" className="w-16 h-16 object-contain" />
+          ) : (
+            <div 
+              className="w-16 h-16 rounded-xl flex items-center justify-center text-white font-bold text-xl"
+              style={{ backgroundColor: team.color || '#374151' }}
+            >
+              {team.abbreviation}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl font-bold text-white truncate">{team.name}</h2>
+            <div className="flex items-center gap-2 text-sm text-white/60">
+              <span>{team.record}</span>
+              {data?.team?.standing && (
+                <>
+                  <span>•</span>
+                  <span>{data.team.standing}</span>
+                </>
+              )}
+            </div>
+            {data?.team?.division && (
+              <div className="text-xs text-white/40 mt-0.5">{data.team.division}</div>
+            )}
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            <X className="w-5 h-5 text-white/60" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-white/10">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                activeTab === tab.id 
+                  ? 'text-white border-b-2 border-white' 
+                  : 'text-white/50 hover:text-white/70'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 text-white/30 animate-spin" />
+            </div>
+          ) : (
+            <>
+              {/* News Tab */}
+              {activeTab === 'news' && (
+                <div className="space-y-3">
+                  {data?.news?.length > 0 ? (
+                    data.news.map((article, i) => (
+                      <a
+                        key={i}
+                        href={article.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors group"
+                      >
+                        <div className="flex gap-3">
+                          {article.image && (
+                            <img src={article.image} alt="" className="w-20 h-14 object-cover rounded flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-medium text-white line-clamp-2 group-hover:text-blue-400 transition-colors">
+                              {article.headline}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              {/* Source with logo */}
+                              {article.source && (
+                                <span className="flex items-center gap-1">
+                                  {article.source === 'ESPN' || article.link?.includes('espn.com') ? (
+                                    <img 
+                                      src="https://a.espncdn.com/combiner/i?img=/i/espn/misc_logos/500/espn_icon.png&h=40&w=40" 
+                                      alt="ESPN" 
+                                      className="w-3.5 h-3.5 rounded-sm"
+                                    />
+                                  ) : article.source === 'NFL' || article.link?.includes('nfl.com') ? (
+                                    <img 
+                                      src="https://static.www.nfl.com/image/upload/v1554321393/league/nvfr7ogywskqrfaiu38m.svg" 
+                                      alt="NFL" 
+                                      className="w-3.5 h-3.5"
+                                    />
+                                  ) : null}
+                                  <span className="text-xs text-white/50">
+                                    {article.source || (article.link?.includes('espn.com') ? 'ESPN' : article.link?.includes('nfl.com') ? 'NFL' : '')}
+                                  </span>
+                                </span>
+                              )}
+                              {!article.source && article.link?.includes('espn.com') && (
+                                <span className="flex items-center gap-1">
+                                  <img 
+                                    src="https://a.espncdn.com/combiner/i?img=/i/espn/misc_logos/500/espn_icon.png&h=40&w=40" 
+                                    alt="ESPN" 
+                                    className="w-3.5 h-3.5 rounded-sm"
+                                  />
+                                  <span className="text-xs text-white/50">ESPN</span>
+                                </span>
+                              )}
+                              <span className="text-xs text-white/40">{formatDate(article.published)}</span>
+                              {article.premium && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">ESPN+</span>
+                              )}
+                            </div>
+                          </div>
+                          <ExternalLink className="w-4 h-4 text-white/20 flex-shrink-0" />
+                        </div>
+                      </a>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-white/40">
+                      <Newspaper className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                      <p>No recent news available</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Stats Tab */}
+              {activeTab === 'stats' && (
+                <div className="space-y-4">
+                  {/* Team Record */}
+                  {data?.team && (
+                    <div className="grid grid-cols-4 gap-2">
+                      <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                        <div className="text-lg font-bold text-white">{data.team.record || '-'}</div>
+                        <div className="text-[10px] text-white/40">Record</div>
+                      </div>
+                      <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                        <div className="text-lg font-bold text-white">{data.team.streak || '-'}</div>
+                        <div className="text-[10px] text-white/40">Streak</div>
+                      </div>
+                      <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                        <div className="text-lg font-bold text-white">{data.team.homeRecord || '-'}</div>
+                        <div className="text-[10px] text-white/40">Home</div>
+                      </div>
+                      <div className="bg-white/5 rounded-lg p-2.5 text-center">
+                        <div className="text-lg font-bold text-white">{data.team.awayRecord || '-'}</div>
+                        <div className="text-[10px] text-white/40">Away</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Team Stats Summary */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <div className="text-xs text-white/40 mb-1">Points/Game</div>
+                      <div className="text-lg font-semibold text-white">
+                        {data?.stats?.offense?.pointsPerGame?.displayValue || '-'}
+                        {data?.stats?.rankings?.pointsFor && (
+                          <span className="text-xs text-emerald-400 ml-1">({data.stats.rankings.pointsFor})</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <div className="text-xs text-white/40 mb-1">Pts Allowed/Game</div>
+                      <div className="text-lg font-semibold text-white">
+                        {data?.stats?.defense?.pointsAllowedPerGame?.displayValue || '-'}
+                        {data?.stats?.rankings?.pointsAgainst && (
+                          <span className="text-xs text-emerald-400 ml-1">({data.stats.rankings.pointsAgainst})</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Key Players - Categorized by Position */}
+                  {data?.topPlayers && (
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <h4 className="text-xs font-medium text-white/40 uppercase tracking-wide mb-3">Key Players</h4>
+                      <div className="space-y-3">
+                        {/* QB */}
+                        {data.topPlayers.qb?.length > 0 && (
+                          <div className="flex gap-3">
+                            <span className="text-xs font-medium text-white/30 w-8 pt-1">QB</span>
+                            <div className="flex-1 space-y-1.5">
+                              {data.topPlayers.qb.map((p, i) => (
+                                <div key={i} className="flex items-center gap-2 flex-wrap">
+                                  {p.headshot && <img src={p.headshot} alt="" className="w-8 h-8 rounded-full object-cover" />}
+                                  <span className="text-sm font-medium text-white">{p.name}</span>
+                                  {p.injury && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                      ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
+                                        ? 'bg-red-500/20 text-red-400'
+                                        : p.injury.status?.toLowerCase().includes('doubtful')
+                                        ? 'bg-orange-500/20 text-orange-400'
+                                        : p.injury.status?.toLowerCase().includes('questionable')
+                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                        : 'bg-gray-500/20 text-gray-400'
+                                    }`}>
+                                      {p.injury.status}
+                                    </span>
+                                  )}
+                                  <span className="text-sm text-white/50">
+                                    {Object.entries(p.stats || {}).map(([k, v]) => `${v} ${k}`).join(', ')}
+                                    {p.perGameStats && Object.keys(p.perGameStats).length > 0 && (
+                                      <span className="text-white/30 ml-1">
+                                        ({Object.entries(p.perGameStats).map(([k, v]) => `${v} ${k}`).join(', ')})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* RB */}
+                        {data.topPlayers.rb?.length > 0 && (
+                          <div className="flex gap-3">
+                            <span className="text-xs font-medium text-white/30 w-8 pt-1">RB</span>
+                            <div className="flex-1 space-y-1.5">
+                              {data.topPlayers.rb.map((p, i) => (
+                                <div key={i} className="flex items-center gap-2 flex-wrap">
+                                  {p.headshot && <img src={p.headshot} alt="" className="w-8 h-8 rounded-full object-cover" />}
+                                  <span className="text-sm font-medium text-white">{p.name}</span>
+                                  {p.injury && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                      ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
+                                        ? 'bg-red-500/20 text-red-400'
+                                        : p.injury.status?.toLowerCase().includes('doubtful')
+                                        ? 'bg-orange-500/20 text-orange-400'
+                                        : p.injury.status?.toLowerCase().includes('questionable')
+                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                        : 'bg-gray-500/20 text-gray-400'
+                                    }`}>
+                                      {p.injury.status}
+                                    </span>
+                                  )}
+                                  <span className="text-sm text-white/50">
+                                    {Object.entries(p.stats || {}).map(([k, v]) => `${v} ${k}`).join(', ')}
+                                    {p.perGameStats && Object.keys(p.perGameStats).length > 0 && (
+                                      <span className="text-white/30 ml-1">
+                                        ({Object.entries(p.perGameStats).map(([k, v]) => `${v} ${k}`).join(', ')})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* WR */}
+                        {data.topPlayers.wr?.length > 0 && (
+                          <div className="flex gap-3">
+                            <span className="text-xs font-medium text-white/30 w-8 pt-1">WR</span>
+                            <div className="flex-1 space-y-1.5">
+                              {data.topPlayers.wr.map((p, i) => (
+                                <div key={i} className="flex items-center gap-2 flex-wrap">
+                                  {p.headshot && <img src={p.headshot} alt="" className="w-8 h-8 rounded-full object-cover" />}
+                                  <span className="text-sm font-medium text-white">{p.name}</span>
+                                  {p.injury && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                      ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
+                                        ? 'bg-red-500/20 text-red-400'
+                                        : p.injury.status?.toLowerCase().includes('doubtful')
+                                        ? 'bg-orange-500/20 text-orange-400'
+                                        : p.injury.status?.toLowerCase().includes('questionable')
+                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                        : 'bg-gray-500/20 text-gray-400'
+                                    }`}>
+                                      {p.injury.status}
+                                    </span>
+                                  )}
+                                  <span className="text-sm text-white/50">
+                                    {Object.entries(p.stats || {}).map(([k, v]) => `${v} ${k}`).join(', ')}
+                                    {p.perGameStats && Object.keys(p.perGameStats).length > 0 && (
+                                      <span className="text-white/30 ml-1">
+                                        ({Object.entries(p.perGameStats).map(([k, v]) => `${v} ${k}`).join(', ')})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* TE */}
+                        {data.topPlayers.te?.length > 0 && (
+                          <div className="flex gap-3">
+                            <span className="text-xs font-medium text-white/30 w-8 pt-1">TE</span>
+                            <div className="flex-1 space-y-1.5">
+                              {data.topPlayers.te.map((p, i) => (
+                                <div key={i} className="flex items-center gap-2 flex-wrap">
+                                  {p.headshot && <img src={p.headshot} alt="" className="w-8 h-8 rounded-full object-cover" />}
+                                  <span className="text-sm font-medium text-white">{p.name}</span>
+                                  {p.injury && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                      ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
+                                        ? 'bg-red-500/20 text-red-400'
+                                        : p.injury.status?.toLowerCase().includes('doubtful')
+                                        ? 'bg-orange-500/20 text-orange-400'
+                                        : p.injury.status?.toLowerCase().includes('questionable')
+                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                        : 'bg-gray-500/20 text-gray-400'
+                                    }`}>
+                                      {p.injury.status}
+                                    </span>
+                                  )}
+                                  <span className="text-sm text-white/50">
+                                    {Object.entries(p.stats || {}).map(([k, v]) => `${v} ${k}`).join(', ')}
+                                    {p.perGameStats && Object.keys(p.perGameStats).length > 0 && (
+                                      <span className="text-white/30 ml-1">
+                                        ({Object.entries(p.perGameStats).map(([k, v]) => `${v} ${k}`).join(', ')})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* DEF */}
+                        {data.topPlayers.def?.length > 0 && (
+                          <div className="flex gap-3">
+                            <span className="text-xs font-medium text-white/30 w-8 pt-1">DEF</span>
+                            <div className="flex-1 space-y-1.5">
+                              {data.topPlayers.def.map((p, i) => (
+                                <div key={i} className="flex items-center gap-2 flex-wrap">
+                                  {p.headshot && <img src={p.headshot} alt="" className="w-8 h-8 rounded-full object-cover" />}
+                                  <span className="text-sm font-medium text-white">{p.name}</span>
+                                  <span className="text-xs text-white/30">({p.position})</span>
+                                  {p.injury && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                      ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
+                                        ? 'bg-red-500/20 text-red-400'
+                                        : p.injury.status?.toLowerCase().includes('doubtful')
+                                        ? 'bg-orange-500/20 text-orange-400'
+                                        : p.injury.status?.toLowerCase().includes('questionable')
+                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                        : 'bg-gray-500/20 text-gray-400'
+                                    }`}>
+                                      {p.injury.status}
+                                    </span>
+                                  )}
+                                  <span className="text-sm text-white/50">
+                                    {Object.entries(p.stats || {}).map(([k, v]) => `${v} ${k}`).join(', ')}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Passing & Rushing Stats */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {data?.stats?.passing && (
+                      <div className="bg-white/5 rounded-lg p-3">
+                        <div className="text-xs text-white/40 uppercase tracking-wide mb-2">Passing</div>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-white/50">Yds/G</span>
+                            <span className="text-white">
+                              {data.stats.passing.yardsPerGame?.displayValue || '-'}
+                              {data.stats.rankings?.passingYPG && (
+                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.passingYPG})</span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-white/50">TD/G</span>
+                            <span className="text-white">
+                              {data.stats.passing.touchdownsPerGame?.displayValue || '-'}
+                              {data.stats.rankings?.passingTD && (
+                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.passingTD})</span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {data?.stats?.rushing && (
+                      <div className="bg-white/5 rounded-lg p-3">
+                        <div className="text-xs text-white/40 uppercase tracking-wide mb-2">Rushing</div>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-white/50">Yds/G</span>
+                            <span className="text-white">
+                              {data.stats.rushing.yardsPerGame?.displayValue || '-'}
+                              {data.stats.rankings?.rushingYPG && (
+                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.rushingYPG})</span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-white/50">TD/G</span>
+                            <span className="text-white">
+                              {data.stats.rushing.touchdownsPerGame?.displayValue || '-'}
+                              {data.stats.rankings?.rushingTD && (
+                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.rushingTD})</span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-white/50">YPC</span>
+                            <span className="text-white">
+                              {data.stats.rushing.yardsPerCarry?.displayValue || '-'}
+                              {data.stats.rankings?.rushingYPC && (
+                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.rushingYPC})</span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Schedule Tab */}
+              {activeTab === 'schedule' && (
+                <div className="space-y-1">
+                  {data?.schedule?.length > 0 ? (
+                    data.schedule.map((game, i) => (
+                      <div 
+                        key={i} 
+                        className={`flex items-center gap-2 p-2 rounded-lg ${
+                          game.isCompleted 
+                            ? game.result === 'W' ? 'bg-green-500/10' : 'bg-red-500/10'
+                            : 'bg-white/5'
+                        }`}
+                      >
+                        {/* Week */}
+                        <div className="w-8 text-center">
+                          <div className="text-xs text-white/40">Wk</div>
+                          <div className="text-sm font-medium text-white">{game.week}</div>
+                        </div>
+                        
+                        {/* Result or Status */}
+                        <div className="w-8 text-center">
+                          {game.isCompleted ? (
+                            <div className={`text-sm font-bold ${game.result === 'W' ? 'text-green-400' : 'text-red-400'}`}>
+                              {game.result}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-white/40">-</div>
+                          )}
+                        </div>
+                        
+                        {/* Home/Away indicator */}
+                        <div className="w-6 text-center text-xs text-white/40">
+                          {game.isHome ? 'vs' : '@'}
+                        </div>
+                        
+                        {/* Opponent */}
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          {game.opponent?.logo && (
+                            <img src={game.opponent.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-sm text-white truncate">{game.opponent?.abbreviation || game.opponent?.name}</div>
+                            <div className="text-[10px] text-white/40">{game.opponent?.record}</div>
+                          </div>
+                        </div>
+                        
+                        {/* Score or Date */}
+                        <div className="text-right">
+                          {game.isCompleted ? (
+                            <div className="text-sm font-medium text-white">
+                              {game.teamScore}-{game.oppScore}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-white/50">
+                              {formatGameDate(game.date)}
+                            </div>
+                          )}
+                          <div className="text-[10px] text-white/30">{game.teamRecord}</div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-white/40">
+                      <Calendar className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                      <p>No schedule available</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

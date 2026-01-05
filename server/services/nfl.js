@@ -1,6 +1,18 @@
 // NFL Data Service - ESPN API Integration with Enhanced Stats
 const API_BASE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 
+// Helper to convert our app week numbers to ESPN API format
+// Our app: weeks 1-18 = regular season, weeks 19-22 = playoffs
+// ESPN API: seasonType 2 + weeks 1-18 = regular season
+//           seasonType 3 + weeks 1-4 = playoffs (Wild Card, Divisional, Conference, Super Bowl)
+const getEspnWeekParams = (week) => {
+  if (week <= 18) {
+    return { espnWeek: week, seasonType: 2 };
+  }
+  // Playoff weeks: 19=Wild Card(1), 20=Divisional(2), 21=Conference(3), 22=Super Bowl(4)
+  return { espnWeek: week - 18, seasonType: 3 };
+};
+
 // Cache for API responses
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -1434,8 +1446,9 @@ const getTeamGameStatus = async (teamId, week, season = null) => {
       season = currentSeason;
     }
     
-    // Get week schedule
-    const games = await getWeekSchedule(season, week);
+    // Get week schedule (handle playoff weeks)
+    const { espnWeek, seasonType } = getEspnWeekParams(week);
+    const games = await getWeekSchedule(season, espnWeek, seasonType);
     
     // Find the game for this team
     const game = games.find(g => 

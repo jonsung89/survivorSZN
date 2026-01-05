@@ -5,6 +5,18 @@ const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
 const { getCurrentSeason, getWeekSchedule, hasGameStarted, getGameWinner, getTeam } = require('../services/nfl');
 
+// Helper to convert our app week numbers to ESPN API format
+// Our app: weeks 1-18 = regular season, weeks 19-22 = playoffs
+// ESPN API: seasonType 2 + weeks 1-18 = regular season
+//           seasonType 3 + weeks 1-4 = playoffs (Wild Card, Divisional, Conference, Super Bowl)
+const getEspnWeekParams = (week) => {
+  if (week <= 18) {
+    return { espnWeek: week, seasonType: 2 };
+  }
+  // Playoff weeks: 19=Wild Card(1), 20=Divisional(2), 21=Conference(3), 22=Super Bowl(4)
+  return { espnWeek: week - 18, seasonType: 3 };
+};
+
 // Helper to get user from Firebase UID
 const getUser = async (req) => {
   return db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
@@ -61,8 +73,9 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'This week only requires one pick' });
     }
 
-    // Get week schedule
-    const games = await getWeekSchedule(league.season, week);
+    // Get week schedule (handle playoff weeks)
+    const { espnWeek, seasonType } = getEspnWeekParams(week);
+    const games = await getWeekSchedule(league.season, espnWeek, seasonType);
 
     // Check if team is playing this week
     const teamGame = games.find(g => 
@@ -73,8 +86,10 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'This team is on bye this week' });
     }
 
-    // Check if game has started
-    if (hasGameStarted(teamGame.date)) {
+    // Check if game has started - use status and date
+    const gameStatus = teamGame.status || 'STATUS_SCHEDULED';
+    const gameStarted = gameStatus !== 'STATUS_SCHEDULED' || hasGameStarted(teamGame.date);
+    if (gameStarted) {
       return res.status(400).json({ error: 'Cannot pick a team whose game has already started' });
     }
 
@@ -265,16 +280,40 @@ router.get('/available/:leagueId/:week', authMiddleware, async (req, res) => {
     // Also track teams picked this week (for double pick - can't pick same team twice)
     const thisWeekTeams = new Set(currentPicks.map(p => p.team_id));
 
-    // Get week schedule
-    const games = await getWeekSchedule(league.season, weekNum);
+    // Get week schedule (handle playoff weeks)
+    const { espnWeek, seasonType } = getEspnWeekParams(weekNum);
+    const games = await getWeekSchedule(league.season, espnWeek, seasonType);
     const now = new Date();
 
     // Build available teams list
     const teamsPlaying = new Map();
     
+    console.log('Building available teams for week', weekNum, '- found', games.length, 'games');
+    console.log('Current time (now):', now.toISOString());
+    
     for (const game of games) {
-      const gameStart = new Date(game.date);
-      const isLocked = gameStart <= now;
+      // Parse game date - handle various formats
+      let gameStart;
+      if (game.date) {
+        gameStart = new Date(game.date);
+        // Check for invalid date
+        if (isNaN(gameStart.getTime())) {
+          console.warn(`Invalid game date: ${game.date}, defaulting to unlocked`);
+          gameStart = new Date(Date.now() + 86400000); // Default to tomorrow (not locked)
+        }
+      } else {
+        console.warn(`No game date for game ${game.id}, defaulting to unlocked`);
+        gameStart = new Date(Date.now() + 86400000); // Default to tomorrow (not locked)
+      }
+      
+      // Game is locked if it has started (not STATUS_SCHEDULED) OR if game time has passed
+      // Use status as primary indicator, date as fallback
+      const gameStatus = game.status || 'STATUS_SCHEDULED';
+      const isGameStarted = gameStatus !== 'STATUS_SCHEDULED';
+      const isTimePassed = gameStart <= now;
+      const isLocked = isGameStarted || isTimePassed;
+      
+      console.log(`Game ${game.id}: ${game.homeTeam?.abbreviation} vs ${game.awayTeam?.abbreviation}, status=${gameStatus}, date=${game.date}, gameStart=${gameStart.toISOString()}, isLocked=${isLocked}`);
 
       if (game.homeTeam) {
         teamsPlaying.set(game.homeTeam.id, {
@@ -367,7 +406,8 @@ router.post('/update-results', async (req, res) => {
     let updated = 0;
 
     for (const pick of pendingPicks) {
-      const games = await getWeekSchedule(pick.season, pick.week);
+      const { espnWeek, seasonType } = getEspnWeekParams(pick.week);
+      const games = await getWeekSchedule(pick.season, espnWeek, seasonType);
       const game = games.find(g => g.id === pick.game_id);
 
       if (!game || game.status !== 'STATUS_FINAL') continue;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   Trophy, Users, Settings, ChevronLeft, ChevronRight, 
@@ -58,7 +58,9 @@ export default function LeagueDetail() {
   const [standings, setStandings] = useState([]);
   const [currentWeek, setCurrentWeek] = useState(1);
   const [selectedWeek, setSelectedWeek] = useState(null);
+  const [loadedWeek, setLoadedWeek] = useState(null); // Track which week's data is loaded
   const [loading, setLoading] = useState(true);
+  const [loadingStandings, setLoadingStandings] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [settings, setSettings] = useState({ maxStrikes: 1, doublePickWeeks: [], entryFee: 0, prizePotOverride: null });
@@ -75,18 +77,129 @@ export default function LeagueDetail() {
   const [pickReason, setPickReason] = useState('');
   const [togglingPayment, setTogglingPayment] = useState(null);
   const [gameStatuses, setGameStatuses] = useState({}); // { teamId: gameStatus }
-  const [loadingGameStatuses, setLoadingGameStatuses] = useState(false);
+  const hasTriggeredUpdateRef = useRef(false);
 
   const isCommissioner = league?.commissionerId === user?.id;
+
+  // Helper to change week
+  const handleWeekChange = (newWeek) => {
+    if (newWeek === selectedWeek) return;
+    setSelectedWeek(newWeek);
+  };
+
+  // Helper to calculate pick result from game status when database result is pending
+  const getPickResult = (pick, teamId) => {
+    // If database has a definitive result, use it
+    if (pick?.result && pick.result !== 'pending') {
+      return pick.result;
+    }
+    
+    // Otherwise calculate from game status
+    const gameStatus = gameStatuses[String(teamId)];
+    if (!gameStatus || gameStatus.state !== 'post') {
+      return pick?.result || null; // Game not finished yet
+    }
+    
+    // Game is final - calculate result from scores
+    const teamScore = parseInt(gameStatus.team?.score) || 0;
+    const opponentScore = parseInt(gameStatus.opponent?.score) || 0;
+    
+    if (teamScore > opponentScore) {
+      return 'win';
+    } else if (teamScore < opponentScore) {
+      return 'loss';
+    } else {
+      return 'loss'; // Ties count as losses in survivor pools
+    }
+  };
+
+  // Helper to get effective strikes (database + any unprocessed losses from completed games)
+  // Checks ALL weeks up to currentWeek, not just the selected week
+  const getEffectiveStrikes = (member) => {
+    let strikes = member.strikes || 0;
+    
+    // Check all weeks up to currentWeek for unprocessed losses
+    for (let week = league?.startWeek || 1; week <= currentWeek; week++) {
+      const weekData = member.picks?.[week];
+      const weekPicks = weekData?.picks || [];
+      const displayPicks = weekPicks.length > 0 
+        ? weekPicks 
+        : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result }] : []);
+      
+      for (const pick of displayPicks) {
+        const dbResult = pick.result;
+        const effectiveResult = getPickResult(pick, pick.teamId);
+        
+        // If database says pending but game shows loss, add a strike
+        if (dbResult !== 'loss' && dbResult !== 'win' && effectiveResult === 'loss') {
+          strikes++;
+        }
+      }
+    }
+    
+    return strikes;
+  };
+
+  // Sort standings by effective strikes (ascending), then alphabetically by display name
+  const sortedStandings = useMemo(() => {
+    if (!standings || standings.length === 0) return [];
+    
+    return [...standings].sort((a, b) => {
+      // First sort by effective strikes (fewer strikes = higher ranking)
+      const aStrikes = getEffectiveStrikes(a);
+      const bStrikes = getEffectiveStrikes(b);
+      
+      if (aStrikes !== bStrikes) {
+        return aStrikes - bStrikes;
+      }
+      
+      // Then sort alphabetically by display name
+      const aName = (a.displayName || '').toLowerCase();
+      const bName = (b.displayName || '').toLowerCase();
+      return aName.localeCompare(bName);
+    });
+  }, [standings, currentWeek, gameStatuses, league?.startWeek, league?.maxStrikes]);
 
   useEffect(() => {
     loadData();
   }, [leagueId]);
 
   useEffect(() => {
-    if (selectedWeek !== null) {
-      loadStandings(selectedWeek);
-    }
+    if (selectedWeek === null) return;
+    
+    let cancelled = false;
+    hasTriggeredUpdateRef.current = false;
+    
+    const doLoad = async () => {
+      setLoadingStandings(true);
+      try {
+        const result = await leagueAPI.getStandings(leagueId, selectedWeek);
+        if (cancelled) return; // Don't update if effect was cleaned up
+        
+        if (result.success && result.standings) {
+          setStandings(result.standings);
+          await fetchGameStatuses(result.standings, selectedWeek);
+        } else if (Array.isArray(result.standings)) {
+          setStandings(result.standings);
+          await fetchGameStatuses(result.standings, selectedWeek);
+        }
+        
+        if (!cancelled) {
+          setLoadedWeek(selectedWeek);
+        }
+      } catch (error) {
+        console.error('Failed to load standings:', error);
+      }
+      if (!cancelled) {
+        setLoadingStandings(false);
+      }
+    };
+    
+    doLoad();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [selectedWeek]);
 
   const loadData = async () => {
@@ -144,20 +257,23 @@ export default function LeagueDetail() {
     setLoading(false);
   };
 
+  // Refresh standings (used after admin actions, not for week changes)
   const loadStandings = async (week) => {
+    setLoadingStandings(true);
     try {
       const result = await leagueAPI.getStandings(leagueId, week);
       if (result.success && result.standings) {
         setStandings(result.standings);
-        // Fetch game statuses for all picked teams
-        fetchGameStatuses(result.standings, week);
+        await fetchGameStatuses(result.standings, week);
       } else if (Array.isArray(result.standings)) {
         setStandings(result.standings);
-        fetchGameStatuses(result.standings, week);
+        await fetchGameStatuses(result.standings, week);
       }
+      setLoadedWeek(week);
     } catch (error) {
       console.error('Failed to load standings:', error);
     }
+    setLoadingStandings(false);
   };
 
   // Fetch game status for all picked teams in the selected week
@@ -178,9 +294,10 @@ export default function LeagueDetail() {
       });
     });
 
-    if (teamIds.size === 0) return;
-
-    setLoadingGameStatuses(true);
+    if (teamIds.size === 0) {
+      setGameStatuses({});
+      return;
+    }
     
     try {
       // Fetch game status for each team in parallel
@@ -205,8 +322,6 @@ export default function LeagueDetail() {
     } catch (error) {
       console.error('Failed to fetch game statuses:', error);
     }
-    
-    setLoadingGameStatuses(false);
   };
 
   // Auto-refresh game statuses for live games
@@ -224,6 +339,58 @@ export default function LeagueDetail() {
       return () => clearInterval(interval);
     }
   }, [gameStatuses, standings, selectedWeek]);
+
+  // Trigger database update when we detect completed games with pending picks
+  useEffect(() => {
+    // Skip if we've already triggered an update for this data set
+    if (hasTriggeredUpdateRef.current) return;
+    
+    const checkAndUpdateResults = async () => {
+      // Check if any picks have completed games but pending results
+      let hasPendingCompletedGames = false;
+      
+      for (const member of standings) {
+        for (let week = league?.startWeek || 1; week <= currentWeek; week++) {
+          const weekData = member.picks?.[week];
+          const weekPicks = weekData?.picks || [];
+          const displayPicks = weekPicks.length > 0 
+            ? weekPicks 
+            : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result }] : []);
+          
+          for (const pick of displayPicks) {
+            if (pick.result === 'pending' || !pick.result) {
+              const gameStatus = gameStatuses[String(pick.teamId)];
+              if (gameStatus?.state === 'post') {
+                hasPendingCompletedGames = true;
+                break;
+              }
+            }
+          }
+          if (hasPendingCompletedGames) break;
+        }
+        if (hasPendingCompletedGames) break;
+      }
+      
+      if (hasPendingCompletedGames) {
+        hasTriggeredUpdateRef.current = true; // Mark as triggered
+        try {
+          console.log('Detected completed games with pending picks, triggering results update...');
+          const result = await picksAPI.updateResults();
+          if (result.updated > 0) {
+            console.log(`Updated ${result.updated} pick results`);
+            // Don't reload standings here - getEffectiveStrikes already shows correct data
+            // and reloading causes a flicker. The updated data will show on next page load.
+          }
+        } catch (error) {
+          console.error('Failed to update results:', error);
+        }
+      }
+    };
+    
+    if (standings.length > 0 && Object.keys(gameStatuses).length > 0 && currentWeek && league) {
+      checkAndUpdateResults();
+    }
+  }, [gameStatuses, standings.length, currentWeek, league?.startWeek]);
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
@@ -272,7 +439,7 @@ export default function LeagueDetail() {
         };
         setActionLog(prev => [newLogEntry, ...prev]);
         
-        showToast(`Strike ${action === 'add' ? 'added' : 'removed'} for ${member.displayName} (Week ${week})`, 'success');
+        showToast(`Strike ${action === 'add' ? 'added' : 'removed'} for ${member.displayName} (${getWeekLabel(week)})`, 'success');
       } else {
         showToast(result.error || 'Failed to modify strikes', 'error');
       }
@@ -377,7 +544,7 @@ export default function LeagueDetail() {
         }
         
         const teamNames = selectedTeamsForPick.map(id => NFL_TEAMS[id]?.name || id).join(' & ');
-        showToast(`Pick${isDoublePick ? 's' : ''} set for ${member.displayName} - Week ${week}: ${teamNames}`, 'success');
+        showToast(`Pick${isDoublePick ? 's' : ''} set for ${member.displayName} - ${getWeekLabel(week)}: ${teamNames}`, 'success');
       } else {
         const firstError = results.find(r => !r.result.success);
         showToast(firstError?.result.error || 'Failed to set pick', 'error');
@@ -413,21 +580,6 @@ export default function LeagueDetail() {
     return currentPicks.length < requiredPicks;
   };
 
-  // Check if user can edit their current pick (has pick but game hasn't started)
-  const canEditPick = () => {
-    if (!league) return false;
-    const myMember = league.members?.find(m => m.userId === user?.id);
-    if (myMember?.status === 'eliminated') return false;
-    if (currentWeek < league.startWeek) return false;
-    
-    const currentPicks = getPicksForWeek(currentWeek);
-    if (currentPicks.length === 0) return false;
-    
-    // Check if any pick's game hasn't started yet (user can edit on the pick page)
-    // We'll just show the button and let MakePick.jsx handle the locked state
-    return true;
-  };
-
   if (loading) {
     return <Loading fullScreen />;
   }
@@ -436,10 +588,21 @@ export default function LeagueDetail() {
     return null;
   }
 
+  // Generate weeks from league start through end of playoffs (week 22 = Super Bowl)
   const weeks = Array.from(
-    { length: 18 - league.startWeek + 1 }, 
+    { length: 22 - league.startWeek + 1 }, 
     (_, i) => league.startWeek + i
   );
+
+  // Helper to get week label for display
+  const getWeekLabel = (week) => {
+    if (week <= 18) return `Week ${week}`;
+    if (week === 19) return 'Wild Card';
+    if (week === 20) return 'Divisional';
+    if (week === 21) return 'Conference';
+    if (week === 22) return 'Super Bowl';
+    return `Week ${week}`;
+  };
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
@@ -466,21 +629,13 @@ export default function LeagueDetail() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {needsPickThisWeek() ? (
+          {needsPickThisWeek() && (
             <Link
               to={`/league/${leagueId}/pick`}
               className="btn-primary flex items-center gap-2 text-sm sm:text-base py-2.5 sm:py-3 flex-1 sm:flex-none justify-center animate-pulse-glow"
             >
               <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
               Make Pick
-            </Link>
-          ) : canEditPick() && (
-            <Link
-              to={`/league/${leagueId}/pick`}
-              className="btn-secondary flex items-center gap-2 text-sm sm:text-base py-2.5 sm:py-3 flex-1 sm:flex-none justify-center"
-            >
-              <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" />
-              Edit Pick
             </Link>
           )}
           
@@ -582,10 +737,10 @@ export default function LeagueDetail() {
       )}
 
       {/* Week Selector */}
-      <div className="glass-card rounded-xl sm:rounded-2xl p-2 sm:p-4 mb-4 sm:mb-6 animate-in" style={{ animationDelay: '50ms' }}>
-        <div className="flex items-center justify-between">
+      <div className="glass-card rounded-xl sm:rounded-2xl p-2 sm:p-4 mb-4 sm:mb-6 animate-in h-[60px] sm:h-[72px]" style={{ animationDelay: '50ms' }}>
+        <div className="flex items-center justify-between h-full">
           <button
-            onClick={() => setSelectedWeek(Math.max(league.startWeek, selectedWeek - 1))}
+            onClick={() => handleWeekChange(Math.max(league.startWeek, selectedWeek - 1))}
             disabled={selectedWeek <= league.startWeek}
             className="p-2 sm:p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
           >
@@ -593,29 +748,44 @@ export default function LeagueDetail() {
           </button>
 
           <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-1 sm:py-2 px-2 sm:px-4 scrollbar-hide">
-            {weeks.map(week => (
-              <button
-                key={week}
-                onClick={() => setSelectedWeek(week)}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base flex-shrink-0 ${
-                  selectedWeek === week
-                    ? 'bg-nfl-blue text-white shadow-lg'
-                    : week === currentWeek
-                    ? 'bg-white/10 text-white border border-nfl-blue/50'
-                    : 'bg-white/5 text-white/60 hover:bg-white/10'
-                }`}
-              >
-                <span className="hidden sm:inline">Week </span>{week}
-                {week === currentWeek && selectedWeek !== week && (
-                  <span className="ml-1.5 w-2 h-2 bg-emerald-400 rounded-full inline-block animate-pulse"></span>
-                )}
-              </button>
-            ))}
+            {weeks.map(week => {
+              // Playoff week labels
+              const weekLabel = week <= 18 ? week : 
+                week === 19 ? 'WC' : 
+                week === 20 ? 'DIV' : 
+                week === 21 ? 'CONF' : 
+                week === 22 ? 'SB' : week;
+              const weekFullLabel = week <= 18 ? `Week ${week}` : 
+                week === 19 ? 'Wild Card' : 
+                week === 20 ? 'Divisional' : 
+                week === 21 ? 'Conference' : 
+                week === 22 ? 'Super Bowl' : `Week ${week}`;
+              
+              return (
+                <button
+                  key={week}
+                  onClick={() => handleWeekChange(week)}
+                  className={`px-3 sm:px-4 h-[32px] sm:h-[40px] rounded-lg sm:rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base flex-shrink-0 flex items-center justify-center ${
+                    selectedWeek === week
+                      ? 'bg-nfl-blue text-white shadow-lg'
+                      : week === currentWeek
+                      ? 'bg-white/10 text-white border border-emerald-500/50'
+                      : 'bg-white/5 text-white/60 hover:bg-white/10'
+                  }`}
+                  title={weekFullLabel}
+                >
+                  <span className="hidden sm:inline">{week <= 18 ? 'Week ' : ''}</span>{weekLabel}
+                  {week === currentWeek && selectedWeek !== week && (
+                    <span className="ml-1 text-xs text-emerald-400">●</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           <button
-            onClick={() => setSelectedWeek(Math.min(18, selectedWeek + 1))}
-            disabled={selectedWeek >= 18}
+            onClick={() => handleWeekChange(Math.min(22, selectedWeek + 1))}
+            disabled={selectedWeek >= 22}
             className="p-2 sm:p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
           >
             <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -624,41 +794,70 @@ export default function LeagueDetail() {
       </div>
 
       {/* Your Pick Card - Prominent Game Display */}
-      {(() => {
-        // Find current user's pick for selected week
-        const myStanding = standings.find(m => m.isMe);
-        const weekData = myStanding?.picks?.[selectedWeek];
-        const weekPicks = weekData?.picks || [];
-        const displayPicks = weekPicks.length > 0 
-          ? weekPicks 
-          : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result }] : []);
-        
-        if (displayPicks.length === 0 && selectedWeek >= league.startWeek && selectedWeek <= currentWeek) {
-          // No pick made yet for current/past week
-          return (
-            <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 animate-in" style={{ animationDelay: '75ms' }}>
-              <div className="text-center py-4">
-                <AlertCircle className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
-                <p className="text-white font-medium">No pick for Week {selectedWeek}</p>
-                {selectedWeek === currentWeek && (
+      <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 h-[180px] sm:h-[200px]">
+        {(loadingStandings || loadedWeek !== selectedWeek) ? (
+          // Loading state
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="w-8 h-8 text-white/40 animate-spin" />
+          </div>
+        ) : (() => {
+          // Find current user's pick for selected week
+          const myStanding = standings.find(m => m.isMe);
+          const weekData = myStanding?.picks?.[selectedWeek];
+          const weekPicks = weekData?.picks || [];
+          const displayPicks = weekPicks.length > 0 
+            ? weekPicks 
+            : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result }] : []);
+          
+          if (displayPicks.length === 0 && selectedWeek >= league.startWeek) {
+            // No pick made yet - show Make Pick for current and future weeks
+            const canMakePick = selectedWeek >= currentWeek && myStanding?.status !== 'eliminated';
+            return (
+              <div className="flex flex-col items-center justify-center h-full">
+                <AlertCircle className="w-10 h-10 text-yellow-400 mb-3" />
+                <p className="text-white font-medium">No pick for {getWeekLabel(selectedWeek)}</p>
+                {canMakePick && (
                   <Link
-                    to={`/league/${leagueId}/pick`}
-                    className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-nfl-blue rounded-lg text-white font-medium hover:bg-nfl-blue/80 transition-colors"
+                    to={`/league/${leagueId}/pick?week=${selectedWeek}`}
+                    className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-emerald-600 rounded-lg text-white font-medium hover:bg-emerald-500 transition-colors"
                   >
                     <Calendar className="w-4 h-4" />
                     Make Pick
                   </Link>
                 )}
               </div>
-            </div>
-          );
-        }
-        
-        if (displayPicks.length === 0) return null;
-        
-        return (
-          <div className="mb-4 sm:mb-6 animate-in" style={{ animationDelay: '75ms' }}>
-            <h3 className="text-sm font-medium text-white/60 mb-3">Your Week {selectedWeek} Pick{displayPicks.length > 1 ? 's' : ''}</h3>
+            );
+          }
+          
+          if (displayPicks.length === 0) {
+            return (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-white/50">No pick data for {getWeekLabel(selectedWeek)}</p>
+              </div>
+            );
+          }
+          
+          // Check if all picks' games are still scheduled (can edit)
+          const allGamesScheduled = displayPicks.every(pick => {
+            const gameStatus = gameStatuses[String(pick.teamId)];
+            return gameStatus?.state === 'pre';
+          });
+          const canEdit = allGamesScheduled && myStanding?.status !== 'eliminated';
+          
+          return (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-white/60">Your {getWeekLabel(selectedWeek)} Pick{displayPicks.length > 1 ? 's' : ''}</h3>
+                {canEdit && (
+                  <Link
+                    to={`/league/${leagueId}/pick?week=${selectedWeek}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white/80 text-sm font-medium transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Edit Pick
+                  </Link>
+                )}
+              </div>
             
             <div className={`grid gap-4 ${displayPicks.length > 1 ? 'sm:grid-cols-2' : ''}`}>
               {displayPicks.map((pick, idx) => {
@@ -714,133 +913,127 @@ export default function LeagueDetail() {
                   });
                 };
                 
-                // SCHEDULED GAMES - keep exactly as is
-                if (isScheduled) {
-                  return (
-                    <div key={idx} className="rounded-xl overflow-hidden bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 border border-white/10">
-                      <div className="flex items-center">
-                        {/* Left team (your pick) */}
-                        <div className="flex-1 flex items-center gap-3 p-4">
-                          <div className="relative flex-shrink-0">
-                            {team?.logo && <img src={team.logo} alt={team.name} className="w-14 h-14" />}
+                return (
+                  <div key={idx} className="rounded-xl overflow-hidden bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 border border-white/10">
+                    {/* ESPN-style horizontal layout */}
+                    <div className="flex items-center">
+                      {/* Left team (your pick) */}
+                      <div className={`flex-1 flex items-center gap-3 p-4 ${
+                        isFinal && isWinning ? 'bg-gradient-to-r from-emerald-500/10 to-transparent' :
+                        isFinal && isLosing ? 'bg-gradient-to-r from-red-500/5 to-transparent' :
+                        isLive ? 'bg-gradient-to-r from-white/5 to-transparent' : ''
+                      }`}>
+                        {/* Logo with pick indicator */}
+                        <div className="relative flex-shrink-0">
+                          {team?.logo && <img src={team.logo} alt={team.name} className="w-14 h-14" />}
+                          {/* Show win/loss indicator for completed games, checkmark for scheduled/live */}
+                          {isFinal ? (
+                            isWinning ? (
+                              <div className="absolute -top-1 -right-1 bg-emerald-500 rounded-full p-0.5" title="Winner!">
+                                <Check className="w-3 h-3 text-white" />
+                              </div>
+                            ) : (
+                              <div className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5" title="Loss">
+                                <X className="w-3 h-3 text-white" />
+                              </div>
+                            )
+                          ) : (
                             <div className="absolute -top-1 -right-1 bg-emerald-500 rounded-full p-0.5" title="Your Pick">
                               <Check className="w-3 h-3 text-white" />
                             </div>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-white font-semibold text-sm">{team?.abbreviation}</span>
-                            {gameStatus.team.record && (
-                              <span className="text-white/40 text-xs">{gameStatus.team.record}</span>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Center - Game time */}
-                        <div className="flex-shrink-0 px-4 py-6 text-center min-w-[100px]">
-                          <p className="text-white/60 text-xs">{formatGameTime()}</p>
-                          {getCountdown() && (
-                            <p className="text-emerald-400 text-lg font-bold mt-1">{getCountdown()}</p>
                           )}
                         </div>
                         
-                        {/* Right team (opponent) */}
-                        {(() => {
-                          const oppTeamData = NFL_TEAMS[String(gameStatus.opponent.id)];
-                          return (
-                            <div className="flex-1 flex items-center justify-end gap-3 p-4">
-                              <div className="flex flex-col items-end">
-                                <span className="text-white/70 font-semibold text-sm">{oppTeamData?.abbreviation || gameStatus.opponent.abbreviation}</span>
-                                {gameStatus.opponent.record && (
-                                  <span className="text-white/40 text-xs">{gameStatus.opponent.record}</span>
-                                )}
-                              </div>
-                              <div className="flex-shrink-0">
-                                {gameStatus.opponent.logo && (
-                                  <img src={gameStatus.opponent.logo} alt={oppTeamData?.name} className="w-14 h-14 opacity-70" />
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  );
-                }
-                
-                // LIVE/FINAL GAMES - ESPN style with team name under logo, record under score
-                const oppTeamData = NFL_TEAMS[String(gameStatus.opponent.id)];
-                const oppWinning = gameStatus.opponent.score > gameStatus.team.score;
-                
-                return (
-                  <div key={idx} className="rounded-xl overflow-hidden bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 border border-white/10">
-                    <div className="flex items-center">
-                      {/* Left team (your pick) */}
-                      <div className={`flex items-center gap-4 p-4 ${
-                        isWinning ? 'bg-gradient-to-r from-emerald-500/10 to-transparent' :
-                        isLosing ? 'bg-gradient-to-r from-red-500/10 to-transparent' : ''
-                      }`}>
-                        {/* Logo with name under */}
-                        <div className="flex flex-col items-center">
-                          <div className="relative">
-                            {team?.logo && <img src={team.logo} alt={team.name} className="w-12 h-12" />}
-                            <div className={`absolute -top-1 -right-1 ${isLosing ? 'bg-red-500' : 'bg-emerald-500'} rounded-full p-0.5`} title="Your Pick">
-                              <Check className="w-3 h-3 text-white" />
-                            </div>
-                          </div>
-                          <span className="text-white font-medium text-sm mt-1">{team?.abbreviation}</span>
-                        </div>
-                        
-                        {/* Score with record under */}
-                        <div className="flex flex-col items-center">
-                          <span className={`text-4xl font-bold ${isWinning ? 'text-white' : 'text-white/40'}`}>
-                            {gameStatus.team.score}
-                          </span>
+                        {/* Score & Info */}
+                        <div className="flex flex-col">
+                          {(isLive || isFinal) ? (
+                            <span className={`text-4xl font-bold ${
+                              isWinning ? 'text-white' : 'text-white/50'
+                            }`}>
+                              {gameStatus.team.score}
+                            </span>
+                          ) : null}
+                          <span className="text-white font-semibold text-sm">{team?.abbreviation}</span>
                           {gameStatus.team.record && (
                             <span className="text-white/40 text-xs">{gameStatus.team.record}</span>
                           )}
                         </div>
+                        
+                        {/* Winner arrow */}
+                        {isFinal && isWinning && (
+                          <ChevronLeft className="w-5 h-5 text-emerald-400 ml-auto" />
+                        )}
                       </div>
                       
                       {/* Center - Status */}
-                      <div className="flex-1 text-center px-2">
-                        {isLive ? (
+                      <div className="flex-shrink-0 px-4 py-6 text-center min-w-[100px]">
+                        {isScheduled && (
                           <div>
-                            <p className="text-white text-lg font-bold">{gameStatus.clock}</p>
+                            <p className="text-white/60 text-xs">{formatGameTime()}</p>
+                            {getCountdown() && (
+                              <p className="text-emerald-400 text-lg font-bold mt-1">{getCountdown()}</p>
+                            )}
+                          </div>
+                        )}
+                        {isLive && (
+                          <div>
                             <div className="flex items-center justify-center gap-1.5 text-red-400">
                               <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                               <span className="text-xs font-bold uppercase">{gameStatus.period}Q</span>
                             </div>
+                            <p className="text-white text-lg font-bold">{gameStatus.clock}</p>
                           </div>
-                        ) : (
-                          <p className="text-white/50 text-sm font-medium">Final</p>
+                        )}
+                        {isFinal && (
+                          <div>
+                            <p className="text-white/50 text-sm font-medium">Final</p>
+                            <p className={`text-xs font-bold mt-1 ${isWinning ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {isWinning ? 'WIN' : 'LOSS'}
+                            </p>
+                          </div>
                         )}
                       </div>
                       
                       {/* Right team (opponent) */}
-                      <div className={`flex items-center gap-4 p-4 ${
-                        oppWinning ? 'bg-gradient-to-l from-white/5 to-transparent' : ''
-                      }`}>
-                        {/* Score with record under */}
-                        <div className="flex flex-col items-center">
-                          <span className={`text-4xl font-bold ${oppWinning ? 'text-white' : 'text-white/40'}`}>
-                            {gameStatus.opponent.score}
-                          </span>
-                          {gameStatus.opponent.record && (
-                            <span className="text-white/40 text-xs">{gameStatus.opponent.record}</span>
-                          )}
-                        </div>
-                        
-                        {/* Logo with name under */}
-                        <div className="flex flex-col items-center">
-                          {gameStatus.opponent.logo && (
-                            <img src={gameStatus.opponent.logo} alt={oppTeamData?.name} className={`w-12 h-12 ${oppWinning ? '' : 'opacity-60'}`} />
-                          )}
-                          <span className="text-white/70 font-medium text-sm mt-1">{oppTeamData?.abbreviation || gameStatus.opponent.abbreviation}</span>
-                        </div>
-                      </div>
+                      {(() => {
+                        const oppTeamData = NFL_TEAMS[String(gameStatus.opponent.id)];
+                        const oppWinning = gameStatus.opponent.score > gameStatus.team.score;
+                        return (
+                          <div className={`flex-1 flex items-center justify-end gap-3 p-4 ${
+                            isFinal && oppWinning ? 'bg-gradient-to-l from-white/5 to-transparent' : ''
+                          }`}>
+                            {/* Winner arrow */}
+                            {isFinal && oppWinning && (
+                              <ChevronRight className="w-5 h-5 text-white/40 mr-auto" />
+                            )}
+                            
+                            {/* Score & Info */}
+                            <div className="flex flex-col items-end">
+                              {(isLive || isFinal) ? (
+                                <span className={`text-4xl font-bold ${
+                                  oppWinning ? 'text-white' : 'text-white/50'
+                                }`}>
+                                  {gameStatus.opponent.score}
+                                </span>
+                              ) : null}
+                              <span className="text-white/70 font-semibold text-sm">{oppTeamData?.abbreviation || gameStatus.opponent.abbreviation}</span>
+                              {gameStatus.opponent.record && (
+                                <span className="text-white/40 text-xs">{gameStatus.opponent.record}</span>
+                              )}
+                            </div>
+                            
+                            {/* Logo */}
+                            <div className="flex-shrink-0">
+                              {gameStatus.opponent.logo && (
+                                <img src={gameStatus.opponent.logo} alt={oppTeamData?.name} className={`w-14 h-14 ${oppWinning ? '' : 'opacity-60'}`} />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                     
-                    {/* Live game situation */}
+                    {/* Live game details - expandable section */}
                     {isLive && gameStatus.situation && (
                       <div className="px-4 pb-3 border-t border-white/5">
                         <div className={`flex items-center justify-center gap-2 text-xs pt-2 ${
@@ -858,9 +1051,10 @@ export default function LeagueDetail() {
                 );
               })}
             </div>
-          </div>
-        );
-      })()}
+            </>
+          );
+        })()}
+      </div>
 
       {/* Standings Table */}
       <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden animate-in" style={{ animationDelay: '100ms' }}>
@@ -869,12 +1063,12 @@ export default function LeagueDetail() {
             <Users className="w-4 h-4 sm:w-5 sm:h-5" />
             Standings
           </h2>
-          <span className="text-white/40 text-xs sm:text-sm">Week {selectedWeek}</span>
+          <span className="text-white/40 text-xs sm:text-sm">{getWeekLabel(selectedWeek)}</span>
         </div>
 
         {/* Mobile Card View */}
         <div className="sm:hidden divide-y divide-white/5">
-          {standings.map((member, index) => {
+          {sortedStandings.map((member, index) => {
             const weekData = member.picks?.[selectedWeek];
             const weekPicks = weekData?.picks || [];
             const isDoublePick = (league.doublePickWeeks || []).includes(selectedWeek);
@@ -884,10 +1078,15 @@ export default function LeagueDetail() {
               ? weekPicks 
               : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result, visible: weekData.visible }] : []);
             
+            // Calculate effective strikes from completed games
+            const effectiveStrikes = getEffectiveStrikes(member);
+            const effectivelyEliminated = effectiveStrikes >= (league?.maxStrikes || 1);
+            const effectiveStatus = effectivelyEliminated ? 'eliminated' : member.status;
+            
             return (
               <div 
                 key={member.memberId}
-                className={`p-3 ${member.isMe ? 'bg-nfl-blue/10' : ''} ${member.status === 'eliminated' ? 'opacity-50' : ''}`}
+                className={`p-3 ${member.isMe ? 'bg-nfl-blue/10' : ''} ${effectiveStatus === 'eliminated' ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -908,8 +1107,8 @@ export default function LeagueDetail() {
                       )}
                     </div>
                   </div>
-                  <span className={`badge text-xs ${member.status === 'active' ? 'badge-active' : 'badge-eliminated'}`}>
-                    {member.status}
+                  <span className={`badge text-xs ${effectiveStatus === 'active' ? 'badge-active' : 'badge-eliminated'}`}>
+                    {effectiveStatus}
                   </span>
                 </div>
                 
@@ -917,7 +1116,7 @@ export default function LeagueDetail() {
                   <div className="flex items-center gap-2">
                     <div className="flex gap-1">
                       {Array.from({ length: league.maxStrikes }).map((_, i) => (
-                        <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < member.strikes ? 'bg-red-500' : 'bg-white/20'}`} />
+                        <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < effectiveStrikes ? 'bg-red-500' : 'bg-white/20'}`} />
                       ))}
                     </div>
                     
@@ -928,6 +1127,7 @@ export default function LeagueDetail() {
                             return <EyeOff key={idx} className="w-4 h-4 text-white/30" />;
                           }
                           const team = NFL_TEAMS[String(pick.teamId)];
+                          const result = getPickResult(pick, pick.teamId);
                           return (
                             <div key={idx} className="flex items-center gap-1">
                               {team?.logo ? (
@@ -938,9 +1138,9 @@ export default function LeagueDetail() {
                                 </div>
                               )}
                               {!isDoublePick && <span className="text-white/70 text-xs">{team?.name}</span>}
-                              {pick.result && (
-                                <span className={`text-xs font-bold ${pick.result === 'win' ? 'text-green-400' : pick.result === 'loss' ? 'text-red-400' : 'text-white/40'}`}>
-                                  {pick.result === 'win' ? 'W' : pick.result === 'loss' ? 'L' : '-'}
+                              {result && result !== 'pending' && (
+                                <span className={`text-xs font-bold ${result === 'win' ? 'text-green-400' : 'text-red-400'}`}>
+                                  {result === 'win' ? 'W' : 'L'}
                                 </span>
                               )}
                             </div>
@@ -978,7 +1178,7 @@ export default function LeagueDetail() {
                   <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">Paid</th>
                 )}
                 <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">
-                  Week {selectedWeek} Pick{(league.doublePickWeeks || []).includes(selectedWeek) ? 's' : ''}
+                  {getWeekLabel(selectedWeek)} Pick{(league.doublePickWeeks || []).includes(selectedWeek) ? 's' : ''}
                   {(league.doublePickWeeks || []).includes(selectedWeek) && (
                     <span className="text-orange-400 ml-1 text-xs">×2</span>
                   )}
@@ -989,7 +1189,7 @@ export default function LeagueDetail() {
               </tr>
             </thead>
             <tbody>
-              {standings.map((member, index) => {
+              {sortedStandings.map((member, index) => {
                 const weekData = member.picks?.[selectedWeek];
                 const weekPicks = weekData?.picks || [];
                 const isDoublePick = (league.doublePickWeeks || []).includes(selectedWeek);
@@ -999,12 +1199,17 @@ export default function LeagueDetail() {
                   ? weekPicks 
                   : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result, visible: weekData.visible, gameStatus: weekData.gameStatus, game: weekData.game }] : []);
                 
+                // Calculate effective strikes from completed games
+                const effectiveStrikes = getEffectiveStrikes(member);
+                const effectivelyEliminated = effectiveStrikes >= (league?.maxStrikes || 1);
+                const effectiveStatus = effectivelyEliminated ? 'eliminated' : member.status;
+                
                 return (
                   <tr 
                     key={member.memberId}
-                    className={`border-b border-white/5 transition-colors ${
+                    className={`border-b border-white/5 transition-colors h-[85px] ${
                       member.isMe ? 'bg-nfl-blue/10' : 'hover:bg-white/5'
-                    } ${member.status === 'eliminated' ? 'opacity-50' : ''}`}
+                    } ${effectiveStatus === 'eliminated' ? 'opacity-50' : ''}`}
                   >
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
@@ -1034,7 +1239,7 @@ export default function LeagueDetail() {
                           <div
                             key={i}
                             className={`w-3 h-3 rounded-full ${
-                              i < member.strikes
+                              i < effectiveStrikes
                                 ? 'bg-red-500'
                                 : 'bg-white/20'
                             }`}
@@ -1044,11 +1249,11 @@ export default function LeagueDetail() {
                     </td>
                     <td className="px-4 py-4 text-center">
                       <span className={`badge ${
-                        member.status === 'active' 
+                        effectiveStatus === 'active' 
                           ? 'badge-active' 
                           : 'badge-eliminated'
                       }`}>
-                        {member.status}
+                        {effectiveStatus}
                       </span>
                     </td>
                     {isCommissioner && league.entryFee > 0 && (
@@ -1076,7 +1281,7 @@ export default function LeagueDetail() {
                       </td>
                     )}
                     <td className="px-4 py-4">
-                      <div className="flex items-center justify-center">
+                      <div className="flex items-center justify-center h-[52px]">
                         {displayPicks.length > 0 ? (
                           isDoublePick ? (
                             // Double pick layout: each team as a card with logo, name, W/L
@@ -1091,6 +1296,7 @@ export default function LeagueDetail() {
                                   );
                                 }
                                 const team = NFL_TEAMS[String(pick.teamId)];
+                                const result = getPickResult(pick, pick.teamId);
                                 return (
                                   <div key={idx} className="flex flex-col items-center">
                                     {team?.logo ? (
@@ -1105,11 +1311,11 @@ export default function LeagueDetail() {
                                     )}
                                     <div className="flex items-center gap-1 mt-1">
                                       <span className="text-white/70 text-xs">{team?.abbreviation}</span>
-                                      {pick.result && pick.result !== 'pending' && (
+                                      {result && result !== 'pending' && (
                                         <span className={`text-xs font-bold ${
-                                          pick.result === 'win' ? 'text-green-400' : 'text-red-400'
+                                          result === 'win' ? 'text-green-400' : 'text-red-400'
                                         }`}>
-                                          {pick.result === 'win' ? 'W' : 'L'}
+                                          {result === 'win' ? 'W' : 'L'}
                                         </span>
                                       )}
                                     </div>
@@ -1130,6 +1336,7 @@ export default function LeagueDetail() {
                                   );
                                 }
                                 const team = NFL_TEAMS[String(pick.teamId)];
+                                const result = getPickResult(pick, pick.teamId);
                                 return (
                                   <div key={idx} className="flex flex-col items-center">
                                     {team?.logo ? (
@@ -1144,11 +1351,11 @@ export default function LeagueDetail() {
                                     )}
                                     <div className="flex items-center gap-1 mt-1">
                                       <span className="text-white/70 text-xs">{team?.abbreviation}</span>
-                                      {pick.result && pick.result !== 'pending' && (
+                                      {result && result !== 'pending' && (
                                         <span className={`text-xs font-bold ${
-                                          pick.result === 'win' ? 'text-green-400' : 'text-red-400'
+                                          result === 'win' ? 'text-green-400' : 'text-red-400'
                                         }`}>
-                                          {pick.result === 'win' ? 'W' : 'L'}
+                                          {result === 'win' ? 'W' : 'L'}
                                         </span>
                                       )}
                                     </div>
@@ -1217,10 +1424,13 @@ export default function LeagueDetail() {
               const requiredPicks = isDoublePick ? 2 : 1;
               const isCurrent = week === currentWeek;
               
-              // Determine overall result for styling
-              const hasWin = weekPicks.some(p => p.result === 'win');
-              const hasLoss = weekPicks.some(p => p.result === 'loss');
-              const hasPending = weekPicks.some(p => p.result === 'pending');
+              // Determine overall result using effective results from game status
+              const hasWin = weekPicks.some(p => getPickResult(p, p.teamId) === 'win');
+              const hasLoss = weekPicks.some(p => getPickResult(p, p.teamId) === 'loss');
+              const hasPending = weekPicks.some(p => {
+                const result = getPickResult(p, p.teamId);
+                return !result || result === 'pending';
+              });
               const isComplete = weekPicks.length === requiredPicks;
               
               let bgClass = 'bg-white/5 border border-white/10';
@@ -1239,10 +1449,10 @@ export default function LeagueDetail() {
               return (
                 <div
                   key={week}
-                  className={`flex flex-col items-center p-3 rounded-xl min-w-[80px] ${bgClass} ${isCurrent ? 'ring-2 ring-nfl-blue' : ''}`}
+                  className={`flex flex-col items-center p-3 rounded-xl min-w-[80px] ${bgClass} ${isCurrent ? 'ring-2 ring-emerald-500' : ''}`}
                 >
                   <span className="text-xs text-white/50 mb-2">
-                    Week {week}
+                    {week <= 18 ? `Week ${week}` : week === 19 ? 'Wild Card' : week === 20 ? 'Divisional' : week === 21 ? 'Conf' : week === 22 ? 'Super Bowl' : `Week ${week}`}
                     {isDoublePick && <span className="text-orange-400 ml-1">×2</span>}
                   </span>
                   
@@ -1251,6 +1461,7 @@ export default function LeagueDetail() {
                       <div className="flex items-center gap-1 mb-1">
                         {weekPicks.map((pick, idx) => {
                           const team = NFL_TEAMS[String(pick.teamId)];
+                          const result = getPickResult(pick, pick.teamId);
                           return (
                             <div key={idx} className="flex flex-col items-center">
                               {team?.logo ? (
@@ -1269,11 +1480,11 @@ export default function LeagueDetail() {
                                 </div>
                               )}
                               {/* Show individual W/L for double picks */}
-                              {isDoublePick && pick.result && pick.result !== 'pending' && (
+                              {isDoublePick && result && result !== 'pending' && (
                                 <span className={`text-xs font-bold ${
-                                  pick.result === 'win' ? 'text-green-400' : 'text-red-400'
+                                  result === 'win' ? 'text-green-400' : 'text-red-400'
                                 }`}>
-                                  {pick.result === 'win' ? 'W' : 'L'}
+                                  {result === 'win' ? 'W' : 'L'}
                                 </span>
                               )}
                             </div>
@@ -1640,7 +1851,7 @@ export default function LeagueDetail() {
                               : 'bg-white/10 text-white/60 hover:bg-white/20'
                           }`}
                         >
-                          {week}
+                          {week <= 18 ? week : week === 19 ? 'WC' : week === 20 ? 'DIV' : week === 21 ? 'CONF' : week === 22 ? 'SB' : week}
                         </button>
                       ))}
                     </div>
@@ -1649,8 +1860,8 @@ export default function LeagueDetail() {
                   <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
                     <p className="text-yellow-200 text-sm">
                       {strikeDialog.action === 'add' 
-                        ? `This will add a strike to ${strikeDialog.member.displayName} for Week ${strikeDialog.week || '?'}. They will have ${strikeDialog.member.strikes + 1}/${league.maxStrikes} strikes.${strikeDialog.member.strikes + 1 >= league.maxStrikes ? ' They will be eliminated.' : ''}`
-                        : `This will remove a strike from ${strikeDialog.member.displayName} for Week ${strikeDialog.week || '?'}. They will have ${strikeDialog.member.strikes - 1}/${league.maxStrikes} strikes.`
+                        ? `This will add a strike to ${strikeDialog.member.displayName} for ${strikeDialog.week ? getWeekLabel(strikeDialog.week) : '?'}. They will have ${strikeDialog.member.strikes + 1}/${league.maxStrikes} strikes.${strikeDialog.member.strikes + 1 >= league.maxStrikes ? ' They will be eliminated.' : ''}`
+                        : `This will remove a strike from ${strikeDialog.member.displayName} for ${strikeDialog.week ? getWeekLabel(strikeDialog.week) : '?'}. They will have ${strikeDialog.member.strikes - 1}/${league.maxStrikes} strikes.`
                       }
                     </p>
                   </div>
@@ -1725,7 +1936,7 @@ export default function LeagueDetail() {
                   Set Pick{isDoublePick ? 's' : ''}
                 </h2>
                 <p className="text-white/60 text-sm">
-                  {pickDialog.member.displayName} • Week {pickDialog.week}
+                  {pickDialog.member.displayName} • {getWeekLabel(pickDialog.week)}
                   {isDoublePick && <span className="text-orange-400 ml-2">(Double Pick Week)</span>}
                 </p>
               </div>
@@ -1740,6 +1951,7 @@ export default function LeagueDetail() {
                 <div className="flex flex-wrap gap-2">
                   {weeks.map(week => {
                     const weekIsDouble = (league.doublePickWeeks || []).includes(week);
+                    const shortLabel = week <= 18 ? week : week === 19 ? 'WC' : week === 20 ? 'DIV' : week === 21 ? 'CONF' : week === 22 ? 'SB' : week;
                     return (
                       <button
                         key={week}
@@ -1754,8 +1966,9 @@ export default function LeagueDetail() {
                             ? 'bg-orange-500/20 text-orange-300 hover:bg-orange-500/30'
                             : 'bg-white/10 text-white/60 hover:bg-white/20'
                         }`}
+                        title={getWeekLabel(week)}
                       >
-                        {week}
+                        {shortLabel}
                         {weekIsDouble && pickDialog.week !== week && <span className="ml-1">×2</span>}
                       </button>
                     );
@@ -1770,15 +1983,16 @@ export default function LeagueDetail() {
                   <div className="flex flex-wrap gap-2 mt-1">
                     {currentWeekPicks.map((pick, idx) => {
                       const team = NFL_TEAMS[String(pick.teamId)];
+                      const result = getPickResult(pick, pick.teamId);
                       return (
                         <div key={idx} className="flex items-center gap-2 bg-white/5 rounded-lg px-2 py-1">
                           {team?.logo && <img src={team.logo} alt={team.name} className="w-5 h-5" />}
                           <span className="text-white text-sm">{team?.name || pick.teamId}</span>
-                          {pick.result && pick.result !== 'pending' && (
+                          {result && result !== 'pending' && (
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
-                              pick.result === 'win' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                              result === 'win' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                             }`}>
-                              {pick.result.toUpperCase()}
+                              {result.toUpperCase()}
                             </span>
                           )}
                         </div>
@@ -1786,21 +2000,26 @@ export default function LeagueDetail() {
                     })}
                   </div>
                 ) : currentPick?.teamId ? (
-                  <div className="flex items-center gap-2 mt-1">
-                    {NFL_TEAMS[String(currentPick.teamId)]?.logo && (
-                      <img src={NFL_TEAMS[String(currentPick.teamId)].logo} alt="" className="w-5 h-5" />
-                    )}
-                    <span className="text-white text-sm">{NFL_TEAMS[String(currentPick.teamId)]?.name}</span>
-                    {currentPick.result && currentPick.result !== 'pending' && (
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        currentPick.result === 'win' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        {currentPick.result.toUpperCase()}
-                      </span>
-                    )}
-                  </div>
+                  (() => {
+                    const result = getPickResult(currentPick, currentPick.teamId);
+                    return (
+                      <div className="flex items-center gap-2 mt-1">
+                        {NFL_TEAMS[String(currentPick.teamId)]?.logo && (
+                          <img src={NFL_TEAMS[String(currentPick.teamId)].logo} alt="" className="w-5 h-5" />
+                        )}
+                        <span className="text-white text-sm">{NFL_TEAMS[String(currentPick.teamId)]?.name}</span>
+                        {result && result !== 'pending' && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${
+                            result === 'win' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {result.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()
                 ) : (
-                  <p className="text-white/40 text-sm mt-1">No pick for Week {pickDialog.week}</p>
+                  <p className="text-white/40 text-sm mt-1">No pick for {getWeekLabel(pickDialog.week)}</p>
                 )}
               </div>
 
@@ -1906,7 +2125,7 @@ export default function LeagueDetail() {
               {selectedTeamsForPick.length === requiredPicks && (
                 <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
                   <p className="text-yellow-200 text-sm">
-                    This will set {pickDialog.member.displayName}'s Week {pickDialog.week} pick{isDoublePick ? 's' : ''} to{' '}
+                    This will set {pickDialog.member.displayName}'s {getWeekLabel(pickDialog.week)} pick{isDoublePick ? 's' : ''} to{' '}
                     {selectedTeamsForPick.map(id => NFL_TEAMS[id]?.name).join(' & ')}.
                     {(currentWeekPicks.length > 0 || currentPick?.teamId) && ' This will override their existing pick(s).'}
                   </p>

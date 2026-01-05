@@ -179,6 +179,14 @@ export const picksAPI = {
   getAvailableTeams: async (leagueId, week) => {
     const res = await authFetch(`/picks/available/${leagueId}/${week}`);
     return res.json();
+  },
+
+  // Trigger update of pick results for completed games
+  updateResults: async () => {
+    const res = await fetch(`${API_URL}/picks/update-results`, {
+      method: 'POST'
+    });
+    return res.json();
   }
 };
 

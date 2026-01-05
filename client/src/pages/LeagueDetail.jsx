@@ -607,8 +607,8 @@ export default function LeagueDetail() {
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       {/* Header */}
-      <div className="flex flex-col gap-4 mb-6 sm:mb-8 animate-in">
-        <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex flex-col gap-4 mb-6 sm:mb-8">
+        <div className="flex items-center gap-3 sm:gap-4 animate-in">
           <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-nfl-blue to-blue-700 flex items-center justify-center shadow-lg flex-shrink-0">
             <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
           </div>
@@ -737,7 +737,7 @@ export default function LeagueDetail() {
       )}
 
       {/* Week Selector */}
-      <div className="glass-card rounded-xl sm:rounded-2xl p-2 sm:p-4 mb-4 sm:mb-6 animate-in h-[60px] sm:h-[72px]" style={{ animationDelay: '50ms' }}>
+      <div className="glass-card rounded-xl sm:rounded-2xl p-2 sm:p-4 mb-4 sm:mb-6 h-[60px] sm:h-[72px]" style={{ animationDelay: '50ms' }}>
         <div className="flex items-center justify-between h-full">
           <button
             onClick={() => handleWeekChange(Math.max(league.startWeek, selectedWeek - 1))}
@@ -1057,7 +1057,7 @@ export default function LeagueDetail() {
       </div>
 
       {/* Standings Table */}
-      <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden animate-in" style={{ animationDelay: '100ms' }}>
+      <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden" style={{ animationDelay: '100ms' }}>
         <div className="p-3 sm:p-4 border-b border-white/10 flex items-center justify-between">
           <h2 className="font-display text-lg sm:text-xl font-semibold text-white flex items-center gap-2">
             <Users className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1408,7 +1408,7 @@ export default function LeagueDetail() {
       </div>
 
       {/* My Picks History */}
-      <div className="glass-card rounded-2xl mt-6 overflow-hidden animate-in" style={{ animationDelay: '200ms' }}>
+      <div className="glass-card rounded-2xl mt-6 overflow-hidden" style={{ animationDelay: '200ms' }}>
         <div className="p-4 border-b border-white/10">
           <h2 className="font-display text-xl font-semibold text-white flex items-center gap-2">
             <Eye className="w-5 h-5" />

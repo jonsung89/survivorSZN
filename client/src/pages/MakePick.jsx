@@ -12,15 +12,15 @@ import Loading from '../components/Loading';
 export default function MakePick() {
   const { leagueId } = useParams();
   const navigate = useNavigate();
-  const { showToast } = useToast();
   const [searchParams] = useSearchParams();
-  const weekParam = searchParams.get('week');
+  const { showToast } = useToast();
   
   const [loading, setLoading] = useState(true);
+  const [loadingWeek, setLoadingWeek] = useState(null); // Track which week is loading
   const [submitting, setSubmitting] = useState(false);
   const [league, setLeague] = useState(null);
   const [currentWeek, setCurrentWeek] = useState(18);
-  const [selectedWeek, setSelectedWeek] = useState(18);
+  const [selectedWeek, setSelectedWeek] = useState(null); // Start as null until we know the week
   const [games, setGames] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [currentPick, setCurrentPick] = useState(null);
@@ -38,6 +38,16 @@ export default function MakePick() {
       console.error('Failed to load team info:', error);
       setTeamInfoDialog(prev => ({ ...prev, loading: false }));
     }
+  };
+
+  // Helper to get week label (handles playoff weeks)
+  const getWeekLabel = (week) => {
+    if (week <= 18) return `Week ${week}`;
+    if (week === 19) return 'Wild Card';
+    if (week === 20) return 'Divisional';
+    if (week === 21) return 'Conference';
+    if (week === 22) return 'Super Bowl';
+    return `Week ${week}`;
   };
 
   useEffect(() => {
@@ -65,11 +75,12 @@ export default function MakePick() {
       setLeague(leagueData);
 
       const seasonResult = await nflAPI.getSeason();
-      const apiWeek = seasonResult.week || 18;
-      setCurrentWeek(apiWeek);
+      const week = seasonResult.week || 18;
+      setCurrentWeek(week);
       
-      // Use week from URL param if provided, otherwise use current week
-      const targetWeek = weekParam ? parseInt(weekParam) : apiWeek;
+      // Check for week parameter in URL, otherwise use current week
+      const urlWeek = searchParams.get('week');
+      const targetWeek = urlWeek ? parseInt(urlWeek) : week;
       setSelectedWeek(targetWeek);
 
       const picksResult = await picksAPI.getLeaguePicks(leagueId);
@@ -84,6 +95,12 @@ export default function MakePick() {
   };
 
   const loadTeams = async (week) => {
+    // Clear state immediately to prevent showing stale data
+    setLoadingWeek(week);
+    setCurrentPick(null);
+    setSelectedTeam(null);
+    setCurrentPickLocked(false);
+    
     try {
       const result = await picksAPI.getAvailableTeams(leagueId, week);
       const data = result.success ? result.data || result : result;
@@ -164,20 +181,18 @@ export default function MakePick() {
           setSelectedTeam(data.currentPick.teamId);
           const currentPickTeam = data.teams.find(t => t.team?.id === data.currentPick.teamId);
           setCurrentPickLocked(currentPickTeam?.isLocked || false);
-        } else {
-          setCurrentPick(null);
-          setSelectedTeam(null);
-          setCurrentPickLocked(false);
         }
+        // Note: if no pick, state is already cleared at the start
       } else {
         setGames([]);
-        setCurrentPick(null);
         setSelectedTeam(null);
         setCurrentPickLocked(false);
       }
     } catch (error) {
       console.error('Load teams error:', error);
       setGames([]);
+    } finally {
+      setLoadingWeek(null);
     }
   };
 
@@ -221,19 +236,9 @@ export default function MakePick() {
   };
 
   if (loading) return <Loading fullScreen />;
-  if (!league) return null;
+  if (!league || selectedWeek === null) return <Loading fullScreen />;
 
   const startWeek = league.startWeek || league.start_week || 1;
-
-  // Helper to get week label for display
-  const getWeekLabel = (week) => {
-    if (week <= 18) return `Week ${week}`;
-    if (week === 19) return 'Wild Card';
-    if (week === 20) return 'Divisional';
-    if (week === 21) return 'Conference';
-    if (week === 22) return 'Super Bowl';
-    return `Week ${week}`;
-  };
 
   return (
     <div className="max-w-2xl mx-auto px-2 sm:px-4 py-3 sm:py-6 pb-24">
@@ -244,7 +249,7 @@ export default function MakePick() {
         </Link>
         <div className="min-w-0">
           <h1 className="font-display text-xl sm:text-2xl font-bold text-white">
-            {currentPick ? 'Change Your Pick' : 'Make Your Pick'}
+            {loadingWeek ? 'Loading...' : currentPick ? 'Change Your Pick' : 'Make Your Pick'}
           </h1>
           <p className="text-white/50 text-sm truncate">{league.name}</p>
         </div>
@@ -254,21 +259,26 @@ export default function MakePick() {
       <div className="flex items-center justify-between bg-white/5 rounded-lg p-1 mb-3 sm:mb-4">
         <button
           onClick={() => setSelectedWeek(Math.max(startWeek, selectedWeek - 1))}
-          disabled={selectedWeek <= startWeek}
+          disabled={selectedWeek <= startWeek || loadingWeek}
           className="p-2 sm:p-3 hover:bg-white/10 rounded-lg disabled:opacity-30"
         >
           <ChevronLeft className="w-5 h-5 text-white" />
         </button>
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-white/50 hidden sm:block" />
-          <span className="text-white font-semibold text-base sm:text-lg">{getWeekLabel(selectedWeek)}</span>
+          <span className="text-white font-semibold text-base sm:text-lg">
+            {getWeekLabel(selectedWeek)}
+          </span>
           {selectedWeek === currentWeek && (
             <span className="bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full">Current</span>
+          )}
+          {loadingWeek && (
+            <Loader2 className="w-4 h-4 text-white/50 animate-spin" />
           )}
         </div>
         <button
           onClick={() => setSelectedWeek(Math.min(22, selectedWeek + 1))}
-          disabled={selectedWeek >= 22}
+          disabled={selectedWeek >= 22 || loadingWeek}
           className="p-2 sm:p-3 hover:bg-white/10 rounded-lg disabled:opacity-30"
         >
           <ChevronRight className="w-5 h-5 text-white" />
@@ -276,7 +286,7 @@ export default function MakePick() {
       </div>
 
       {/* Current Pick Display */}
-      {currentPick && (
+      {currentPick && !loadingWeek && (
         <div className={`rounded-xl p-3 sm:p-4 mb-3 sm:mb-4 border ${
           currentPickLocked 
             ? 'bg-red-500/10 border-red-500/20' 

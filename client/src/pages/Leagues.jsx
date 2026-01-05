@@ -12,29 +12,41 @@ export default function Leagues() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    loadLeagues();
-  }, []);
-
-  const loadLeagues = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const result = await leagueAPI.getMyLeagues();
-      
-      if (result.success && result.leagues) {
-        setLeagues(result.leagues);
-      } else if (Array.isArray(result.leagues)) {
-        setLeagues(result.leagues);
-      } else if (result.error) {
-        setError(result.error);
+    let cancelled = false;
+    
+    const loadLeagues = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const result = await leagueAPI.getMyLeagues();
+        
+        if (cancelled) return;
+        
+        if (result.success && result.leagues) {
+          setLeagues(result.leagues);
+        } else if (Array.isArray(result.leagues)) {
+          setLeagues(result.leagues);
+        } else if (result.error) {
+          setError(result.error);
+        }
+      } catch (err) {
+        console.error('Failed to load leagues:', err);
+        if (!cancelled) {
+          setError('Failed to load leagues');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    } catch (err) {
-      console.error('Failed to load leagues:', err);
-      setError('Failed to load leagues');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    
+    loadLeagues();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (loading) {
     return <Loading fullScreen />;
@@ -43,7 +55,7 @@ export default function Leagues() {
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8 animate-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8  animate-in">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">My Leagues</h1>
           <p className="text-white/60 mt-1 text-sm sm:text-base">Manage your survivor pools</p>
@@ -68,7 +80,7 @@ export default function Leagues() {
 
       {/* Error State */}
       {error && (
-        <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border border-red-500/30 animate-in">
+        <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border border-red-500/30">
           <div className="flex items-center gap-3 text-red-400 text-sm sm:text-base">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <p>{error}</p>
@@ -83,8 +95,7 @@ export default function Leagues() {
             <Link
               key={league.id}
               to={`/league/${league.id}`}
-              className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 block hover:bg-white/10 active:bg-white/15 transition-all group animate-in"
-              style={{ animationDelay: `${index * 50}ms` }}
+              className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 block hover:bg-white/10 active:bg-white/15 transition-all group"
             >
               <div className="flex items-center gap-3 sm:gap-4">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-nfl-blue to-blue-700 flex items-center justify-center shadow-lg flex-shrink-0">
@@ -135,7 +146,7 @@ export default function Leagues() {
           ))}
         </div>
       ) : (
-        <div className="glass-card rounded-xl sm:rounded-2xl p-8 sm:p-12 text-center animate-in">
+        <div className="glass-card rounded-xl sm:rounded-2xl p-8 sm:p-12 text-center">
           <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-white/20 mx-auto mb-4" />
           <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">No leagues yet</h2>
           <p className="text-white/60 text-sm sm:text-base mb-6">Create a league or join an existing one to get started</p>

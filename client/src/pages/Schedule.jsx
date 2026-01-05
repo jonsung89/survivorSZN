@@ -40,7 +40,54 @@ export default function Schedule() {
   const playoffRoundNumbers = [1, 2, 3, 5]; // Wild Card, Divisional, Conference, Super Bowl
 
   useEffect(() => {
+    let cancelled = false;
+    
+    const loadSeason = async () => {
+      try {
+        const result = await nflAPI.getSeason();
+        if (cancelled) return;
+        
+        if (result.season) {
+          const year = result.season;
+          const week = result.week;
+          const seasonType = result.seasonType || 2;
+          
+          setSeason(year);
+          setCurrentYear(year);
+          setCurrentWeek(week);
+          setCurrentSeasonType(seasonType);
+          setSelectedWeek(week);
+          setSelectedSeasonType(seasonType);
+          
+          // Directly load the schedule for the current week
+          if (seasonType === 2) {
+            await loadSchedule(week, year, 2);
+            // Scroll to current week tab after data loads
+            setTimeout(() => {
+              const key = `2-${week}`;
+              const button = weekButtonRefs.current[key];
+              if (button && weekTabsRef.current) {
+                button.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+              }
+            }, 100);
+          } else if (seasonType === 3) {
+            await loadAllPlayoffRounds(year);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load season:', error);
+      }
+      if (!cancelled) {
+        setLoading(false);
+        setInitialLoadDone(true);
+      }
+    };
+    
     loadSeason();
+    
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -78,43 +125,6 @@ export default function Schedule() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const loadSeason = async () => {
-    try {
-      const result = await nflAPI.getSeason();
-      if (result.season) {
-        const year = result.season;
-        const week = result.week;
-        const seasonType = result.seasonType || 2;
-        
-        setSeason(year);
-        setCurrentYear(year);
-        setCurrentWeek(week);
-        setCurrentSeasonType(seasonType);
-        setSelectedWeek(week);
-        setSelectedSeasonType(seasonType);
-        
-        // Directly load the schedule for the current week
-        if (seasonType === 2) {
-          await loadSchedule(week, year, 2);
-          // Scroll to current week tab after data loads
-          setTimeout(() => {
-            const key = `2-${week}`;
-            const button = weekButtonRefs.current[key];
-            if (button && weekTabsRef.current) {
-              button.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-            }
-          }, 100);
-        } else if (seasonType === 3) {
-          await loadAllPlayoffRounds(year);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load season:', error);
-    }
-    setLoading(false);
-    setInitialLoadDone(true);
-  };
 
   const loadSchedule = async (week, targetSeason, seasonType) => {
     setScheduleLoading(true);
@@ -224,9 +234,7 @@ export default function Schedule() {
   };
 
   const isGameLive = (game) => {
-    // Include halftime and other mid-game statuses
-    const liveStatuses = ['STATUS_IN_PROGRESS', 'STATUS_HALFTIME', 'STATUS_END_PERIOD', 'in_progress'];
-    return liveStatuses.includes(game.status);
+    return game.status === 'STATUS_IN_PROGRESS' || game.status === 'in_progress';
   };
 
   const getStatusDisplay = (game) => {
@@ -234,7 +242,7 @@ export default function Schedule() {
       return (
         <span className="flex items-center gap-1.5 text-xs font-semibold text-red-400 bg-red-500/20 px-2 py-1 rounded-full">
           <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-          {game.statusDetail || 'LIVE'}
+          LIVE
         </span>
       );
     }
@@ -960,7 +968,7 @@ export default function Schedule() {
               {isLive ? (
                 <span className="flex items-center justify-end gap-1.5 text-xs font-semibold text-red-400">
                   <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                  {game.statusDetail || 'LIVE'}
+                  LIVE
                 </span>
               ) : isPast ? (
                 <span className="text-xs font-medium text-white/50">Final</span>
@@ -977,7 +985,7 @@ export default function Schedule() {
           
           {/* Expanded Content - Mobile */}
           {isExpanded && (
-            (isPast || isLive) ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
+            isPast ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
           )}
         </div>
 
@@ -1077,7 +1085,7 @@ export default function Schedule() {
           
           {/* Expanded Content - Desktop */}
           {isExpanded && (
-            (isPast || isLive) ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
+            isPast ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
           )}
         </div>
       </div>
@@ -1091,7 +1099,7 @@ export default function Schedule() {
   return (
     <div className="max-w-3xl mx-auto px-3 sm:px-4 pt-0 sm:py-8 pb-4">
       {/* Header with Season Dropdown */}
-      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 animate-in">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
             NFL Schedule
@@ -1206,7 +1214,7 @@ export default function Schedule() {
               <ChevronLeft className="w-5 h-5 text-white" />
             </button>
             
-            <div className="flex-1 overflow-x-auto scrollbar-hide" ref={weekTabsRef}>
+            <div className="flex-1 overflow-x-auto scrollbar-hide pt-2" ref={weekTabsRef}>
               <div className="flex gap-1.5 sm:gap-2 pb-1">
                 {regularWeeks.map(week => {
                   const isSelected = selectedWeek === week;
@@ -1227,7 +1235,7 @@ export default function Schedule() {
                     >
                       <span className="hidden sm:inline">Week </span>{week}
                       {isCurrent && (
-                        <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-yellow-400' : 'bg-green-500'}`} />
+                        <span className={`absolute -top-1.5 -right-1 w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-yellow-400' : 'bg-green-500'}`} />
                       )}
                     </button>
                   );

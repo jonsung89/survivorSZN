@@ -154,7 +154,88 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    loadDashboard();
+    let cancelled = false;
+    
+    const load = async () => {
+      try {
+        const [leaguesData, pendingData, seasonData] = await Promise.all([
+          leagueAPI.getMyLeagues(),
+          userAPI.getPendingPicks(),
+          nflAPI.getSeason()
+        ]);
+
+        if (cancelled) return;
+
+        // Handle new API response format: { success: true, leagues: [...] }
+        if (leaguesData.success && leaguesData.leagues) {
+          setLeagues(leaguesData.leagues);
+        } else if (Array.isArray(leaguesData)) {
+          setLeagues(leaguesData);
+        } else {
+          setLeagues([]);
+        }
+
+        // Handle pending picks response
+        if (pendingData.success && pendingData.pendingPicks) {
+          setPendingPicks(pendingData.pendingPicks);
+        } else if (pendingData.pendingPicks) {
+          setPendingPicks(pendingData.pendingPicks);
+        } else {
+          setPendingPicks([]);
+        }
+
+        setSeasonInfo(seasonData);
+
+        // Fetch schedule to get first game time
+        if (seasonData?.week) {
+          try {
+            const scheduleData = await nflAPI.getSchedule(seasonData.week);
+            if (cancelled) return;
+            
+            if (scheduleData?.games?.length > 0) {
+              const now = new Date();
+              const games = scheduleData.games;
+              
+              // Store all games for the week
+              setAllGames(games);
+              
+              // Check if any games have started (in progress, final, or past scheduled time)
+              const hasStartedGames = games.some(g => {
+                if (g.status === 'STATUS_IN_PROGRESS' || g.status === 'STATUS_FINAL') return true;
+                // Also check if scheduled time has passed
+                const gameTime = new Date(g.date);
+                return gameTime <= now && g.status !== 'STATUS_SCHEDULED';
+              });
+              setWeekStarted(hasStartedGames);
+              
+              // If week hasn't started, find first upcoming game for countdown
+              if (!hasStartedGames) {
+                const upcomingGames = games
+                  .filter(g => new Date(g.date) > now)
+                  .sort((a, b) => new Date(a.date) - new Date(b.date));
+                
+                if (upcomingGames.length > 0) {
+                  setFirstGame(upcomingGames[0]);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Failed to fetch schedule:', err);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load dashboard:', error);
+      }
+      if (!cancelled) {
+        setLoading(false);
+      }
+    };
+    
+    load();
+    
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Fetch game details for live games (to get betting data)
@@ -245,75 +326,6 @@ export default function Dashboard() {
       return () => clearInterval(interval);
     }
   }, [weekStarted, seasonInfo?.week, allGames]);
-
-  const loadDashboard = async () => {
-    try {
-      const [leaguesData, pendingData, seasonData] = await Promise.all([
-        leagueAPI.getMyLeagues(),
-        userAPI.getPendingPicks(),
-        nflAPI.getSeason()
-      ]);
-
-      // Handle new API response format: { success: true, leagues: [...] }
-      if (leaguesData.success && leaguesData.leagues) {
-        setLeagues(leaguesData.leagues);
-      } else if (Array.isArray(leaguesData)) {
-        setLeagues(leaguesData);
-      } else {
-        setLeagues([]);
-      }
-
-      // Handle pending picks response
-      if (pendingData.success && pendingData.pendingPicks) {
-        setPendingPicks(pendingData.pendingPicks);
-      } else if (pendingData.pendingPicks) {
-        setPendingPicks(pendingData.pendingPicks);
-      } else {
-        setPendingPicks([]);
-      }
-
-      setSeasonInfo(seasonData);
-
-      // Fetch schedule to get first game time
-      if (seasonData?.week) {
-        try {
-          const scheduleData = await nflAPI.getSchedule(seasonData.week);
-          if (scheduleData?.games?.length > 0) {
-            const now = new Date();
-            const games = scheduleData.games;
-            
-            // Store all games for the week
-            setAllGames(games);
-            
-            // Check if any games have started (in progress, final, or past scheduled time)
-            const hasStartedGames = games.some(g => {
-              if (g.status === 'STATUS_IN_PROGRESS' || g.status === 'STATUS_FINAL') return true;
-              // Also check if scheduled time has passed
-              const gameTime = new Date(g.date);
-              return gameTime <= now && g.status !== 'STATUS_SCHEDULED';
-            });
-            setWeekStarted(hasStartedGames);
-            
-            // If week hasn't started, find first upcoming game for countdown
-            if (!hasStartedGames) {
-              const upcomingGames = games
-                .filter(g => new Date(g.date) > now)
-                .sort((a, b) => new Date(a.date) - new Date(b.date));
-              
-              if (upcomingGames.length > 0) {
-                setFirstGame(upcomingGames[0]);
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Failed to fetch schedule:', err);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load dashboard:', error);
-    }
-    setLoading(false);
-  };
 
   if (loading) {
     return (
@@ -587,7 +599,7 @@ export default function Dashboard() {
       )}
 
       {/* Leagues Section */}
-      <div className="animate-in" style={{ animationDelay: '100ms' }}>
+      <div className="" style={{ animationDelay: '100ms' }}>
         <div className="flex items-center justify-between mb-3 sm:mb-4">
           <h2 className="text-lg sm:text-xl font-display font-semibold text-white">My Leagues</h2>
           <Link
@@ -694,7 +706,7 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="mt-6 sm:mt-8 grid gap-3 sm:gap-4 sm:grid-cols-2 animate-in" style={{ animationDelay: '500ms' }}>
+      <div className="mt-6 sm:mt-8 grid gap-3 sm:gap-4 sm:grid-cols-2" style={{ animationDelay: '500ms' }}>
         <Link
           to="/leagues/create"
           className="glass-card rounded-xl p-4 sm:p-5 hover:bg-white/[0.06] active:bg-white/[0.08] transition-all group flex items-center gap-3 sm:gap-4"

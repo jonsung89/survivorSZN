@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircle, X, Send, Users, Crown, ChevronLeft, ChevronRight, ChevronUp, Smile, Image, Reply, CornerUpLeft, AlertCircle, Search, Maximize2, Minimize2, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { MessageCircle, X, Send, Users, Crown, ChevronLeft, ChevronRight, ChevronUp, Smile, Image, Reply, CornerUpLeft, AlertCircle, Search, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Trash2, ShieldX } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
@@ -211,6 +211,19 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     const unsubscribe = on('reaction-update', ({ messageId, reactions }) => {
       setMessages(prev => prev.map(m => 
         m.id === messageId ? { ...m, reactions } : m
+      ));
+    });
+
+    return unsubscribe;
+  }, [on]);
+
+  // Listen for message updates (including soft deletes)
+  useEffect(() => {
+    const unsubscribe = on('message-updated', ({ messageId, message, gif, deletedAt, deletedBy }) => {
+      setMessages(prev => prev.map(m => 
+        m.id === messageId 
+          ? { ...m, message, gif, deletedAt, deletedBy }
+          : m
       ));
     });
 
@@ -487,6 +500,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
       return;
     }
     
+    // Don't show menu for deleted messages
+    if (message.deletedAt) {
+      return;
+    }
+    
     // Capture click position for desktop menu positioning
     const rect = e.currentTarget.getBoundingClientRect();
     setMenuPosition({
@@ -577,6 +595,26 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     setSelectedMessage(null);
   };
 
+  const handleDelete = (message) => {
+    if (window.confirm('Delete this message?')) {
+      if (socket) {
+        socket.emit('delete-message', { leagueId, messageId: message.id });
+      }
+    }
+    setShowMessageMenu(false);
+    setSelectedMessage(null);
+  };
+
+  const handleModerate = (message) => {
+    if (window.confirm('Remove this message as commissioner? It will show as removed.')) {
+      if (socket) {
+        socket.emit('moderate-message', { leagueId, messageId: message.id });
+      }
+    }
+    setShowMessageMenu(false);
+    setSelectedMessage(null);
+  };
+
   // Swipe/drag to reply handlers (works with both touch and mouse)
   const handleSwipeStart = (e, messageId) => {
     // Get clientX from touch or mouse event
@@ -598,8 +636,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   };
 
   const handleSwipeEnd = (message) => {
-    if (swipeOffset > 50) {
-      // Trigger reply
+    if (swipeOffset > 50 && !message.deletedAt) {
+      // Trigger reply (only if not deleted)
       handleReply(message);
     }
     setSwipeOffset(0);
@@ -800,6 +838,13 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
   const currentTyping = typingUsers[leagueId] || [];
   const currentOnline = onlineUsers[leagueId] || [];
+
+  // Auto-scroll when someone starts typing
+  useEffect(() => {
+    if (currentTyping.length > 0 && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [currentTyping]);
 
   // Profile Panel Component
   const ProfilePanel = ({ profile, onClose }) => {
@@ -1019,43 +1064,63 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   {message.replyTo && (
                     <div className="ml-1 mb-1 pl-2 border-l-2 border-white/20 text-xs text-white/40">
                       <span className="font-medium text-white/50">{message.replyTo.displayName}</span>
-                      <p className="truncate">{message.replyTo.preview}</p>
-                    </div>
-                  )}
-
-                  {/* GIF content - displayed without bubble */}
-                  {message.gif && (
-                    <div 
-                      className="cursor-pointer active:scale-[0.98] transition-all hover:brightness-110"
-                      onClick={(e) => handleMessageTap(e, message)}
-                    >
-                      <img 
-                        src={message.gif.url} 
-                        alt="GIF" 
-                        className="rounded-2xl max-w-[240px] max-h-[240px] object-cover"
-                        loading="lazy"
-                      />
-                    </div>
-                  )}
-
-                  {/* Text content with bubble - only show if there's actual text (not just [GIF]) */}
-                  {message.message && message.message !== '[GIF]' && (
-                    <div
-                      className={`inline-block px-3 py-2 rounded-2xl rounded-tl-md cursor-pointer active:scale-[0.98] transition-all hover:ring-1 hover:ring-white/20 ${
-                        isOwn
-                          ? 'bg-emerald-600/20 border border-emerald-500/30 text-white hover:bg-emerald-600/30'
-                          : 'bg-white/10 text-white hover:bg-white/15'
-                      }`}
-                      onClick={(e) => handleMessageTap(e, message)}
-                    >
-                      <p className="text-sm whitespace-pre-wrap break-words">
-                        {message.message.split(/(@\w+)/g).map((part, i) => 
-                          part.startsWith('@') ? (
-                            <span key={i} className="text-nfl-blue font-medium">{part}</span>
-                          ) : part
-                        )}
+                      <p className="truncate italic">
+                        {/* Check if the original message was deleted by finding it in messages */}
+                        {messages.find(m => m.id === message.replyTo.id)?.deletedAt
+                          ? 'This message was deleted'
+                          : message.replyTo.preview
+                        }
                       </p>
                     </div>
+                  )}
+
+                  {/* Deleted message placeholder */}
+                  {message.deletedAt ? (
+                    <div className="inline-block px-3 py-2 rounded-2xl rounded-tl-md bg-white/5 border border-white/10">
+                      <p className="text-sm text-white/40 italic">
+                        {message.deletedBy === 'commissioner' 
+                          ? '🛡️ Message removed by commissioner'
+                          : 'This message was deleted'
+                        }
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* GIF content - displayed without bubble */}
+                      {message.gif && (
+                        <div 
+                          className="cursor-pointer active:scale-[0.98] transition-all hover:brightness-110"
+                          onClick={(e) => handleMessageTap(e, message)}
+                        >
+                          <img 
+                            src={message.gif.url} 
+                            alt="GIF" 
+                            className="rounded-2xl max-w-[240px] max-h-[240px] object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
+
+                      {/* Text content with bubble - only show if there's actual text (not just [GIF]) */}
+                      {message.message && message.message !== '[GIF]' && (
+                        <div
+                          className={`inline-block px-3 py-2 rounded-2xl rounded-tl-md cursor-pointer active:scale-[0.98] transition-all hover:ring-1 hover:ring-white/20 ${
+                            isOwn
+                              ? 'bg-emerald-600/20 border border-emerald-500/30 text-white hover:bg-emerald-600/30'
+                              : 'bg-white/10 text-white hover:bg-white/15'
+                          }`}
+                          onClick={(e) => handleMessageTap(e, message)}
+                        >
+                          <p className="text-sm whitespace-pre-wrap break-words">
+                            {message.message.split(/(@\w+)/g).map((part, i) => 
+                              part.startsWith('@') ? (
+                                <span key={i} className="text-nfl-blue font-medium">{part}</span>
+                              ) : part
+                            )}
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
                   
                   {/* Reactions */}
@@ -1105,7 +1170,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
             <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
           </div>
-          <span>{currentTyping.join(', ')} typing...</span>
+          <span>
+            {currentTyping.length === 1 
+              ? `${currentTyping[0]} is typing...` 
+              : `${currentTyping.length} people are typing...`
+            }
+          </span>
         </div>
       )}
 
@@ -1141,6 +1211,17 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             <div className="w-2 h-2 bg-emerald-500 rounded-full" />
             <span className="text-[10px] text-white/40">{currentOnline.length}</span>
           </div>
+          
+          {/* Typing indicator */}
+          {currentTyping.length > 0 && (
+            <div className="mt-3 flex flex-col items-center gap-1" title={currentTyping.length === 1 ? `${currentTyping[0]} is typing...` : `${currentTyping.length} people typing...`}>
+              <div className="flex gap-0.5">
+                <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Expanded state - full chat */}
@@ -1158,11 +1239,27 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-white/10">
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-white">League Chat</h3>
-              <p className="text-xs text-white/50 flex items-center gap-1">
-                <Users className="w-3 h-3" />
-                {currentOnline.length} online
-                {connected ? '' : ' • Reconnecting...'}
-              </p>
+              {currentTyping.length > 0 ? (
+                <p className="text-xs text-nfl-blue flex items-center gap-1.5">
+                  <span className="flex gap-0.5">
+                    <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </span>
+                  <span className="truncate">
+                    {currentTyping.length === 1 
+                      ? `${currentTyping[0]} is typing...` 
+                      : `${currentTyping.length} people typing...`
+                    }
+                  </span>
+                </p>
+              ) : (
+                <p className="text-xs text-white/50 flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  {currentOnline.length} online
+                  {connected ? '' : ' • Reconnecting...'}
+                </p>
+              )}
             </div>
             <button
               onClick={() => setIsDesktopCollapsed(true)}
@@ -1511,11 +1608,27 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-white">League Chat</h3>
-                    <p className="text-xs text-white/50 flex items-center gap-1">
-                      <Users className="w-3 h-3" />
-                      {currentOnline.length} online
-                      {connected ? '' : ' • Reconnecting...'}
-                    </p>
+                    {currentTyping.length > 0 ? (
+                      <p className="text-xs text-nfl-blue flex items-center gap-1.5">
+                        <span className="flex gap-0.5">
+                          <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </span>
+                        <span className="truncate">
+                          {currentTyping.length === 1 
+                            ? `${currentTyping[0]} is typing...` 
+                            : `${currentTyping.length} people typing...`
+                          }
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-white/50 flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        {currentOnline.length} online
+                        {connected ? '' : ' • Reconnecting...'}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     {/* Size toggle button */}
@@ -1781,20 +1894,49 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     
                     {/* Actions */}
                     <div className="p-2">
-                      <button
-                        onClick={() => handleReply(selectedMessage)}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-white hover:bg-white/5 rounded-xl transition-colors"
-                      >
-                        <Reply className="w-5 h-5 text-white/60" />
-                        <span>Reply</span>
-                      </button>
-                      <button
-                        onClick={() => handleReport(selectedMessage)}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-red-400 hover:bg-white/5 rounded-xl transition-colors"
-                      >
-                        <AlertCircle className="w-5 h-5" />
-                        <span>Report</span>
-                      </button>
+                      {/* Reply - always available unless message is deleted */}
+                      {!selectedMessage?.deletedAt && (
+                        <button
+                          onClick={() => handleReply(selectedMessage)}
+                          className="w-full px-4 py-3 flex items-center gap-3 text-white hover:bg-white/5 rounded-xl transition-colors"
+                        >
+                          <Reply className="w-5 h-5 text-white/60" />
+                          <span>Reply</span>
+                        </button>
+                      )}
+                      
+                      {/* Own message - Delete option */}
+                      {!selectedMessage?.deletedAt && (selectedMessage?.user_id || selectedMessage?.userId) === user?.id && (
+                        <button
+                          onClick={() => handleDelete(selectedMessage)}
+                          className="w-full px-4 py-3 flex items-center gap-3 text-red-400 hover:bg-white/5 rounded-xl transition-colors"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                          <span>Delete</span>
+                        </button>
+                      )}
+                      
+                      {/* Other's message - Commissioner can moderate */}
+                      {!selectedMessage?.deletedAt && (selectedMessage?.user_id || selectedMessage?.userId) !== user?.id && (
+                        <>
+                          {user?.id === commissionerId && (
+                            <button
+                              onClick={() => handleModerate(selectedMessage)}
+                              className="w-full px-4 py-3 flex items-center gap-3 text-yellow-400 hover:bg-white/5 rounded-xl transition-colors"
+                            >
+                              <ShieldX className="w-5 h-5" />
+                              <span>Remove as Commish</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleReport(selectedMessage)}
+                            className="w-full px-4 py-3 flex items-center gap-3 text-red-400 hover:bg-white/5 rounded-xl transition-colors"
+                          >
+                            <AlertCircle className="w-5 h-5" />
+                            <span>Report</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                     
                     {/* Cancel */}
@@ -1876,20 +2018,49 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             
             {/* Actions */}
             <div className="p-1">
-              <button
-                onClick={() => handleReply(selectedMessage)}
-                className="w-full px-3 py-2 flex items-center gap-3 text-white text-sm hover:bg-white/5 rounded-lg transition-colors"
-              >
-                <Reply className="w-4 h-4 text-white/60" />
-                <span>Reply</span>
-              </button>
-              <button
-                onClick={() => handleReport(selectedMessage)}
-                className="w-full px-3 py-2 flex items-center gap-3 text-red-400 text-sm hover:bg-white/5 rounded-lg transition-colors"
-              >
-                <AlertCircle className="w-4 h-4" />
-                <span>Report</span>
-              </button>
+              {/* Reply - always available unless message is deleted */}
+              {!selectedMessage?.deletedAt && (
+                <button
+                  onClick={() => handleReply(selectedMessage)}
+                  className="w-full px-3 py-2 flex items-center gap-3 text-white text-sm hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <Reply className="w-4 h-4 text-white/60" />
+                  <span>Reply</span>
+                </button>
+              )}
+              
+              {/* Own message - Delete option */}
+              {!selectedMessage?.deletedAt && (selectedMessage?.user_id || selectedMessage?.userId) === user?.id && (
+                <button
+                  onClick={() => handleDelete(selectedMessage)}
+                  className="w-full px-3 py-2 flex items-center gap-3 text-red-400 text-sm hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete</span>
+                </button>
+              )}
+              
+              {/* Other's message - Commissioner can moderate */}
+              {!selectedMessage?.deletedAt && (selectedMessage?.user_id || selectedMessage?.userId) !== user?.id && (
+                <>
+                  {user?.id === commissionerId && (
+                    <button
+                      onClick={() => handleModerate(selectedMessage)}
+                      className="w-full px-3 py-2 flex items-center gap-3 text-yellow-400 text-sm hover:bg-white/5 rounded-lg transition-colors"
+                    >
+                      <ShieldX className="w-4 h-4" />
+                      <span>Remove as Commish</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleReport(selectedMessage)}
+                    className="w-full px-3 py-2 flex items-center gap-3 text-red-400 text-sm hover:bg-white/5 rounded-lg transition-colors"
+                  >
+                    <AlertCircle className="w-4 h-4" />
+                    <span>Report</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -209,6 +209,94 @@ function setupSocketHandlers(io) {
       }
     });
 
+    // Handle message deletion (soft delete - marks as deleted)
+    socket.on('delete-message', async ({ leagueId, messageId }) => {
+      try {
+        // Verify ownership - user can only delete their own messages
+        const message = await db.getOne(
+          'SELECT id, user_id FROM chat_messages WHERE id = $1 AND league_id = $2',
+          [messageId, leagueId]
+        );
+
+        if (!message) {
+          socket.emit('error', { message: 'Message not found' });
+          return;
+        }
+
+        if (message.user_id !== socket.userId) {
+          socket.emit('error', { message: 'Can only delete your own messages' });
+          return;
+        }
+
+        // Soft delete - update message to show it was deleted
+        await db.run(
+          `UPDATE chat_messages 
+           SET message = NULL, gif = NULL, deleted_at = NOW(), deleted_by = 'user'
+           WHERE id = $1`,
+          [messageId]
+        );
+
+        // Broadcast update to league
+        io.to(`league:${leagueId}`).emit('message-updated', { 
+          messageId, 
+          message: null,
+          gif: null,
+          deletedAt: new Date().toISOString(),
+          deletedBy: 'user'
+        });
+      } catch (error) {
+        console.error('Delete message error:', error);
+        socket.emit('error', { message: 'Failed to delete message' });
+      }
+    });
+
+    // Handle commissioner message removal
+    socket.on('moderate-message', async ({ leagueId, messageId }) => {
+      try {
+        // Verify user is commissioner
+        const league = await db.getOne(
+          'SELECT commissioner_id FROM leagues WHERE id = $1',
+          [leagueId]
+        );
+
+        if (!league || league.commissioner_id !== socket.userId) {
+          socket.emit('error', { message: 'Only the commissioner can moderate messages' });
+          return;
+        }
+
+        // Verify message exists
+        const message = await db.getOne(
+          'SELECT id FROM chat_messages WHERE id = $1 AND league_id = $2',
+          [messageId, leagueId]
+        );
+
+        if (!message) {
+          socket.emit('error', { message: 'Message not found' });
+          return;
+        }
+
+        // Soft delete - mark as removed by commissioner
+        await db.run(
+          `UPDATE chat_messages 
+           SET message = NULL, gif = NULL, deleted_at = NOW(), deleted_by = 'commissioner'
+           WHERE id = $1`,
+          [messageId]
+        );
+
+        // Broadcast update to league
+        io.to(`league:${leagueId}`).emit('message-updated', { 
+          messageId, 
+          message: null,
+          gif: null,
+          deletedAt: new Date().toISOString(),
+          deletedBy: 'commissioner'
+        });
+      } catch (error) {
+        console.error('Moderate message error:', error);
+        socket.emit('error', { message: 'Failed to remove message' });
+      }
+    });
+
     // Typing indicator
     socket.on('typing-start', (leagueId) => {
       if (!typingUsers.has(leagueId)) {

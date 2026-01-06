@@ -30,7 +30,7 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
       return res.status(403).json({ error: 'Not a member of this league' });
     }
 
-    // Build query - now includes gif, reply_to, and reactions
+    // Build query - now includes gif, reply_to, reactions, and deleted fields
     let query = `
       SELECT 
         cm.id,
@@ -39,6 +39,8 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
         cm.gif,
         cm.reply_to as "replyTo",
         cm.reactions,
+        cm.deleted_at,
+        cm.deleted_by,
         cm.created_at,
         u.display_name
       FROM chat_messages cm
@@ -62,7 +64,9 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
       ...msg,
       reactions: msg.reactions || {},
       gif: msg.gif || null,
-      replyTo: msg.replyTo || null
+      replyTo: msg.replyTo || null,
+      deletedAt: msg.deleted_at || null,
+      deletedBy: msg.deleted_by || null
     }));
 
     res.json({ messages: formattedMessages });
@@ -194,6 +198,38 @@ router.post('/leagues/:leagueId/messages/:messageId/report', async (req, res) =>
   } catch (error) {
     console.error('Report message error:', error);
     res.status(500).json({ error: 'Failed to report message' });
+  }
+});
+
+// Delete a message (only own messages)
+router.delete('/leagues/:leagueId/messages/:messageId', async (req, res) => {
+  try {
+    const user = await getUser(req);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { leagueId, messageId } = req.params;
+
+    // Verify ownership - user can only delete their own messages
+    const message = await db.getOne(
+      'SELECT id, user_id FROM chat_messages WHERE id = $1 AND league_id = $2',
+      [messageId, leagueId]
+    );
+
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    if (message.user_id !== user.id) {
+      return res.status(403).json({ error: 'Can only delete your own messages' });
+    }
+
+    // Delete the message
+    await db.run('DELETE FROM chat_messages WHERE id = $1', [messageId]);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete message error:', error);
+    res.status(500).json({ error: 'Failed to delete message' });
   }
 });
 

@@ -81,6 +81,7 @@ export default function LeagueDetail() {
   const [pickReason, setPickReason] = useState('');
   const [togglingPayment, setTogglingPayment] = useState(null);
   const [gameStatuses, setGameStatuses] = useState({}); // { teamId: gameStatus }
+  const [isChatCollapsed, setIsChatCollapsed] = useState(true); // Track chat sidebar state
   const hasTriggeredUpdateRef = useRef(false);
 
   const isCommissioner = league?.commissionerId === user?.id;
@@ -622,7 +623,7 @@ export default function LeagueDetail() {
   };
 
   return (
-    <div className="lg:pr-80 xl:pr-96">
+    <div className={`transition-all duration-300 ${isChatCollapsed ? 'lg:pr-16' : 'lg:pr-96 xl:pr-[420px]'}`}>
       {/* Main content - scrolls naturally, with padding for fixed chat sidebar */}
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       {/* Header */}
@@ -2350,6 +2351,7 @@ export default function LeagueDetail() {
           commissionerId={league.commissionerId}
           members={standings}
           maxStrikes={league.maxStrikes}
+          onCollapsedChange={setIsChatCollapsed}
         />
       )}
     </div>

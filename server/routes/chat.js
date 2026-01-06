@@ -30,12 +30,15 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
       return res.status(403).json({ error: 'Not a member of this league' });
     }
 
-    // Build query
+    // Build query - now includes gif, reply_to, and reactions
     let query = `
       SELECT 
         cm.id,
         cm.user_id,
         cm.message,
+        cm.gif,
+        cm.reply_to as "replyTo",
+        cm.reactions,
         cm.created_at,
         u.display_name
       FROM chat_messages cm
@@ -54,8 +57,15 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
 
     const messages = await db.getAll(query, params);
 
-    // Return in chronological order
-    res.json({ messages: messages.reverse() });
+    // Return in chronological order, ensuring reactions default to empty object
+    const formattedMessages = messages.reverse().map(msg => ({
+      ...msg,
+      reactions: msg.reactions || {},
+      gif: msg.gif || null,
+      replyTo: msg.replyTo || null
+    }));
+
+    res.json({ messages: formattedMessages });
   } catch (error) {
     console.error('Get messages error:', error);
     res.status(500).json({ error: 'Failed to fetch messages' });
@@ -149,6 +159,41 @@ router.post('/leagues/:leagueId/read', async (req, res) => {
   } catch (error) {
     console.error('Mark read error:', error);
     res.status(500).json({ error: 'Failed to mark as read' });
+  }
+});
+
+// Report a message
+router.post('/leagues/:leagueId/messages/:messageId/report', async (req, res) => {
+  try {
+    const user = await getUser(req);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { leagueId, messageId } = req.params;
+
+    // Verify membership
+    const membership = await db.getOne(
+      'SELECT id FROM league_members WHERE league_id = $1 AND user_id = $2',
+      [leagueId, user.id]
+    );
+
+    if (!membership) {
+      return res.status(403).json({ error: 'Not a member of this league' });
+    }
+
+    // Log the report (you can create a chat_reports table or just log for now)
+    console.log(`Message reported: ${messageId} by user ${user.id} in league ${leagueId}`);
+    
+    // Optionally insert into a reports table:
+    // await db.run(
+    //   `INSERT INTO chat_reports (message_id, reported_by, league_id, created_at)
+    //    VALUES ($1, $2, $3, NOW())`,
+    //   [messageId, user.id, leagueId]
+    // );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Report message error:', error);
+    res.status(500).json({ error: 'Failed to report message' });
   }
 });
 

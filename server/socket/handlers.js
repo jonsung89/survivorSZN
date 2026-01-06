@@ -105,11 +105,12 @@ function setupSocketHandlers(io) {
       leaveLeague(socket, io, leagueId);
     });
 
-    // Send chat message
-    socket.on('chat-message', async ({ leagueId, message }) => {
+    // Send chat message (with GIF and reply support)
+    socket.on('chat-message', async ({ leagueId, message, replyTo, gif }) => {
       try {
-        if (!message || message.trim().length === 0) return;
-        if (message.length > 1000) {
+        // Allow empty message if there's a GIF
+        if ((!message || message.trim().length === 0) && !gif) return;
+        if (message && message.length > 1000) {
           socket.emit('error', { message: 'Message too long' });
           return;
         }
@@ -125,12 +126,18 @@ function setupSocketHandlers(io) {
           return;
         }
 
-        // Save message to database
+        // Save message to database (with gif and reply_to)
         const result = await db.getOne(
-          `INSERT INTO chat_messages (league_id, user_id, message)
-           VALUES ($1, $2, $3)
-           RETURNING id, created_at`,
-          [leagueId, socket.userId, message.trim()]
+          `INSERT INTO chat_messages (league_id, user_id, message, gif, reply_to)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, created_at, reactions`,
+          [
+            leagueId, 
+            socket.userId, 
+            message ? message.trim() : null,
+            gif ? JSON.stringify(gif) : null,
+            replyTo ? JSON.stringify(replyTo) : null
+          ]
         );
 
         // Broadcast to league room
@@ -138,9 +145,15 @@ function setupSocketHandlers(io) {
           id: result.id,
           leagueId,
           userId: socket.userId,
+          user_id: socket.userId, // Include both formats for compatibility
           displayName: socket.displayName,
-          message: message.trim(),
-          createdAt: result.created_at
+          display_name: socket.displayName,
+          message: message ? message.trim() : null,
+          gif: gif || null,
+          replyTo: replyTo || null,
+          reactions: result.reactions || {},
+          createdAt: result.created_at,
+          created_at: result.created_at
         });
 
         // Clear typing indicator
@@ -148,6 +161,51 @@ function setupSocketHandlers(io) {
       } catch (error) {
         console.error('Chat message error:', error);
         socket.emit('error', { message: 'Failed to send message' });
+      }
+    });
+
+    // Handle reactions
+    socket.on('react', async ({ leagueId, messageId, emoji }) => {
+      try {
+        // Get current reactions
+        const message = await db.getOne(
+          'SELECT reactions FROM chat_messages WHERE id = $1 AND league_id = $2',
+          [messageId, leagueId]
+        );
+
+        if (!message) {
+          socket.emit('error', { message: 'Message not found' });
+          return;
+        }
+
+        let reactions = message.reactions || {};
+
+        // Toggle user's reaction
+        if (reactions[emoji]?.includes(socket.userId)) {
+          // Remove reaction
+          reactions[emoji] = reactions[emoji].filter(id => id !== socket.userId);
+          if (reactions[emoji].length === 0) {
+            delete reactions[emoji];
+          }
+        } else {
+          // Add reaction
+          reactions[emoji] = [...(reactions[emoji] || []), socket.userId];
+        }
+
+        // Update database
+        await db.run(
+          'UPDATE chat_messages SET reactions = $1 WHERE id = $2',
+          [JSON.stringify(reactions), messageId]
+        );
+
+        // Broadcast to league
+        io.to(`league:${leagueId}`).emit('reaction-update', { 
+          messageId, 
+          reactions 
+        });
+      } catch (error) {
+        console.error('Reaction error:', error);
+        socket.emit('error', { message: 'Failed to add reaction' });
       }
     });
 

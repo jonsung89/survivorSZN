@@ -1,10 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Users, Crown, ChevronLeft, ChevronUp } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { MessageCircle, X, Send, Users, Crown, ChevronLeft, ChevronRight, ChevronUp, Smile, Image, Reply, CornerUpLeft, AlertCircle, Search, Maximize2, Minimize2, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
+const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Free tier API key
+
+// Popular emoji categories
+const EMOJI_CATEGORIES = {
+  recent: ['😂', '❤️', '🔥', '👍', '😭', '🙏', '😊', '🥺'],
+  smileys: ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😌', '😍', '🥰', '😘', '😋', '😛', '😜', '🤪', '😝', '🤗', '🤭', '🤫', '🤔', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '😮', '🤐', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '👾', '🤖'],
+  gestures: ['👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅', '👄'],
+  animals: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦', '🐤', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜', '🦟', '🦗', '🕷️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🐘', '🦛', '🦏', '🐪', '🐫', '🦒', '🦘', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈', '🐈‍⬛', '🐓', '🦃', '🦚', '🦜', '🦢', '🦩', '🕊️', '🐇', '🦝', '🦨', '🦡', '🦫', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔'],
+  food: ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🫒', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🦴', '🌭', '🍔', '🍟', '🍕', '🫓', '🥪', '🥙', '🧆', '🌮', '🌯', '🫔', '🥗', '🥘', '🫕', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '🫖', '☕', '🍵', '🧃', '🥤', '🧋', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍾', '🧊'],
+  sports: ['⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍', '🏏', '🪃', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛼', '🛷', '⛸️', '🥌', '🎿', '⛷️', '🏂', '🪂', '🏋️', '🤼', '🤸', '⛹️', '🤺', '🤾', '🏌️', '🏇', '⛸️', '🏊', '🤽', '🧗', '🚵', '🚴', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖️', '🏵️', '🎗️', '🎫', '🎟️'],
+  objects: ['⌚', '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', '🗜️', '💽', '💾', '💿', '📀', '📼', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️', '🧭', '⏱️', '⏲️', '⏰', '🕰️', '⌛', '⏳', '📡', '🔋', '🔌', '💡', '🔦', '🕯️', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', '💳', '💎', '⚖️', '🪜', '🧰', '🪛', '🔧', '🔨', '⚒️', '🛠️', '⛏️', '🪚', '🔩', '⚙️', '🪤', '🧱', '⛓️', '🧲', '🔫', '💣', '🧨', '🪓', '🔪', '🗡️', '⚔️', '🛡️', '🚬', '⚰️', '🪦', '⚱️', '🏺', '🔮', '📿', '🧿', '💈', '⚗️', '🔭', '🔬', '🕳️', '🩹', '🩺', '💊', '💉', '🩸', '🧬', '🦠', '🧫', '🧪'],
+  symbols: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❤️‍🔥', '❤️‍🩹', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', '⛎', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓', '🆔', '⚛️', '🉑', '☢️', '☣️', '📴', '📳', '🈶', '🈚', '🈸', '🈺', '🈷️', '✴️', '🆚', '💮', '🉐', '㊙️', '㊗️', '🈴', '🈵', '🈹', '🈲', '🅰️', '🅱️', '🆎', '🆑', '🅾️', '🆘', '❌', '⭕', '🛑', '⛔', '📛', '🚫', '💯', '💢', '♨️', '🚷', '🚯', '🚳', '🚱', '🔞', '📵', '🚭', '❗', '❕', '❓', '❔', '‼️', '⁉️', '🔅', '🔆', '〽️', '⚠️', '🚸', '🔱', '⚜️', '🔰', '♻️', '✅', '🈯', '💹', '❇️', '✳️', '❎', '🌐', '💠', 'Ⓜ️', '🌀', '💤', '🏧', '🚾', '♿', '🅿️', '🛗', '🈳', '🈂️', '🛂', '🛃', '🛄', '🛅', '🚹', '🚺', '🚼', '⚧️', '🚻', '🚮', '🎦', '📶', '🈁', '🔣', 'ℹ️', '🔤', '🔡', '🔠', '🆖', '🆗', '🆙', '🆒', '🆕', '🆓', '0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '🔢', '#️⃣', '*️⃣', '⏏️', '▶️', '⏸️', '⏯️', '⏹️', '⏺️', '⏭️', '⏮️', '⏩', '⏪', '⏫', '⏬', '◀️', '🔼', '🔽', '➡️', '⬅️', '⬆️', '⬇️', '↗️', '↘️', '↙️', '↖️', '↕️', '↔️', '↪️', '↩️', '⤴️', '⤵️', '🔀', '🔁', '🔂', '🔄', '🔃', '🎵', '🎶', '➕', '➖', '➗', '✖️', '🟰', '♾️', '💲', '💱', '™️', '©️', '®️', '👁️‍🗨️', '🔚', '🔙', '🔛', '🔝', '🔜', '〰️', '➰', '➿', '✔️', '☑️', '🔘', '🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '⚫', '⚪', '🟤', '🔺', '🔻', '🔸', '🔹', '🔶', '🔷', '🔳', '🔲', '▪️', '▫️', '◾', '◽', '◼️', '◻️', '🟥', '🟧', '🟨', '🟩', '🟦', '🟪', '⬛', '⬜', '🟫', '🔈', '🔇', '🔉', '🔊', '🔔', '🔕', '📣', '📢', '💬', '💭', '🗯️', '♠️', '♣️', '♥️', '♦️', '🃏', '🎴', '🀄', '🕐', '🕑', '🕒', '🕓', '🕔', '🕕', '🕖', '🕗', '🕘', '🕙', '🕚', '🕛', '🕜', '🕝', '🕞', '🕟', '🕠', '🕡', '🕢', '🕣', '🕤', '🕥', '🕦', '🕧'],
+  flags: ['🏳️', '🏴', '🏴‍☠️', '🏁', '🚩', '🎌', '🏳️‍🌈', '🏳️‍⚧️', '🇺🇸', '🇬🇧', '🇨🇦', '🇦🇺', '🇩🇪', '🇫🇷', '🇮🇹', '🇪🇸', '🇯🇵', '🇰🇷', '🇨🇳', '🇮🇳', '🇧🇷', '🇲🇽', '🇷🇺']
+};
+
+// Quick reactions for messages
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
 // NFL team data for profile picks display
 const NFL_TEAMS = {
@@ -42,27 +59,65 @@ const NFL_TEAMS = {
   '34': { name: 'Texans', abbreviation: 'HOU', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/hou.png' },
 };
 
-export default function ChatWidget({ leagueId, leagueName, commissionerId, members = [], maxStrikes = 1 }) {
+export default function ChatWidget({ leagueId, leagueName, commissionerId, members = [], maxStrikes = 1, onCollapsedChange }) {
   const { user, getIdToken } = useAuth();
-  const { connected, onlineUsers, typingUsers, sendMessage, startTyping, stopTyping, on, joinLeague, leaveLeague } = useSocket();
+  const { socket, connected, onlineUsers, typingUsers, sendMessage, startTyping, stopTyping, on, joinLeague, leaveLeague } = useSocket();
   
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const [isAnimatingIn, setIsAnimatingIn] = useState(false); // For open animation
-  const [sheetSize, setSheetSize] = useState('full'); // 'full', 'half', 'closed'
+  const [isAnimatingIn, setIsAnimatingIn] = useState(false);
+  const [sheetSize, setSheetSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('chatSheetSize');
+      return saved === 'half' ? 'half' : 'full';
+    }
+    return 'full';
+  });
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(true); // Start collapsed on smaller desktops
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [selectedProfile, setSelectedProfile] = useState(null);
-  const [hasNewMessage, setHasNewMessage] = useState(false); // For preview bar animation
+  const [hasNewMessage, setHasNewMessage] = useState(false);
+  
+  // Desktop collapsed state (persisted in localStorage)
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('chatCollapsed') === 'true';
+    }
+    return false;
+  });
+  
+  // Enhanced chat features
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [gifSearchQuery, setGifSearchQuery] = useState('');
+  const [gifs, setGifs] = useState([]);
+  const [gifsLoading, setGifsLoading] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [showMessageMenu, setShowMessageMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 }); // For positioning menu near message
+  const [emojiCategory, setEmojiCategory] = useState('recent');
+  const [swipingMessageId, setSwipingMessageId] = useState(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [reactionDetail, setReactionDetail] = useState(null); // { messageId, emoji, users }
+  const longPressTimer = useRef(null);
   
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const mobileMessagesRef = useRef(null);
   const inputRef = useRef(null);
   const mobileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const gifSearchTimeout = useRef(null);
+  const swipeStartX = useRef(0);
+  const isSwipeDragging = useRef(false); // Track if user is dragging to reply
   
   // Drag gesture tracking
   const sheetRef = useRef(null);
@@ -71,6 +126,15 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
+  // Toggle desktop chat collapsed state
+  const toggleCollapsed = () => {
+    setIsCollapsed(prev => {
+      const newValue = !prev;
+      localStorage.setItem('chatCollapsed', String(newValue));
+      return newValue;
+    });
+  };
+
   // Join league room when widget mounts
   useEffect(() => {
     if (leagueId && connected) {
@@ -78,6 +142,27 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
       return () => leaveLeague(leagueId);
     }
   }, [leagueId, connected, joinLeague, leaveLeague]);
+
+  // Auto-expand chat on xl screens, collapse on smaller
+  useEffect(() => {
+    const handleResize = () => {
+      const isXL = window.innerWidth >= 1280;
+      setIsDesktopCollapsed(!isXL);
+    };
+    
+    // Set initial state
+    handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Notify parent when collapsed state changes
+  useEffect(() => {
+    if (onCollapsedChange) {
+      onCollapsedChange(isDesktopCollapsed);
+    }
+  }, [isDesktopCollapsed, onCollapsedChange]);
 
   // Load initial messages when chat opens (mobile) or on mount (desktop)
   // Also load a few messages initially for the preview bar
@@ -121,6 +206,17 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     return unsubscribe;
   }, [on, leagueId, isOpen]);
 
+  // Listen for reactions
+  useEffect(() => {
+    const unsubscribe = on('reaction-update', ({ messageId, reactions }) => {
+      setMessages(prev => prev.map(m => 
+        m.id === messageId ? { ...m, reactions } : m
+      ));
+    });
+
+    return unsubscribe;
+  }, [on]);
+
   // Fetch unread count on mount
   useEffect(() => {
     if (leagueId) {
@@ -134,6 +230,25 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  // Scroll to bottom when resizing sheet (especially full -> half)
+  useEffect(() => {
+    if (sheetSize && mobileMessagesRef.current) {
+      // Delay to let the resize animation complete
+      setTimeout(() => {
+        if (mobileMessagesRef.current) {
+          mobileMessagesRef.current.scrollTop = mobileMessagesRef.current.scrollHeight;
+        }
+      }, 350); // Match the transition duration
+    }
+  }, [sheetSize]);
+
+  // Save sheet size preference to localStorage
+  useEffect(() => {
+    if (sheetSize) {
+      localStorage.setItem('chatSheetSize', sheetSize);
+    }
+  }, [sheetSize]);
 
   const fetchUnreadCount = async () => {
     try {
@@ -190,10 +305,25 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   };
 
   const handleSend = (isMobile = false) => {
-    if (!inputValue.trim()) return;
+    if (!inputValue.trim() && !selectedMessage?.gif) return;
     
-    sendMessage(leagueId, inputValue.trim());
+    // Build message with metadata
+    const messageData = {
+      content: inputValue.trim(),
+      replyTo: replyingTo ? {
+        id: replyingTo.id,
+        userId: replyingTo.user_id || replyingTo.userId,
+        displayName: replyingTo.display_name || replyingTo.displayName,
+        preview: (replyingTo.message || '').substring(0, 50)
+      } : null,
+      gif: selectedMessage?.gif || null
+    };
+    
+    sendMessage(leagueId, messageData.content, messageData.replyTo, messageData.gif);
     setInputValue('');
+    setReplyingTo(null);
+    setShowEmojiPicker(false);
+    setShowGifPicker(false);
     stopTyping(leagueId);
     
     if (isMobile && mobileInputRef.current) {
@@ -204,7 +334,22 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   };
 
   const handleInputChange = (e) => {
-    setInputValue(e.target.value);
+    const value = e.target.value;
+    setInputValue(value);
+    
+    // Check for @ mentions
+    const cursorPos = e.target.selectionStart;
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+    
+    if (mentionMatch) {
+      setShowMentions(true);
+      setMentionQuery(mentionMatch[1].toLowerCase());
+      setMentionIndex(0);
+    } else {
+      setShowMentions(false);
+      setMentionQuery('');
+    }
     
     startTyping(leagueId);
     
@@ -218,11 +363,281 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   };
 
   const handleKeyDown = (e, isMobile = false) => {
+    // Handle mention selection with arrow keys and enter
+    if (showMentions && filteredMembers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex(prev => Math.min(prev + 1, filteredMembers.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex(prev => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertMention(filteredMembers[mentionIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowMentions(false);
+        return;
+      }
+    }
+    
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend(isMobile);
     }
   };
+
+  // Filter members for mentions
+  const filteredMembers = members.filter(m => 
+    (m.displayName || m.display_name || '').toLowerCase().includes(mentionQuery)
+  ).slice(0, 5);
+
+  // Insert mention into input
+  const insertMention = (member) => {
+    const name = member.displayName || member.display_name || 'User';
+    const cursorPos = (mobileInputRef.current || inputRef.current)?.selectionStart || inputValue.length;
+    const textBeforeCursor = inputValue.substring(0, cursorPos);
+    const textAfterCursor = inputValue.substring(cursorPos);
+    const mentionStart = textBeforeCursor.lastIndexOf('@');
+    
+    const newValue = textBeforeCursor.substring(0, mentionStart) + `@${name} ` + textAfterCursor;
+    setInputValue(newValue);
+    setShowMentions(false);
+    setMentionQuery('');
+  };
+
+  // Emoji handling
+  const insertEmoji = (emoji) => {
+    setInputValue(prev => prev + emoji);
+    // Keep emoji picker open for multiple selections
+  };
+
+  // GIF search with Tenor API
+  const searchGifs = useCallback(async (query) => {
+    if (!query.trim()) {
+      // Load trending GIFs
+      setGifsLoading(true);
+      try {
+        const res = await fetch(
+          `https://tenor.googleapis.com/v2/featured?key=${TENOR_API_KEY}&limit=20&media_filter=gif,tinygif`
+        );
+        const data = await res.json();
+        setGifs(data.results || []);
+      } catch (error) {
+        console.error('Failed to load trending GIFs:', error);
+      }
+      setGifsLoading(false);
+      return;
+    }
+    
+    setGifsLoading(true);
+    try {
+      const res = await fetch(
+        `https://tenor.googleapis.com/v2/search?key=${TENOR_API_KEY}&q=${encodeURIComponent(query)}&limit=20&media_filter=gif,tinygif`
+      );
+      const data = await res.json();
+      setGifs(data.results || []);
+    } catch (error) {
+      console.error('Failed to search GIFs:', error);
+    }
+    setGifsLoading(false);
+  }, []);
+
+  // Debounced GIF search
+  const handleGifSearch = (query) => {
+    setGifSearchQuery(query);
+    if (gifSearchTimeout.current) {
+      clearTimeout(gifSearchTimeout.current);
+    }
+    gifSearchTimeout.current = setTimeout(() => {
+      searchGifs(query);
+    }, 300);
+  };
+
+  // Send GIF
+  const sendGif = (gif) => {
+    console.log('Sending GIF:', gif);
+    const gifUrl = gif.media_formats?.gif?.url || gif.media_formats?.tinygif?.url;
+    console.log('GIF URL:', gifUrl);
+    if (gifUrl) {
+      const gifData = { 
+        url: gifUrl, 
+        width: gif.media_formats?.gif?.dims?.[0] || gif.media_formats?.tinygif?.dims?.[0], 
+        height: gif.media_formats?.gif?.dims?.[1] || gif.media_formats?.tinygif?.dims?.[1]
+      };
+      console.log('Sending message with GIF data:', gifData);
+      sendMessage(leagueId, '[GIF]', null, gifData);
+      setShowGifPicker(false);
+      setGifSearchQuery('');
+    } else {
+      console.error('No GIF URL found in:', gif.media_formats);
+    }
+  };
+
+  // Message actions
+  const handleMessageTap = (e, message) => {
+    // Don't show menu if we were dragging
+    if (isSwipeDragging.current) {
+      isSwipeDragging.current = false;
+      return;
+    }
+    
+    // Capture click position for desktop menu positioning
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMenuPosition({
+      x: rect.left,
+      y: rect.bottom + 8 // 8px below the message
+    });
+    setSelectedMessage(message);
+    setShowMessageMenu(true);
+  };
+
+  const handleReply = (message) => {
+    setReplyingTo(message);
+    setShowMessageMenu(false);
+    setSelectedMessage(null);
+    // Focus input
+    setTimeout(() => {
+      (mobileInputRef.current || inputRef.current)?.focus();
+    }, 100);
+  };
+
+  const handleReact = (message, emoji) => {
+    // Use socket to emit reaction
+    if (socket && connected) {
+      socket.emit('react', { leagueId, messageId: message.id, emoji });
+    }
+    
+    // Update local state optimistically
+    const userId = user?.id;
+    setMessages(prev => prev.map(m => {
+      if (m.id === message.id) {
+        const reactions = { ...(m.reactions || {}) };
+        const currentUsers = reactions[emoji] || [];
+        
+        if (currentUsers.includes(userId)) {
+          // Remove reaction
+          reactions[emoji] = currentUsers.filter(id => id !== userId);
+          if (reactions[emoji].length === 0) delete reactions[emoji];
+        } else {
+          // Add reaction
+          reactions[emoji] = [...currentUsers, userId];
+        }
+        return { ...m, reactions };
+      }
+      return m;
+    }));
+    
+    setShowMessageMenu(false);
+    setSelectedMessage(null);
+  };
+
+  // Long press handlers for showing who reacted
+  const handleReactionLongPressStart = (message, emoji, users) => {
+    longPressTimer.current = setTimeout(() => {
+      // Get display names for users who reacted
+      const userNames = users.map(userId => {
+        if (userId === user?.id) return 'You';
+        const member = members.find(m => (m.userId || m.user_id) === userId);
+        return member?.displayName || member?.display_name || 'Unknown';
+      });
+      setReactionDetail({ messageId: message.id, emoji, users: userNames });
+    }, 500);
+  };
+
+  const handleReactionLongPressEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleReport = async (message) => {
+    if (window.confirm('Report this message as inappropriate?')) {
+      try {
+        const token = await getIdToken();
+        await fetch(`${API_URL}/chat/${leagueId}/messages/${message.id}/report`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        alert('Message reported. Thank you.');
+      } catch (error) {
+        console.error('Failed to report:', error);
+      }
+    }
+    setShowMessageMenu(false);
+    setSelectedMessage(null);
+  };
+
+  // Swipe/drag to reply handlers (works with both touch and mouse)
+  const handleSwipeStart = (e, messageId) => {
+    // Get clientX from touch or mouse event
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    swipeStartX.current = clientX;
+    setSwipingMessageId(messageId);
+    isSwipeDragging.current = false; // Reset drag flag
+  };
+
+  const handleSwipeMove = (e) => {
+    if (!swipingMessageId) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const diff = clientX - swipeStartX.current;
+    // Only allow right swipe (positive diff), with max of 80px
+    if (diff > 5) { // 5px threshold before considering it a drag
+      isSwipeDragging.current = true;
+      setSwipeOffset(Math.min(diff, 80));
+    }
+  };
+
+  const handleSwipeEnd = (message) => {
+    if (swipeOffset > 50) {
+      // Trigger reply
+      handleReply(message);
+    }
+    setSwipeOffset(0);
+    setSwipingMessageId(null);
+    isSwipeDragging.current = false;
+  };
+
+  // Mouse-specific handlers for desktop drag-to-reply
+  const handleMouseDown = (e, messageId) => {
+    handleSwipeStart(e, messageId);
+    // Add document-level listeners for mouse move/up
+    const currentMessage = messages.find(m => m.id === messageId);
+    
+    const onMouseMove = (moveEvent) => {
+      handleSwipeMove(moveEvent);
+    };
+    
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      if (currentMessage) {
+        handleSwipeEnd(currentMessage);
+      } else {
+        setSwipeOffset(0);
+        setSwipingMessageId(null);
+      }
+    };
+    
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Load trending GIFs when picker opens
+  useEffect(() => {
+    if (showGifPicker && gifs.length === 0) {
+      searchGifs('');
+    }
+  }, [showGifPicker, searchGifs]);
 
   const handleScroll = (e) => {
     const { scrollTop } = e.target;
@@ -325,14 +740,14 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     setTimeout(() => {
       setIsOpen(false);
       setIsClosing(false);
-      setSheetSize('full'); // Reset for next open
+      // Don't reset sheetSize - preserve user's preference
     }, 300);
   };
 
   const openSheet = () => {
     setIsOpen(true);
     setIsClosing(false);
-    setSheetSize('full');
+    // sheetSize is already set from localStorage or previous session
     // Trigger animation after a frame to ensure initial state is rendered
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -345,7 +760,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   // Get sheet height based on size
   const getSheetHeight = () => {
     if (sheetSize === 'full') return 'calc(100% - 40px)';
-    if (sheetSize === 'half') return '50%';
+    if (sheetSize === 'half') return '35%';
     return '0';
   };
 
@@ -536,18 +951,43 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             const prevMessage = dateMessages[idx - 1];
             const prevUserId = prevMessage?.user_id || prevMessage?.userId;
             
-            // Check if there's a significant time gap (5 minutes) between messages
             const messageTime = new Date(message.created_at || message.createdAt).getTime();
             const prevMessageTime = prevMessage ? new Date(prevMessage.created_at || prevMessage.createdAt).getTime() : 0;
             const timeGapMinutes = prevMessage ? (messageTime - prevMessageTime) / (1000 * 60) : 0;
             const hasSignificantTimeGap = timeGapMinutes > 5;
             
-            // Show name/timestamp if: first message, different user, or significant time gap
             const showName = idx === 0 || prevUserId !== messageUserId || hasSignificantTimeGap;
             const displayName = message.display_name || message.displayName;
+            const isBeingSwiped = swipingMessageId === message.id;
+            const messageSwipeOffset = isBeingSwiped ? swipeOffset : 0;
 
             return (
-              <div key={message.id} className={`flex gap-2 ${showName ? 'mt-4' : 'mt-1'}`}>
+              <div 
+                key={message.id} 
+                className={`flex gap-2 ${showName ? 'mt-4' : 'mt-1'} relative select-none`}
+                style={{ transform: `translateX(${messageSwipeOffset}px)`, transition: isBeingSwiped ? 'none' : 'transform 0.2s' }}
+                onTouchStart={(e) => handleSwipeStart(e, message.id)}
+                onTouchMove={handleSwipeMove}
+                onTouchEnd={() => handleSwipeEnd(message)}
+                onMouseDown={(e) => {
+                  // Only handle left click and not on buttons/inputs
+                  if (e.button === 0 && !e.target.closest('button')) {
+                    handleMouseDown(e, message.id);
+                  }
+                }}
+              >
+                {/* Swipe reply indicator */}
+                {messageSwipeOffset > 0 && (
+                  <div 
+                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full pl-2 flex items-center"
+                    style={{ opacity: messageSwipeOffset / 80 }}
+                  >
+                    <div className={`p-2 rounded-full ${messageSwipeOffset > 50 ? 'bg-nfl-blue' : 'bg-white/10'}`}>
+                      <CornerUpLeft className="w-4 h-4 text-white" />
+                    </div>
+                  </div>
+                )}
+
                 {/* Avatar */}
                 <div className={`flex-shrink-0 ${showName ? '' : 'invisible'}`}>
                   <Avatar 
@@ -574,15 +1014,82 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       <span className="text-white/30">{formatTime(message.created_at || message.createdAt)}</span>
                     </p>
                   )}
-                  <div
-                    className={`inline-block px-3 py-2 rounded-2xl rounded-tl-md ${
-                      isOwn
-                        ? 'bg-emerald-600/20 border border-emerald-500/30 text-white'
-                        : 'bg-white/10 text-white'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap break-words">{message.message}</p>
-                  </div>
+                  
+                  {/* Reply context */}
+                  {message.replyTo && (
+                    <div className="ml-1 mb-1 pl-2 border-l-2 border-white/20 text-xs text-white/40">
+                      <span className="font-medium text-white/50">{message.replyTo.displayName}</span>
+                      <p className="truncate">{message.replyTo.preview}</p>
+                    </div>
+                  )}
+
+                  {/* GIF content - displayed without bubble */}
+                  {message.gif && (
+                    <div 
+                      className="cursor-pointer active:scale-[0.98] transition-all hover:brightness-110"
+                      onClick={(e) => handleMessageTap(e, message)}
+                    >
+                      <img 
+                        src={message.gif.url} 
+                        alt="GIF" 
+                        className="rounded-2xl max-w-[240px] max-h-[240px] object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
+
+                  {/* Text content with bubble - only show if there's actual text (not just [GIF]) */}
+                  {message.message && message.message !== '[GIF]' && (
+                    <div
+                      className={`inline-block px-3 py-2 rounded-2xl rounded-tl-md cursor-pointer active:scale-[0.98] transition-all hover:ring-1 hover:ring-white/20 ${
+                        isOwn
+                          ? 'bg-emerald-600/20 border border-emerald-500/30 text-white hover:bg-emerald-600/30'
+                          : 'bg-white/10 text-white hover:bg-white/15'
+                      }`}
+                      onClick={(e) => handleMessageTap(e, message)}
+                    >
+                      <p className="text-sm whitespace-pre-wrap break-words">
+                        {message.message.split(/(@\w+)/g).map((part, i) => 
+                          part.startsWith('@') ? (
+                            <span key={i} className="text-nfl-blue font-medium">{part}</span>
+                          ) : part
+                        )}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Reactions */}
+                  {message.reactions && Object.keys(message.reactions).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1 ml-1">
+                      {Object.entries(message.reactions).map(([emoji, users]) => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleReact(message, emoji)}
+                          onTouchStart={() => handleReactionLongPressStart(message, emoji, users)}
+                          onTouchEnd={handleReactionLongPressEnd}
+                          onTouchCancel={handleReactionLongPressEnd}
+                          onMouseDown={() => handleReactionLongPressStart(message, emoji, users)}
+                          onMouseUp={handleReactionLongPressEnd}
+                          onMouseLeave={handleReactionLongPressEnd}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all active:scale-95 ${
+                            users.includes(user?.id) 
+                              ? 'bg-nfl-blue/30 border border-nfl-blue/50' 
+                              : 'bg-white/10 hover:bg-white/20 border border-transparent'
+                          }`}
+                        >
+                          <span>{emoji}</span>
+                          <span className="text-white/60 min-w-[1ch]">{users.length}</span>
+                        </button>
+                      ))}
+                      {/* Add reaction button */}
+                      <button
+                        onClick={(e) => handleMessageTap(e, message)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 text-white/40 text-sm transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -608,57 +1115,239 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
   return (
     <>
-      {/* Desktop: Fixed sidebar */}
-      <div className="hidden lg:flex flex-col w-80 xl:w-96 bg-slate-900 border-l border-white/10 fixed top-16 right-0 bottom-0">
-        {/* Profile Panel (overlay) */}
-        {selectedProfile && (
-          <ProfilePanel profile={selectedProfile} onClose={() => setSelectedProfile(null)} />
-        )}
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-white/10">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-white">League Chat</h3>
-            <p className="text-xs text-white/50 flex items-center gap-1">
-              <Users className="w-3 h-3" />
-              {currentOnline.length} online
-              {connected ? '' : ' • Reconnecting...'}
-            </p>
+      {/* Desktop: Collapsible sidebar */}
+      <div className="hidden lg:block">
+        {/* Collapsed state - slim bar */}
+        <div 
+          className={`fixed top-16 right-0 bottom-0 w-14 bg-slate-900 border-l border-white/10 flex flex-col items-center py-4 transition-all duration-300 z-40 ${
+            isDesktopCollapsed ? 'translate-x-0' : 'translate-x-full'
+          }`}
+        >
+          <button
+            onClick={() => setIsDesktopCollapsed(false)}
+            className="relative p-3 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors group"
+            title="Open Chat"
+          >
+            <MessageCircle className="w-6 h-6 text-white/70 group-hover:text-white transition-colors" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+          
+          {/* Online indicator */}
+          <div className="mt-3 flex flex-col items-center gap-1">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+            <span className="text-[10px] text-white/40">{currentOnline.length}</span>
           </div>
         </div>
 
-        {/* Messages */}
+        {/* Expanded state - full chat */}
         <div 
-          ref={messagesContainerRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-4"
+          className={`fixed top-16 right-0 bottom-0 w-96 xl:w-[420px] bg-slate-900 border-l border-white/10 flex flex-col transition-all duration-300 z-40 ${
+            isDesktopCollapsed ? 'translate-x-full' : 'translate-x-0'
+          }`}
         >
-          {renderMessages()}
-        </div>
+          {/* Profile Panel (overlay) */}
+          {selectedProfile && (
+            <ProfilePanel profile={selectedProfile} onClose={() => setSelectedProfile(null)} />
+          )}
 
-        {/* Input */}
-        <div className="p-3 border-t border-white/10 bg-slate-800/50">
-          <div className="flex gap-2">
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={(e) => handleKeyDown(e, false)}
-              placeholder="Type a message..."
-              className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
-            />
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-white/10">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-white">League Chat</h3>
+              <p className="text-xs text-white/50 flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                {currentOnline.length} online
+                {connected ? '' : ' • Reconnecting...'}
+              </p>
+            </div>
             <button
-              onClick={() => handleSend(false)}
-              disabled={!inputValue.trim()}
-              className="p-2 bg-nfl-blue rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-nfl-blue/80 transition-colors"
+              onClick={() => setIsDesktopCollapsed(true)}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              title="Collapse Chat"
             >
-              <Send className="w-5 h-5" />
+              <PanelRightClose className="w-5 h-5 text-white/60" />
             </button>
           </div>
+
+          {/* Messages */}
+          <div 
+            ref={messagesContainerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto p-4"
+          >
+            {renderMessages()}
+          </div>
+
+          {/* Input */}
+          <div className="border-t border-white/10 bg-slate-800/50 relative">
+            {/* Reply preview */}
+            {replyingTo && (
+              <div className="px-3 pt-2 flex items-center gap-2">
+                <div className="flex-1 pl-2 border-l-2 border-emerald-500 bg-white/5 rounded-r py-1 pr-2">
+                  <p className="text-xs text-emerald-400 font-medium">
+                    Replying to {replyingTo.display_name || replyingTo.displayName}
+                  </p>
+                  <p className="text-xs text-white/50 truncate">{replyingTo.message}</p>
+                </div>
+                <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-white/10 rounded">
+                  <X className="w-3 h-3 text-white/40" />
+                </button>
+              </div>
+            )}
+            
+            {/* Mentions dropdown */}
+            {showMentions && filteredMembers.length > 0 && (
+              <div className="absolute bottom-full left-3 right-3 mb-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl z-10">
+                {filteredMembers.map((member, idx) => (
+                  <button
+                    key={member.userId || member.user_id}
+                    onClick={() => insertMention(member)}
+                    className={`w-full px-3 py-2 flex items-center gap-2 text-left text-sm transition-colors ${
+                      idx === mentionIndex ? 'bg-nfl-blue/20' : 'hover:bg-white/5'
+                    }`}
+                  >
+                    <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} size="xs" />
+                    <span className="text-white">{member.displayName || member.display_name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {/* Emoji picker */}
+            {showEmojiPicker && (
+              <div className="absolute bottom-full left-3 mb-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
+                {/* Category tabs */}
+                <div className="flex border-b border-white/10 overflow-x-auto hide-scrollbar">
+                  {Object.keys(EMOJI_CATEGORIES).map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setEmojiCategory(cat)}
+                      className={`px-3 py-2 text-xs capitalize whitespace-nowrap transition-colors ${
+                        emojiCategory === cat ? 'text-nfl-blue border-b-2 border-nfl-blue' : 'text-white/50 hover:text-white/70'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+                {/* Emoji grid */}
+                <div className="p-2 h-48 overflow-y-auto">
+                  <div className="grid grid-cols-8 gap-1">
+                    {EMOJI_CATEGORIES[emojiCategory].map((emoji, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => insertEmoji(emoji)}
+                        className="p-1.5 text-xl hover:bg-white/10 rounded transition-colors"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* GIF picker */}
+            {showGifPicker && (
+              <div className="absolute bottom-full left-3 mb-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
+                {/* Search */}
+                <div className="p-2 border-b border-white/10">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                    <input
+                      type="text"
+                      value={gifSearchQuery}
+                      onChange={(e) => handleGifSearch(e.target.value)}
+                      placeholder="Search GIFs..."
+                      className="w-full pl-9 pr-3 py-2 bg-white/10 border border-white/10 rounded-lg text-sm text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
+                    />
+                  </div>
+                </div>
+                {/* GIF grid */}
+                <div className="p-2 h-56 overflow-y-auto">
+                  {gifsLoading ? (
+                    <div className="text-center text-white/40 py-8">Loading...</div>
+                  ) : gifs.length === 0 ? (
+                    <div className="text-center text-white/40 py-8">No GIFs found</div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {gifs.map((gif) => (
+                        <button
+                          key={gif.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            sendGif(gif);
+                          }}
+                          className="aspect-video rounded-lg overflow-hidden hover:ring-2 ring-nfl-blue transition-all active:scale-95"
+                        >
+                          <img 
+                            src={gif.media_formats?.tinygif?.url || gif.media_formats?.gif?.url} 
+                            alt={gif.content_description || 'GIF'}
+                            className="w-full h-full object-cover pointer-events-none"
+                            loading="lazy"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="px-2 py-1 border-t border-white/10 text-center">
+                  <span className="text-[10px] text-white/30">Powered by Tenor</span>
+                </div>
+              </div>
+            )}
+            
+            {/* Input row */}
+            <div className="p-3 flex gap-2">
+              {/* Emoji button */}
+              <button
+                onClick={() => {
+                  setShowEmojiPicker(!showEmojiPicker);
+                  setShowGifPicker(false);
+                }}
+                className={`p-2 rounded-lg transition-colors ${showEmojiPicker ? 'bg-nfl-blue text-white' : 'text-white/50 hover:bg-white/10'}`}
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+              {/* GIF button */}
+              <button
+                onClick={() => {
+                  setShowGifPicker(!showGifPicker);
+                  setShowEmojiPicker(false);
+                }}
+                className={`p-2 rounded-lg transition-colors ${showGifPicker ? 'bg-nfl-blue text-white' : 'text-white/50 hover:bg-white/10'}`}
+              >
+                <span className="text-xs font-bold">GIF</span>
+              </button>
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={handleInputChange}
+                onKeyDown={(e) => handleKeyDown(e, false)}
+                onFocus={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
+                placeholder={replyingTo ? "Type your reply..." : "Type a message... Use @ to mention"}
+                className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
+              />
+              <button
+                onClick={() => handleSend(false)}
+                disabled={!inputValue.trim()}
+                className="p-2 bg-nfl-blue rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-nfl-blue/80 transition-colors"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          
+          {/* Desktop Reaction Detail popup - moved outside */}
         </div>
       </div>
-
       {/* Mobile: Bottom Chat Bar + Sheet */}
       <div className="lg:hidden">
         {/* Bottom Chat Preview Bar */}
@@ -729,7 +1418,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       )}
                     </p>
                     <p className="text-white/50 text-sm truncate">
-                      {messages[messages.length - 1]?.message || 'No messages yet'}
+                      {messages[messages.length - 1]?.gif 
+                        ? 'Sent a GIF 🎞️' 
+                        : messages[messages.length - 1]?.message === '[GIF]'
+                          ? 'Sent a GIF 🎞️'
+                          : messages[messages.length - 1]?.message || 'No messages yet'
+                      }
                     </p>
                   </>
                 ) : (
@@ -769,12 +1463,16 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
         {/* Bottom sheet overlay with animation */}
         {(isOpen || isClosing) && (
           <>
-            {/* Backdrop */}
+            {/* Backdrop - pass-through in half mode so users can interact with league details */}
             <div 
-              className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
+              className={`fixed inset-0 z-50 transition-opacity duration-300 ${
+                sheetSize === 'half' 
+                  ? 'bg-black/20 pointer-events-none' 
+                  : 'bg-black/60 backdrop-blur-sm'
+              } ${
                 isAnimatingIn && !isClosing ? 'opacity-100' : 'opacity-0'
               }`}
-              onClick={closeSheet}
+              onClick={sheetSize === 'half' ? undefined : closeSheet}
             />
             
             {/* Chat Panel - Bottom Sheet */}
@@ -817,65 +1515,397 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       <Users className="w-3 h-3" />
                       {currentOnline.length} online
                       {connected ? '' : ' • Reconnecting...'}
-                      {sheetSize === 'half' && (
-                        <span className="ml-2 text-white/30">• Swipe up to expand</span>
-                      )}
                     </p>
                   </div>
-                  <button
-                    onClick={closeSheet}
-                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                  >
-                    <X className="w-5 h-5 text-white/60" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {/* Size toggle button */}
+                    <button
+                      onClick={() => setSheetSize(sheetSize === 'full' ? 'half' : 'full')}
+                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                      title={sheetSize === 'full' ? 'Minimize' : 'Maximize'}
+                    >
+                      {sheetSize === 'full' ? (
+                        <Minimize2 className="w-5 h-5 text-white/60" />
+                      ) : (
+                        <Maximize2 className="w-5 h-5 text-white/60" />
+                      )}
+                    </button>
+                    {/* Close button */}
+                    <button
+                      onClick={closeSheet}
+                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                    >
+                      <X className="w-5 h-5 text-white/60" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* Messages */}
               <div 
+                ref={mobileMessagesRef}
                 onScroll={handleScroll}
                 className="flex-1 overflow-y-auto p-4"
               >
                 {renderMessages()}
               </div>
 
-              {/* Input - only show in full mode */}
-              {sheetSize === 'full' && (
-                <div className="p-3 border-t border-white/10 bg-slate-800/50 pb-safe">
-                  <div className="flex gap-2">
-                    <input
-                      ref={mobileInputRef}
-                      type="text"
-                      value={inputValue}
-                      onChange={handleInputChange}
-                      onKeyDown={(e) => handleKeyDown(e, true)}
-                      placeholder="Type a message..."
-                      className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
-                    />
-                    <button
-                      onClick={() => handleSend(true)}
-                      disabled={!inputValue.trim()}
-                      className="p-2.5 bg-nfl-blue rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-nfl-blue/80 transition-colors"
-                    >
-                      <Send className="w-5 h-5" />
+              {/* Input area - always shown, simplified in half mode */}
+              <div className="border-t border-white/10 bg-slate-800/50">
+                {/* Reply preview - only in full mode */}
+                {sheetSize === 'full' && replyingTo && (
+                  <div className="px-3 pt-2 flex items-center gap-2">
+                    <div className="flex-1 pl-3 border-l-2 border-emerald-500 bg-white/5 rounded-r py-1.5 pr-2">
+                      <p className="text-xs text-emerald-400 font-medium">
+                        Replying to {replyingTo.display_name || replyingTo.displayName}
+                      </p>
+                      <p className="text-xs text-white/50 truncate">{replyingTo.message}</p>
+                    </div>
+                    <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-white/10 rounded">
+                      <X className="w-4 h-4 text-white/40" />
                     </button>
+                  </div>
+                )}
+                
+                {/* Mentions dropdown - only in full mode */}
+                {sheetSize === 'full' && showMentions && filteredMembers.length > 0 && (
+                  <div className="mx-3 mt-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                    {filteredMembers.map((member, idx) => (
+                      <button
+                        key={member.userId || member.user_id}
+                        onClick={() => insertMention(member)}
+                        className={`w-full px-3 py-2 flex items-center gap-2 text-left transition-colors ${
+                          idx === mentionIndex ? 'bg-nfl-blue/20' : 'hover:bg-white/5'
+                        }`}
+                      >
+                        <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} size="xs" />
+                        <span className="text-sm text-white">{member.displayName || member.display_name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Emoji picker - only in full mode */}
+                {sheetSize === 'full' && showEmojiPicker && (
+                  <div className="mx-3 mt-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                    {/* Category tabs */}
+                    <div className="flex border-b border-white/10 overflow-x-auto hide-scrollbar">
+                      {Object.keys(EMOJI_CATEGORIES).map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => setEmojiCategory(cat)}
+                          className={`px-3 py-2 text-xs capitalize whitespace-nowrap transition-colors ${
+                            emojiCategory === cat ? 'text-nfl-blue border-b-2 border-nfl-blue' : 'text-white/50'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Emoji grid */}
+                    <div className="p-2 h-48 overflow-y-auto">
+                      <div className="grid grid-cols-8 gap-1">
+                        {EMOJI_CATEGORIES[emojiCategory].map((emoji, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => insertEmoji(emoji)}
+                            className="p-1.5 text-xl hover:bg-white/10 rounded transition-colors"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* GIF picker - only in full mode */}
+                {sheetSize === 'full' && showGifPicker && (
+                  <div className="mx-3 mt-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                    {/* Search */}
+                    <div className="p-2 border-b border-white/10">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                        <input
+                          type="text"
+                          value={gifSearchQuery}
+                          onChange={(e) => handleGifSearch(e.target.value)}
+                          placeholder="Search GIFs..."
+                          className="w-full pl-9 pr-3 py-2 bg-white/10 border border-white/10 rounded-lg text-sm text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
+                        />
+                      </div>
+                    </div>
+                    {/* GIF grid */}
+                    <div className="p-2 h-56 overflow-y-auto">
+                      {gifsLoading ? (
+                        <div className="text-center text-white/40 py-8">Loading...</div>
+                      ) : gifs.length === 0 ? (
+                        <div className="text-center text-white/40 py-8">No GIFs found</div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          {gifs.map((gif) => (
+                            <button
+                              key={gif.id}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                sendGif(gif);
+                              }}
+                              className="aspect-video rounded-lg overflow-hidden hover:ring-2 ring-nfl-blue transition-all active:scale-95"
+                            >
+                              <img 
+                                src={gif.media_formats?.tinygif?.url || gif.media_formats?.gif?.url} 
+                                alt={gif.content_description || 'GIF'}
+                                className="w-full h-full object-cover pointer-events-none"
+                                loading="lazy"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="px-2 py-1 border-t border-white/10 text-center">
+                      <span className="text-[10px] text-white/30">Powered by Tenor</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Input row - always visible */}
+                <div className="p-2 pb-safe flex items-center gap-2">
+                  {/* Expand button - only in half mode */}
+                  {sheetSize === 'half' && (
+                    <button
+                      onClick={() => setSheetSize('full')}
+                      className="p-2 rounded-xl bg-white/10 text-white/60 hover:bg-white/20 transition-colors"
+                    >
+                      <Maximize2 className="w-5 h-5" />
+                    </button>
+                  )}
+                  
+                  {/* Emoji button - only in full mode */}
+                  {sheetSize === 'full' && (
+                    <button
+                      onClick={() => {
+                        setShowEmojiPicker(!showEmojiPicker);
+                        setShowGifPicker(false);
+                      }}
+                      className={`p-2.5 rounded-xl transition-colors ${showEmojiPicker ? 'bg-nfl-blue text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                    >
+                      <Smile className="w-5 h-5" />
+                    </button>
+                  )}
+                  
+                  {/* GIF button - only in full mode */}
+                  {sheetSize === 'full' && (
+                    <button
+                      onClick={() => {
+                        setShowGifPicker(!showGifPicker);
+                        setShowEmojiPicker(false);
+                      }}
+                      className={`p-2.5 rounded-xl transition-colors ${showGifPicker ? 'bg-nfl-blue text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                    >
+                      <span className="text-xs font-bold">GIF</span>
+                    </button>
+                  )}
+                  
+                  {/* Text input */}
+                  <input
+                    ref={mobileInputRef}
+                    type="text"
+                    value={inputValue}
+                    onChange={handleInputChange}
+                    onKeyDown={(e) => handleKeyDown(e, true)}
+                    onFocus={() => { 
+                      setShowEmojiPicker(false); 
+                      setShowGifPicker(false);
+                    }}
+                    placeholder={sheetSize === 'half' ? "Type a message..." : (replyingTo ? "Type your reply..." : "Type a message... @ to mention")}
+                    className="flex-1 bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50 text-sm"
+                  />
+                  
+                  {/* Send button */}
+                  <button
+                    onClick={() => handleSend(true)}
+                    disabled={!inputValue.trim()}
+                    className="p-2 bg-nfl-blue rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-nfl-blue/80 transition-colors"
+                  >
+                    <Send className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              
+              {/* Message action menu */}
+              {showMessageMenu && selectedMessage && (
+                <div 
+                  className="absolute inset-0 z-50 flex items-end justify-center bg-black/50"
+                  onClick={() => { setShowMessageMenu(false); setSelectedMessage(null); }}
+                >
+                  <div 
+                    className="w-full max-w-sm bg-slate-800 rounded-t-2xl overflow-hidden animate-slide-up"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {/* Quick reactions */}
+                    <div className="flex justify-center gap-2 p-4 border-b border-white/10">
+                      {QUICK_REACTIONS.map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleReact(selectedMessage, emoji)}
+                          className="p-2 text-2xl hover:bg-white/10 rounded-full transition-colors active:scale-90"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="p-2">
+                      <button
+                        onClick={() => handleReply(selectedMessage)}
+                        className="w-full px-4 py-3 flex items-center gap-3 text-white hover:bg-white/5 rounded-xl transition-colors"
+                      >
+                        <Reply className="w-5 h-5 text-white/60" />
+                        <span>Reply</span>
+                      </button>
+                      <button
+                        onClick={() => handleReport(selectedMessage)}
+                        className="w-full px-4 py-3 flex items-center gap-3 text-red-400 hover:bg-white/5 rounded-xl transition-colors"
+                      >
+                        <AlertCircle className="w-5 h-5" />
+                        <span>Report</span>
+                      </button>
+                    </div>
+                    
+                    {/* Cancel */}
+                    <div className="p-2 border-t border-white/10">
+                      <button
+                        onClick={() => { setShowMessageMenu(false); setSelectedMessage(null); }}
+                        className="w-full px-4 py-3 text-white/60 hover:bg-white/5 rounded-xl transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
               
-              {/* Half mode: tap to expand hint */}
-              {sheetSize === 'half' && (
+              {/* Reaction detail popup (who reacted) */}
+              {reactionDetail && (
                 <div 
-                  className="p-4 border-t border-white/10 bg-slate-800/30 text-center"
-                  onClick={() => setSheetSize('full')}
+                  className="absolute inset-0 z-50 flex items-center justify-center bg-black/50"
+                  onClick={() => setReactionDetail(null)}
                 >
-                  <p className="text-white/40 text-sm">Tap to expand and type a message</p>
+                  <div 
+                    className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl animate-slide-up mx-4 max-w-xs w-full"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{reactionDetail.emoji}</span>
+                        <span className="text-white font-medium">{reactionDetail.users.length}</span>
+                      </div>
+                      <button 
+                        onClick={() => setReactionDetail(null)}
+                        className="p-1 hover:bg-white/10 rounded-full"
+                      >
+                        <X className="w-4 h-4 text-white/50" />
+                      </button>
+                    </div>
+                    <div className="p-2 max-h-60 overflow-y-auto">
+                      {reactionDetail.users.map((name, idx) => (
+                        <div key={idx} className="px-3 py-2 text-white text-sm">
+                          {name}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
           </>
         )}
       </div>
+
+      {/* Global Message Action Menu (popup) - desktop only, outside transformed containers */}
+      {showMessageMenu && selectedMessage && (
+        <div 
+          className="hidden lg:block fixed inset-0 z-[100]"
+          onClick={() => { setShowMessageMenu(false); setSelectedMessage(null); }}
+        >
+          <div 
+            className="absolute bg-slate-800 rounded-xl shadow-2xl border border-white/10 overflow-hidden w-56 animate-scale-in"
+            style={{ 
+              top: Math.min(menuPosition.y, window.innerHeight - 200),
+              left: Math.min(Math.max(menuPosition.x, 16), window.innerWidth - 240),
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Quick reactions */}
+            <div className="flex justify-center gap-1 p-3 border-b border-white/10">
+              {QUICK_REACTIONS.map(emoji => (
+                <button
+                  key={emoji}
+                  onClick={() => handleReact(selectedMessage, emoji)}
+                  className="p-1.5 text-lg hover:bg-white/10 rounded-full transition-colors active:scale-90"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            
+            {/* Actions */}
+            <div className="p-1">
+              <button
+                onClick={() => handleReply(selectedMessage)}
+                className="w-full px-3 py-2 flex items-center gap-3 text-white text-sm hover:bg-white/5 rounded-lg transition-colors"
+              >
+                <Reply className="w-4 h-4 text-white/60" />
+                <span>Reply</span>
+              </button>
+              <button
+                onClick={() => handleReport(selectedMessage)}
+                className="w-full px-3 py-2 flex items-center gap-3 text-red-400 text-sm hover:bg-white/5 rounded-lg transition-colors"
+              >
+                <AlertCircle className="w-4 h-4" />
+                <span>Report</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Reaction Detail popup - desktop only */}
+      {reactionDetail && (
+        <div 
+          className="hidden lg:flex fixed inset-0 z-[100] items-center justify-center"
+          onClick={() => setReactionDetail(null)}
+        >
+          <div 
+            className="bg-slate-800 rounded-xl overflow-hidden shadow-xl border border-white/10 max-w-xs w-full mx-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{reactionDetail.emoji}</span>
+                <span className="text-white font-medium">{reactionDetail.users.length}</span>
+              </div>
+              <button 
+                onClick={() => setReactionDetail(null)}
+                className="p-1 hover:bg-white/10 rounded-full"
+              >
+                <X className="w-4 h-4 text-white/50" />
+              </button>
+            </div>
+            <div className="p-2 max-h-60 overflow-y-auto">
+              {reactionDetail.users.map((name, idx) => (
+                <div key={idx} className="px-3 py-2 text-white text-sm">
+                  {name}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

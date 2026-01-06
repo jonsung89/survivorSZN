@@ -132,9 +132,9 @@ export function SocketProvider({ children }) {
   }, [socket, connected]);
 
   // Send a chat message
-  const sendMessage = useCallback((leagueId, message) => {
+  const sendMessage = useCallback((leagueId, message, replyTo = null, gif = null) => {
     if (socket && connected) {
-      socket.emit('chat-message', { leagueId, message });
+      socket.emit('chat-message', { leagueId, message, replyTo, gif });
     }
   }, [socket, connected]);
 

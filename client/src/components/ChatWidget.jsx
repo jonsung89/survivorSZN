@@ -1673,13 +1673,31 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 
                 {/* Input row - always visible */}
                 <div className="p-2 pb-safe flex items-center gap-2">
-                  {/* Expand button - only in half mode */}
+                  {/* Emoji button - in half mode, expands and opens picker */}
                   {sheetSize === 'half' && (
                     <button
-                      onClick={() => setSheetSize('full')}
+                      onClick={() => {
+                        setSheetSize('full');
+                        setShowEmojiPicker(true);
+                        setShowGifPicker(false);
+                      }}
                       className="p-2 rounded-xl bg-white/10 text-white/60 hover:bg-white/20 transition-colors"
                     >
-                      <Maximize2 className="w-5 h-5" />
+                      <Smile className="w-5 h-5" />
+                    </button>
+                  )}
+                  
+                  {/* GIF button - in half mode, expands and opens picker */}
+                  {sheetSize === 'half' && (
+                    <button
+                      onClick={() => {
+                        setSheetSize('full');
+                        setShowGifPicker(true);
+                        setShowEmojiPicker(false);
+                      }}
+                      className="p-2 rounded-xl bg-white/10 text-white/60 hover:bg-white/20 transition-colors"
+                    >
+                      <span className="text-xs font-bold">GIF</span>
                     </button>
                   )}
                   

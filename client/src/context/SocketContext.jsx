@@ -1,22 +1,19 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
+import { auth } from '../firebase';
 
 const SocketContext = createContext(null);
 
-export function useSocket() {
-  return useContext(SocketContext);
-}
-
 export function SocketProvider({ children }) {
-  const { user, getIdToken } = useAuth();
+  const { user } = useAuth();
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState({});
   const [typingUsers, setTypingUsers] = useState({});
   const currentLeagueRef = useRef(null);
 
-  // Initialize socket connection
+  // Initialize socket connection when user is authenticated
   useEffect(() => {
     if (!user) {
       if (socket) {
@@ -29,28 +26,51 @@ export function SocketProvider({ children }) {
 
     const initSocket = async () => {
       try {
-        const token = await getIdToken();
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
         
-        const newSocket = io(import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001', {
+        // Properly extract the socket URL from VITE_API_URL
+        // VITE_API_URL might be like "https://api.example.com/api" - we need "https://api.example.com"
+        let socketUrl = 'http://localhost:3001';
+        const apiUrl = import.meta.env.VITE_API_URL;
+        if (apiUrl) {
+          try {
+            // Handle both absolute URLs and relative paths
+            if (apiUrl.startsWith('http')) {
+              const url = new URL(apiUrl);
+              socketUrl = url.origin; // Gets "https://api.example.com"
+            }
+            // If it's a relative URL like "/api", use the current origin
+            else if (apiUrl.startsWith('/')) {
+              socketUrl = window.location.origin;
+            }
+          } catch (e) {
+            console.warn('Could not parse API URL for socket:', apiUrl);
+          }
+        }
+        
+        const newSocket = io(socketUrl, {
           auth: { token },
           transports: ['websocket', 'polling']
         });
+        
+        console.log('🔌 Connecting to socket at:', socketUrl);
 
         newSocket.on('connect', () => {
-          console.log('Socket connected');
+          console.log('🔌 Socket connected');
           setConnected(true);
         });
 
         newSocket.on('disconnect', () => {
-          console.log('Socket disconnected');
+          console.log('🔌 Socket disconnected');
           setConnected(false);
         });
 
-        newSocket.on('error', (error) => {
-          console.error('Socket error:', error);
+        newSocket.on('connect_error', (error) => {
+          console.error('Socket connection error:', error.message);
+          setConnected(false);
         });
 
-        // Online users update
         newSocket.on('online-users', (users) => {
           if (currentLeagueRef.current) {
             setOnlineUsers(prev => ({
@@ -60,7 +80,6 @@ export function SocketProvider({ children }) {
           }
         });
 
-        // Typing update
         newSocket.on('typing-update', ({ users }) => {
           if (currentLeagueRef.current) {
             setTypingUsers(prev => ({
@@ -71,6 +90,10 @@ export function SocketProvider({ children }) {
         });
 
         setSocket(newSocket);
+
+        return () => {
+          newSocket.disconnect();
+        };
       } catch (error) {
         console.error('Failed to initialize socket:', error);
       }
@@ -88,8 +111,13 @@ export function SocketProvider({ children }) {
   // Join a league room
   const joinLeague = useCallback((leagueId) => {
     if (socket && connected) {
-      currentLeagueRef.current = leagueId;
+      // Leave previous league if any
+      if (currentLeagueRef.current && currentLeagueRef.current !== leagueId) {
+        socket.emit('leave-league', currentLeagueRef.current);
+      }
+      
       socket.emit('join-league', leagueId);
+      currentLeagueRef.current = leagueId;
     }
   }, [socket, connected]);
 
@@ -103,7 +131,7 @@ export function SocketProvider({ children }) {
     }
   }, [socket, connected]);
 
-  // Send chat message
+  // Send a chat message
   const sendMessage = useCallback((leagueId, message) => {
     if (socket && connected) {
       socket.emit('chat-message', { leagueId, message });
@@ -123,7 +151,7 @@ export function SocketProvider({ children }) {
     }
   }, [socket, connected]);
 
-  // Subscribe to events
+  // Subscribe to socket events
   const on = useCallback((event, handler) => {
     if (socket) {
       socket.on(event, handler);
@@ -132,17 +160,31 @@ export function SocketProvider({ children }) {
     return () => {};
   }, [socket]);
 
+  // Get online users for a league
+  const getOnlineUsers = useCallback((leagueId) => {
+    return onlineUsers[leagueId] || [];
+  }, [onlineUsers]);
+
+  // Check if a user is online in a league
+  const isUserOnline = useCallback((leagueId, userId) => {
+    const users = onlineUsers[leagueId] || [];
+    return users.some(u => u.userId === userId);
+  }, [onlineUsers]);
+
   const value = {
     socket,
     connected,
-    onlineUsers,
-    typingUsers,
     joinLeague,
     leaveLeague,
     sendMessage,
     startTyping,
     stopTyping,
-    on
+    on,
+    onlineUsers,
+    typingUsers,
+    getOnlineUsers,
+    isUserOnline,
+    currentLeague: currentLeagueRef.current
   };
 
   return (
@@ -150,4 +192,12 @@ export function SocketProvider({ children }) {
       {children}
     </SocketContext.Provider>
   );
+}
+
+export function useSocket() {
+  const context = useContext(SocketContext);
+  if (!context) {
+    throw new Error('useSocket must be used within a SocketProvider');
+  }
+  return context;
 }

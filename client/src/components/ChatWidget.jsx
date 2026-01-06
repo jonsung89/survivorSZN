@@ -1187,13 +1187,13 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             {/* Reply preview */}
             {replyingTo && (
               <div className="px-3 pt-2 flex items-center gap-2">
-                <div className="flex-1 pl-2 border-l-2 border-emerald-500 bg-white/5 rounded-r py-1 pr-2">
-                  <p className="text-xs text-emerald-400 font-medium">
+                <div className="flex-1 min-w-0 pl-2 border-l-2 border-emerald-500 bg-white/5 rounded-r py-1 pr-2">
+                  <p className="text-xs text-emerald-400 font-medium truncate">
                     Replying to {replyingTo.display_name || replyingTo.displayName}
                   </p>
                   <p className="text-xs text-white/50 truncate">{replyingTo.message}</p>
                 </div>
-                <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-white/10 rounded">
+                <button onClick={() => setReplyingTo(null)} className="flex-shrink-0 p-1 hover:bg-white/10 rounded">
                   <X className="w-3 h-3 text-white/40" />
                 </button>
               </div>
@@ -1478,7 +1478,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             {/* Chat Panel - Bottom Sheet */}
             <div 
               ref={sheetRef}
-              className={`fixed inset-x-0 bottom-0 z-50 bg-slate-900 flex flex-col rounded-t-3xl shadow-2xl ${
+              className={`fixed inset-x-0 bottom-0 z-50 bg-slate-900 flex flex-col rounded-t-3xl shadow-2xl overflow-hidden ${
                 isDragging ? '' : 'transition-all duration-300 ease-out'
               }`}
               style={{ 
@@ -1545,7 +1545,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               <div 
                 ref={mobileMessagesRef}
                 onScroll={handleScroll}
-                className="flex-1 overflow-y-auto p-4"
+                className="flex-1 overflow-y-auto overflow-x-hidden p-4"
+                style={{ touchAction: 'pan-y' }}
               >
                 {renderMessages()}
               </div>
@@ -1555,13 +1556,13 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 {/* Reply preview - only in full mode */}
                 {sheetSize === 'full' && replyingTo && (
                   <div className="px-3 pt-2 flex items-center gap-2">
-                    <div className="flex-1 pl-3 border-l-2 border-emerald-500 bg-white/5 rounded-r py-1.5 pr-2">
-                      <p className="text-xs text-emerald-400 font-medium">
+                    <div className="flex-1 min-w-0 pl-3 border-l-2 border-emerald-500 bg-white/5 rounded-r py-1.5 pr-2">
+                      <p className="text-xs text-emerald-400 font-medium truncate">
                         Replying to {replyingTo.display_name || replyingTo.displayName}
                       </p>
                       <p className="text-xs text-white/50 truncate">{replyingTo.message}</p>
                     </div>
-                    <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-white/10 rounded">
+                    <button onClick={() => setReplyingTo(null)} className="flex-shrink-0 p-1 hover:bg-white/10 rounded">
                       <X className="w-4 h-4 text-white/40" />
                     </button>
                   </div>

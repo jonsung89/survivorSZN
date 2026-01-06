@@ -97,6 +97,14 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Get Firebase ID token for socket authentication
+  const getIdToken = async () => {
+    if (auth.currentUser) {
+      return await auth.currentUser.getIdToken();
+    }
+    return null;
+  };
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -105,6 +113,7 @@ export function AuthProvider({ children }) {
       updateDisplayName,
       updateEmail,
       refreshToken,
+      getIdToken,  // Added for chat/socket authentication
       showOnboarding,
       completeOnboarding,
       showEmailPrompt,

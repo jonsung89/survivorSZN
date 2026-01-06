@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getCurrentSeason, getWeekSchedule } = require('../services/nfl');
+const { getCurrentSeason, getWeekSchedule, getEspnWeekParams } = require('../services/nfl');
 
 // Helper to get user from Firebase UID
 const getUser = async (req) => {
@@ -844,8 +844,11 @@ router.post('/:leagueId/members/:memberId/pick', authMiddleware, async (req, res
     let gameId = null;
     let teamGame = null;
     
+    // Convert frontend weeks (19-22 for playoffs) to ESPN format
+    const { espnWeek, seasonType } = getEspnWeekParams(parseInt(week));
+    
     try {
-      const games = await getWeekSchedule(season, parseInt(week));
+      const games = await getWeekSchedule(season, espnWeek, seasonType);
       teamGame = games.find(g => 
         String(g.homeTeam?.id) === String(teamId) || String(g.awayTeam?.id) === String(teamId)
       );
@@ -962,9 +965,12 @@ router.get('/:leagueId/standings', authMiddleware, async (req, res) => {
     const targetWeek = week ? parseInt(week) : currentWeek;
 
     // Get schedule for the target week to determine game status
+    // Convert frontend weeks (19-22 for playoffs) to ESPN format
+    const { espnWeek, seasonType } = getEspnWeekParams(targetWeek);
     let weekGames = [];
     try {
-      weekGames = await getWeekSchedule(season, targetWeek);
+      weekGames = await getWeekSchedule(season, espnWeek, seasonType);
+      console.log(`Fetched ${weekGames.length} games for week ${targetWeek} (ESPN: week ${espnWeek}, seasonType ${seasonType})`);
     } catch (e) {
       console.error('Failed to get week schedule:', e);
       // Continue with empty games array
@@ -1050,7 +1056,7 @@ router.get('/:leagueId/standings', authMiddleware, async (req, res) => {
           return {
             teamId: pick.teamId,
             result: pick.result,
-            visible: true,
+            visible,
             pickNumber: pick.pickNumber,
             gameStatus: game?.status
           };

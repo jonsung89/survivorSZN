@@ -292,6 +292,26 @@ router.get('/available/:leagueId/:week', authMiddleware, async (req, res) => {
     console.log('Current time (now):', now.toISOString());
     
     for (const game of games) {
+      // Skip TBD games (playoff matchups not yet determined)
+      // TBD teams have negative IDs or abbreviation "TBD"
+      // Super Bowl uses AFC/NFC placeholders with IDs 31/32
+      const homeTeamId = game.homeTeam?.id;
+      const awayTeamId = game.awayTeam?.id;
+      const homeAbbr = game.homeTeam?.abbreviation;
+      const awayAbbr = game.awayTeam?.abbreviation;
+      
+      const isTBDGame = 
+        !homeTeamId || !awayTeamId ||
+        parseInt(homeTeamId) < 0 || parseInt(awayTeamId) < 0 ||
+        homeAbbr === 'TBD' || awayAbbr === 'TBD' ||
+        homeAbbr === 'AFC' || homeAbbr === 'NFC' ||
+        awayAbbr === 'AFC' || awayAbbr === 'NFC';
+      
+      if (isTBDGame) {
+        console.log(`Skipping TBD game ${game.id}: ${homeAbbr || 'TBD'} vs ${awayAbbr || 'TBD'}`);
+        continue;
+      }
+      
       // Parse game date - handle various formats
       let gameStart;
       if (game.date) {
@@ -360,6 +380,7 @@ router.get('/available/:leagueId/:week', authMiddleware, async (req, res) => {
 
     // Debug: Log sample of teams with their game data
     const teamsArray = Array.from(teamsPlaying.values());
+    console.log(`Found ${teamsArray.length} valid teams (excludes TBD matchups)`);
     if (teamsArray.length > 0) {
       console.log('Sample team data being sent:', {
         team: teamsArray[0].team.name,

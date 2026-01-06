@@ -324,8 +324,29 @@ export default function MakePick() {
       {/* Games */}
       {games.length === 0 ? (
         <div className="text-center py-12">
-          <Calendar className="w-10 h-10 text-white/20 mx-auto mb-3" />
-          <p className="text-white/50">No games scheduled for {getWeekLabel(selectedWeek)}</p>
+          {selectedWeek > 18 ? (
+            <>
+              <Lock className="w-10 h-10 text-white/20 mx-auto mb-3" />
+              <p className="text-white/50 font-medium">
+                {selectedWeek === 19 && 'Wild Card'}
+                {selectedWeek === 20 && 'Divisional Round'}
+                {selectedWeek === 21 && 'Conference Championships'}
+                {selectedWeek === 22 && 'Super Bowl'}
+                {' '}matchups are TBD
+              </p>
+              <p className="text-white/40 text-sm mt-2">
+                {selectedWeek === 19 && 'Matchups will be set after Week 18 concludes'}
+                {selectedWeek === 20 && 'Matchups will be set after Wild Card games conclude'}
+                {selectedWeek === 21 && 'Matchups will be set after Divisional Round concludes'}
+                {selectedWeek === 22 && 'Matchups will be set after Conference Championships conclude'}
+              </p>
+            </>
+          ) : (
+            <>
+              <Calendar className="w-10 h-10 text-white/20 mx-auto mb-3" />
+              <p className="text-white/50">No games scheduled for {getWeekLabel(selectedWeek)}</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-2 sm:space-y-3">

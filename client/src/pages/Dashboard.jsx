@@ -119,6 +119,21 @@ const NFL_TEAMS = {
   '34': { name: 'Texans', abbreviation: 'HOU', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/hou.png' },
 };
 
+// Helper to get proper week label (handles playoffs)
+const getWeekLabel = (week, seasonType) => {
+  if (seasonType === 3) {
+    const playoffLabels = {
+      1: 'Wild Card',
+      2: 'Divisional',
+      3: 'Conference',
+      4: 'Pro Bowl',
+      5: 'Super Bowl'
+    };
+    return playoffLabels[week] || `Playoff Week ${week}`;
+  }
+  return `Week ${week}`;
+};
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -185,11 +200,23 @@ export default function Dashboard() {
         }
 
         setSeasonInfo(seasonData);
+        
+        // DEBUG: Log season data
+        console.log('=== DASHBOARD DEBUG ===');
+        console.log('Season data:', seasonData);
+        console.log('Week:', seasonData?.week, 'SeasonType:', seasonData?.seasonType);
 
         // Fetch schedule to get first game time
         if (seasonData?.week) {
           try {
-            const scheduleData = await nflAPI.getSchedule(seasonData.week);
+            // Pass seasonType for playoffs (3) vs regular season (2)
+            const scheduleData = await nflAPI.getSchedule(seasonData.week, null, seasonData.seasonType || 2);
+            
+            // DEBUG: Log schedule data
+            console.log('Schedule API called with week:', seasonData.week, 'seasonType:', seasonData.seasonType || 2);
+            console.log('Schedule data:', scheduleData);
+            console.log('Games count:', scheduleData?.games?.length);
+            
             if (cancelled) return;
             
             if (scheduleData?.games?.length > 0) {
@@ -208,16 +235,18 @@ export default function Dashboard() {
               });
               setWeekStarted(hasStartedGames);
               
-              // If week hasn't started, find first upcoming game for countdown
-              if (!hasStartedGames) {
-                const upcomingGames = games
-                  .filter(g => new Date(g.date) > now)
-                  .sort((a, b) => new Date(a.date) - new Date(b.date));
-                
-                if (upcomingGames.length > 0) {
-                  setFirstGame(upcomingGames[0]);
-                }
-              }
+              // DEBUG: Log game analysis
+              console.log('Current time:', now.toISOString());
+              console.log('Has started games:', hasStartedGames);
+              console.log('Games with dates:', games.map(g => ({
+                id: g.id,
+                name: g.shortName || g.name,
+                date: g.date,
+                status: g.status,
+                isFuture: new Date(g.date) > now
+              })));
+              
+              // firstGame will be calculated by the allGames useEffect
             }
           } catch (err) {
             console.error('Failed to fetch schedule:', err);
@@ -269,7 +298,12 @@ export default function Dashboard() {
 
   // Countdown timer effect
   useEffect(() => {
-    if (!firstGame?.date || weekStarted) return;
+    if (!firstGame?.date) {
+      console.log('=== COUNTDOWN: No firstGame, skipping ===');
+      return;
+    }
+    
+    console.log('=== COUNTDOWN: Starting timer for', firstGame.shortName || firstGame.name, '===');
 
     const updateCountdown = () => {
       const now = new Date();
@@ -277,8 +311,9 @@ export default function Dashboard() {
       const diff = gameTime - now;
 
       if (diff <= 0) {
+        console.log('COUNTDOWN: Game has started, clearing countdown');
         setCountdown(null);
-        setWeekStarted(true);
+        // Game has started - the auto-refresh will update allGames and firstGame
         return;
       }
 
@@ -294,7 +329,35 @@ export default function Dashboard() {
     const interval = setInterval(updateCountdown, 1000);
 
     return () => clearInterval(interval);
-  }, [firstGame, weekStarted]);
+  }, [firstGame]);
+
+  // Recalculate firstGame when allGames updates (e.g., when a game starts)
+  useEffect(() => {
+    if (!allGames.length) return;
+    
+    const now = new Date();
+    const upcomingGames = allGames
+      .filter(g => new Date(g.date) > now && g.status === 'STATUS_SCHEDULED')
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // DEBUG: Log upcoming games calculation
+    console.log('=== FIRST GAME CALCULATION ===');
+    console.log('All games count:', allGames.length);
+    console.log('Upcoming games count:', upcomingGames.length);
+    if (upcomingGames.length > 0) {
+      console.log('First upcoming game:', upcomingGames[0].shortName || upcomingGames[0].name, upcomingGames[0].date);
+    }
+    
+    if (upcomingGames.length > 0) {
+      setFirstGame(upcomingGames[0]);
+      console.log('Set firstGame to:', upcomingGames[0].shortName || upcomingGames[0].name);
+    } else {
+      // No more upcoming games
+      setFirstGame(null);
+      setCountdown(null);
+      console.log('No upcoming games found - cleared firstGame');
+    }
+  }, [allGames]);
 
   // Auto-refresh games when week has started (every 60 seconds)
   useEffect(() => {
@@ -302,7 +365,8 @@ export default function Dashboard() {
 
     const refreshGames = async () => {
       try {
-        const scheduleData = await nflAPI.getSchedule(seasonInfo.week);
+        // Pass seasonType for playoffs (3) vs regular season (2)
+        const scheduleData = await nflAPI.getSchedule(seasonInfo.week, null, seasonInfo.seasonType || 2);
         if (scheduleData?.games?.length > 0) {
           setAllGames(scheduleData.games);
         }
@@ -325,7 +389,7 @@ export default function Dashboard() {
       const interval = setInterval(refreshGames, 60000); // Every 60 seconds
       return () => clearInterval(interval);
     }
-  }, [weekStarted, seasonInfo?.week, allGames]);
+  }, [weekStarted, seasonInfo?.week, seasonInfo?.seasonType, allGames]);
 
   if (loading) {
     return (
@@ -343,12 +407,12 @@ export default function Dashboard() {
           Welcome back, {user?.displayName || 'Player'}!
         </h1>
         <p className="text-white/60 mt-1 text-base">
-          {seasonInfo ? `Week ${seasonInfo.week} • ${seasonInfo.season} Season` : 'Loading season info...'}
+          {seasonInfo ? `${getWeekLabel(seasonInfo.week, seasonInfo.seasonType)} • ${seasonInfo.season} Season` : 'Loading season info...'}
         </p>
       </div>
 
-      {/* Countdown to First Game - only before week starts */}
-      {countdown && firstGame && !weekStarted && (
+      {/* Countdown to Next Game - shows when there are upcoming games */}
+      {countdown && firstGame && (
         <div className="mb-6 sm:mb-8 animate-in" style={{ animationDelay: '25ms' }}>
           <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-nfl-blue/20 to-purple-600/20 border border-nfl-blue/30">
             <div className="flex items-center justify-between gap-4">
@@ -370,7 +434,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="hidden sm:block border-l border-white/10 pl-3 ml-1">
-                  <p className="text-white/50 text-sm">Week {seasonInfo?.week} Kickoff</p>
+                  <p className="text-white/50 text-sm">{weekStarted ? 'Next' : getWeekLabel(seasonInfo?.week, seasonInfo?.seasonType)} Kickoff</p>
                   <p className="text-white/80 text-base">
                     {new Date(firstGame.date).toLocaleDateString('en-US', { 
                       weekday: 'short', 
@@ -408,7 +472,7 @@ export default function Dashboard() {
             
             {/* Mobile date - only show on small screens */}
             <div className="sm:hidden mt-3 pt-3 border-t border-white/10">
-              <p className="text-white/50 text-sm mb-1">Week {seasonInfo?.week} Kickoff</p>
+              <p className="text-white/50 text-sm mb-1">{weekStarted ? 'Next' : getWeekLabel(seasonInfo?.week, seasonInfo?.seasonType)} Kickoff</p>
               <div className="flex items-center gap-2 text-white/80 text-sm">
                 <Calendar className="w-4 h-4" />
                 <span>
@@ -469,7 +533,7 @@ export default function Dashboard() {
         return (
           <div className="mb-6 sm:mb-8 animate-in" style={{ animationDelay: '25ms' }}>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold text-white/70">Week {seasonInfo?.week} Games</h2>
+              <h2 className="text-base font-semibold text-white/70">{getWeekLabel(seasonInfo?.week, seasonInfo?.seasonType)} Games</h2>
               <Link to="/schedule" className="text-sm text-white/60 hover:text-white flex items-center gap-1 transition-colors">
                 View All
                 <ChevronRight className="w-4 h-4" />
@@ -577,7 +641,7 @@ export default function Dashboard() {
                   You have {pendingPicks.length} pending pick{pendingPicks.length > 1 ? 's' : ''}!
                 </h3>
                 <p className="text-amber-200/70 text-sm mt-1">
-                  Make your Week {seasonInfo?.week} selections before games start
+                  Make your {getWeekLabel(seasonInfo?.week, seasonInfo?.seasonType)} selections before games start
                 </p>
                 <div className="flex flex-wrap gap-2 mt-3">
                   {pendingPicks.map(pick => (

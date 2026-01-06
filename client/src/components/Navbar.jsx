@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useToast } from './Toast';
+import Avatar from './Avatar';
 
 export default function Navbar() {
   const { user, signOut, updateDisplayName } = useAuth();
@@ -87,7 +88,7 @@ export default function Navbar() {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-nfl-red to-red-700 flex items-center justify-center shadow-lg">
                 <span className="text-white font-display font-bold text-lg">🏈</span>
               </div>
-              <div className="block">
+              <div className="hidden sm:block">
                 <h1 className="font-display font-bold text-xl text-white tracking-wide">
                   SurvivorSZN
                 </h1>
@@ -117,9 +118,11 @@ export default function Navbar() {
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-nfl-blue to-blue-700 flex items-center justify-center">
-                  <User className="w-4 h-4 text-white" />
-                </div>
+                <Avatar 
+                  userId={user?.id}
+                  name={user?.displayName || 'Player'}
+                  size="sm"
+                />
                 <span className="text-sm text-white/80">
                   {user?.displayName || 'Player'}
                 </span>
@@ -185,9 +188,11 @@ export default function Navbar() {
               
               <div className="border-t border-white/10 pt-4 mt-4">
                 <div className="flex items-center gap-3 px-4 py-2">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-nfl-blue to-blue-700 flex items-center justify-center">
-                    <User className="w-5 h-5 text-white" />
-                  </div>
+                  <Avatar 
+                    userId={user?.id}
+                    name={user?.displayName || 'Player'}
+                    size="md"
+                  />
                   <div>
                     <p className="text-white font-medium">
                       {user?.displayName || 'Player'}

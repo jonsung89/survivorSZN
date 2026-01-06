@@ -197,12 +197,66 @@ const getCurrentSeasonYear = async () => {
 const getCurrentSeason = async () => {
   try {
     const data = await fetchWithCache(`${API_BASE}/scoreboard`);
-    return {
-      season: data.season?.year || new Date().getFullYear(),
-      seasonType: data.season?.type || 2,
-      week: data.week?.number || 1,
-      displayName: data.week?.teamsOnBye ? `Week ${data.week.number}` : 'Offseason'
-    };
+    
+    // Get the base values from ESPN
+    let season = data.season?.year || new Date().getFullYear();
+    let seasonType = data.season?.type || 2;
+    let week = data.week?.number || 1;
+    let displayName = data.week?.teamsOnBye ? `Week ${week}` : 'Offseason';
+    
+    // If ESPN says offseason or we're past week 18, check if playoffs have started
+    // Playoffs typically run in January, so check for playoff games
+    const now = new Date();
+    const month = now.getMonth(); // 0 = January
+    
+    if (displayName === 'Offseason' || (seasonType === 2 && week >= 18)) {
+      // Check if we're in January/February (playoff months)
+      if (month === 0 || month === 1) {
+        console.log('Checking for playoff games...');
+        
+        // Try to fetch playoff schedule (seasonType=3)
+        // Wild Card = week 1, Divisional = week 2, Conference = week 3, Super Bowl = week 5
+        for (let playoffWeek = 1; playoffWeek <= 5; playoffWeek++) {
+          try {
+            const playoffUrl = `${API_BASE}/scoreboard?seasontype=3&week=${playoffWeek}`;
+            const playoffData = await fetchWithCache(playoffUrl, 5 * 60 * 1000); // 5 min cache
+            
+            if (playoffData.events && playoffData.events.length > 0) {
+              // Found playoff games - check if any are upcoming or in progress
+              const hasUpcomingOrLive = playoffData.events.some(event => {
+                const gameDate = new Date(event.date);
+                const status = event.status?.type?.state;
+                // Game is upcoming (future date) or currently in progress
+                return gameDate > now || status === 'in' || status === 'pre';
+              });
+              
+              if (hasUpcomingOrLive) {
+                // Use this playoff week
+                season = playoffData.season?.year || season;
+                seasonType = 3;
+                week = playoffWeek;
+                
+                const playoffLabels = {
+                  1: 'Wild Card',
+                  2: 'Divisional',
+                  3: 'Conference Championships',
+                  4: 'Pro Bowl',
+                  5: 'Super Bowl'
+                };
+                displayName = playoffLabels[playoffWeek] || `Playoff Week ${playoffWeek}`;
+                
+                console.log(`Found playoff games: ${displayName} (Week ${week}, SeasonType ${seasonType})`);
+                break;
+              }
+            }
+          } catch (playoffError) {
+            console.log(`No playoff week ${playoffWeek} games found`);
+          }
+        }
+      }
+    }
+    
+    return { season, seasonType, week, displayName };
   } catch (error) {
     console.error('Get current season error:', error);
     const now = new Date();
@@ -1544,6 +1598,7 @@ const getTeamGameStatus = async (teamId, week, season = null) => {
 module.exports = {
   getCurrentSeason,
   getWeekSchedule,
+  getEspnWeekParams,
   getTeams,
   getTeam,
   getTeamSeasonResults,

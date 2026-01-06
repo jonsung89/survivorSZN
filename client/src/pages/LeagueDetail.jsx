@@ -4,13 +4,16 @@ import {
   Trophy, Users, Settings, ChevronLeft, ChevronRight, 
   Crown, Plus, Minus, Check, X, Calendar, Loader2,
   AlertCircle, Eye, EyeOff, History, AlertTriangle, Edit3,
-  Pencil, CalendarCheck, DollarSign
+  Pencil, CalendarCheck, DollarSign, Lock
 } from 'lucide-react';
 import { leagueAPI, nflAPI, picksAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
 import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
+import ChatWidget from '../components/ChatWidget';
+import Avatar from '../components/Avatar';
 
 // NFL team data for display (keyed by ESPN team ID)
 const NFL_TEAMS = {
@@ -53,6 +56,7 @@ export default function LeagueDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
+  const { onlineUsers } = useSocket();
   
   const [league, setLeague] = useState(null);
   const [standings, setStandings] = useState([]);
@@ -116,6 +120,7 @@ export default function LeagueDetail() {
   // Helper to get effective strikes (database + any unprocessed losses from completed games)
   // Checks ALL weeks up to currentWeek, not just the selected week
   const getEffectiveStrikes = (member) => {
+    if (!member) return 0;
     let strikes = member.strikes || 0;
     
     // Check all weeks up to currentWeek for unprocessed losses
@@ -228,8 +233,17 @@ export default function LeagueDetail() {
       // Get current NFL week
       const seasonResult = await nflAPI.getSeason();
       if (seasonResult.week) {
-        setCurrentWeek(seasonResult.week);
-        setSelectedWeek(seasonResult.week);
+        // Convert playoff weeks: backend returns week 1-5 with seasonType=3
+        // Frontend uses week 19-22 for playoffs (19=WC, 20=DIV, 21=CONF, 22=SB)
+        let displayWeek = seasonResult.week;
+        if (seasonResult.seasonType === 3) {
+          // Map playoff week 1-5 to frontend weeks 19-22
+          // Week 1 = Wild Card (19), Week 2 = Divisional (20), Week 3 = Conference (21), Week 4 = Pro Bowl (skip), Week 5 = Super Bowl (22)
+          const playoffWeekMap = { 1: 19, 2: 20, 3: 21, 4: 21, 5: 22 };
+          displayWeek = playoffWeekMap[seasonResult.week] || 19;
+        }
+        setCurrentWeek(displayWeek);
+        setSelectedWeek(displayWeek);
       }
 
       // Get my picks
@@ -278,7 +292,7 @@ export default function LeagueDetail() {
 
   // Fetch game status for all picked teams in the selected week
   const fetchGameStatuses = async (standingsData, week) => {
-    // Collect all unique team IDs from picks
+    // Collect all unique team IDs from picks (regardless of visibility - we need game status for all)
     const teamIds = new Set();
     standingsData.forEach(member => {
       const weekData = member.picks?.[week];
@@ -288,7 +302,7 @@ export default function LeagueDetail() {
         : (weekData?.teamId ? [{ teamId: weekData.teamId }] : []);
       
       displayPicks.forEach(pick => {
-        if (pick.teamId && pick.visible !== false) {
+        if (pick.teamId) {
           teamIds.add(String(pick.teamId));
         }
       });
@@ -316,6 +330,9 @@ export default function LeagueDetail() {
       results.forEach(({ teamId, status }) => {
         if (status) {
           newStatuses[teamId] = status;
+        } else {
+          // Mark team as having no game this week (e.g., non-playoff team during playoffs)
+          newStatuses[teamId] = { noGame: true };
         }
       });
       setGameStatuses(newStatuses);
@@ -605,7 +622,9 @@ export default function LeagueDetail() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+    <div className="lg:pr-80 xl:pr-96">
+      {/* Main content - scrolls naturally, with padding for fixed chat sidebar */}
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-3 sm:gap-4 animate-in">
@@ -810,20 +829,56 @@ export default function LeagueDetail() {
             : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result }] : []);
           
           if (displayPicks.length === 0 && selectedWeek >= league.startWeek) {
-            // No pick made yet - show Make Pick for current and future weeks
-            const canMakePick = selectedWeek >= currentWeek && myStanding?.status !== 'eliminated';
+            // No pick made yet
+            const effectiveStrikes = getEffectiveStrikes(myStanding);
+            const isEliminated = myStanding?.status === 'eliminated' || effectiveStrikes >= (league?.maxStrikes || 1);
+            const isPastWeek = selectedWeek < currentWeek;
+            
+            // For playoff weeks (19-22), check if matchups are likely TBD
+            // Matchups are TBD if we're viewing a future playoff week
+            const isPlayoffWeek = selectedWeek > 18;
+            const isMatchupsTBD = isPlayoffWeek && selectedWeek > currentWeek;
+            
+            const canMakePick = selectedWeek >= currentWeek && !isEliminated && !isMatchupsTBD;
+            
             return (
               <div className="flex flex-col items-center justify-center h-full">
-                <AlertCircle className="w-10 h-10 text-yellow-400 mb-3" />
-                <p className="text-white font-medium">No pick for {getWeekLabel(selectedWeek)}</p>
-                {canMakePick && (
-                  <Link
-                    to={`/league/${leagueId}/pick?week=${selectedWeek}`}
-                    className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-emerald-600 rounded-lg text-white font-medium hover:bg-emerald-500 transition-colors"
-                  >
-                    <Calendar className="w-4 h-4" />
-                    Make Pick
-                  </Link>
+                {isEliminated ? (
+                  <>
+                    <X className="w-10 h-10 text-red-400 mb-3" />
+                    <p className="text-white font-medium">Eliminated</p>
+                    <p className="text-white/50 text-sm mt-1">You're out of the competition</p>
+                  </>
+                ) : isMatchupsTBD ? (
+                  <>
+                    <Lock className="w-10 h-10 text-white/30 mb-3" />
+                    <p className="text-white/50 font-medium">{getWeekLabel(selectedWeek)} matchups are TBD</p>
+                    <p className="text-white/40 text-sm mt-1">
+                      {selectedWeek === 19 && 'Matchups set after Week 18'}
+                      {selectedWeek === 20 && 'Matchups set after Wild Card'}
+                      {selectedWeek === 21 && 'Matchups set after Divisional'}
+                      {selectedWeek === 22 && 'Matchups set after Conference'}
+                    </p>
+                  </>
+                ) : isPastWeek ? (
+                  <>
+                    <AlertCircle className="w-10 h-10 text-white/30 mb-3" />
+                    <p className="text-white/50 font-medium">No pick made for {getWeekLabel(selectedWeek)}</p>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-10 h-10 text-yellow-400 mb-3" />
+                    <p className="text-white font-medium">No pick for {getWeekLabel(selectedWeek)}</p>
+                    {canMakePick && (
+                      <Link
+                        to={`/league/${leagueId}/pick?week=${selectedWeek}`}
+                        className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-emerald-600 rounded-lg text-white font-medium hover:bg-emerald-500 transition-colors"
+                      >
+                        <Calendar className="w-4 h-4" />
+                        Make Pick
+                      </Link>
+                    )}
+                  </>
                 )}
               </div>
             );
@@ -837,12 +892,15 @@ export default function LeagueDetail() {
             );
           }
           
-          // Check if all picks' games are still scheduled (can edit)
+          // Check if all picks' games are still scheduled or team not playing (can edit)
           const allGamesScheduled = displayPicks.every(pick => {
             const gameStatus = gameStatuses[String(pick.teamId)];
-            return gameStatus?.state === 'pre';
+            // Allow edit if: game not started yet, OR team isn't playing (invalid pick)
+            return gameStatus?.state === 'pre' || gameStatus?.noGame;
           });
-          const canEdit = allGamesScheduled && myStanding?.status !== 'eliminated';
+          const myEffectiveStrikes = getEffectiveStrikes(myStanding);
+          const isEffectivelyEliminated = myStanding?.status === 'eliminated' || myEffectiveStrikes >= (league?.maxStrikes || 1);
+          const canEdit = allGamesScheduled && !isEffectivelyEliminated;
           
           return (
             <>
@@ -865,7 +923,7 @@ export default function LeagueDetail() {
                 const gameStatus = gameStatuses[String(pick.teamId)];
                 
                 if (!gameStatus) {
-                  // Loading or no game data
+                  // Still loading
                   return (
                     <div key={idx} className="bg-white/5 rounded-xl p-4">
                       <div className="flex items-center gap-3">
@@ -873,6 +931,21 @@ export default function LeagueDetail() {
                         <div>
                           <p className="text-white font-semibold text-lg">{team?.city} {team?.name}</p>
                           <p className="text-white/40 text-sm">Loading game info...</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                if (gameStatus.noGame) {
+                  // Team not playing this week (e.g., non-playoff team during playoffs)
+                  return (
+                    <div key={idx} className="bg-white/5 rounded-xl p-4">
+                      <div className="flex items-center gap-3">
+                        {team?.logo && <img src={team.logo} alt={team.name} className="w-12 h-12 opacity-50" />}
+                        <div>
+                          <p className="text-white/50 font-semibold text-lg">{team?.city} {team?.name}</p>
+                          <p className="text-white/40 text-sm">Not playing this week</p>
                         </div>
                       </div>
                     </div>
@@ -1090,13 +1163,12 @@ export default function LeagueDetail() {
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                      member.isMe ? 'bg-nfl-blue' : 'bg-white/10'
-                    }`}>
-                      <span className="text-white font-semibold">
-                        {member.displayName?.charAt(0)?.toUpperCase() || '?'}
-                      </span>
-                    </div>
+                    <Avatar 
+                      userId={member.userId}
+                      name={member.displayName}
+                      size="sm"
+                      isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
+                    />
                     <div>
                       <p className="text-white font-medium text-sm flex items-center gap-1">
                         {member.displayName}
@@ -1148,7 +1220,9 @@ export default function LeagueDetail() {
                         })}
                       </div>
                     ) : selectedWeek <= currentWeek && selectedWeek >= league.startWeek ? (
-                      <span className="text-white/30 text-xs ml-2">No pick</span>
+                      effectiveStatus === 'eliminated' 
+                        ? <span className="text-white/20 text-xs ml-2">—</span>
+                        : <span className="text-white/30 text-xs ml-2">No pick</span>
                     ) : null}
                   </div>
                   
@@ -1213,13 +1287,12 @@ export default function LeagueDetail() {
                   >
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          member.isMe ? 'bg-nfl-blue' : 'bg-white/10'
-                        }`}>
-                          <span className="text-white font-semibold">
-                            {member.displayName?.charAt(0)?.toUpperCase() || '?'}
-                          </span>
-                        </div>
+                        <Avatar 
+                          userId={member.userId}
+                          name={member.displayName}
+                          size="md"
+                          isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
+                        />
                         <div>
                           <p className="text-white font-medium flex items-center gap-2">
                             {member.displayName}
@@ -1365,7 +1438,9 @@ export default function LeagueDetail() {
                             </div>
                           )
                         ) : selectedWeek >= league.startWeek ? (
-                          <span className="text-white/40 text-sm">No pick{isDoublePick ? 's' : ''}</span>
+                          effectiveStatus === 'eliminated'
+                            ? <span className="text-white/20 text-sm">—</span>
+                            : <span className="text-white/40 text-sm">No pick{isDoublePick ? 's' : ''}</span>
                         ) : (
                           <span className="text-white/30 text-sm">—</span>
                         )}
@@ -1702,13 +1777,12 @@ export default function LeagueDetail() {
                         className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
                       >
                         <div className="flex items-center gap-2">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                            member.isMe ? 'bg-nfl-blue' : 'bg-white/10'
-                          }`}>
-                            <span className="text-white font-semibold">
-                              {member.displayName?.charAt(0)?.toUpperCase() || '?'}
-                            </span>
-                          </div>
+                          <Avatar 
+                            userId={member.userId}
+                            name={member.displayName}
+                            size="sm"
+                            isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
+                          />
                           <div>
                             <span className="text-white text-sm">{member.displayName}</span>
                             {member.email && (
@@ -2264,6 +2338,18 @@ export default function LeagueDetail() {
           isCommissioner={isCommissioner}
           onClose={() => setShowShareModal(false)}
           onInviteCodeUpdate={(newCode) => setLeague(prev => ({ ...prev, inviteCode: newCode }))}
+        />
+      )}
+      </div>
+      
+      {/* Chat sidebar on desktop, floating button on mobile */}
+      {league && (
+        <ChatWidget 
+          leagueId={league.id} 
+          leagueName={league.name}
+          commissionerId={league.commissionerId}
+          members={standings}
+          maxStrikes={league.maxStrikes}
         />
       )}
     </div>

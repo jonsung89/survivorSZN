@@ -81,6 +81,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const [hasMore, setHasMore] = useState(true);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [hasNewMessage, setHasNewMessage] = useState(false);
+  const [isPageScrolling, setIsPageScrolling] = useState(false);
   
   // Desktop collapsed state (persisted in localStorage)
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -249,6 +250,25 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
       localStorage.setItem('chatSheetSize', sheetSize);
     }
   }, [sheetSize]);
+
+  // Hide preview bar while page is scrolling (prevents mobile browser viewport jitter)
+  useEffect(() => {
+    let scrollTimeout;
+    
+    const handleScroll = () => {
+      setIsPageScrolling(true);
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        setIsPageScrolling(false);
+      }, 150); // Show bar 150ms after scrolling stops
+    };
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, []);
 
   const fetchUnreadCount = async () => {
     try {
@@ -1350,19 +1370,25 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
       </div>
       {/* Mobile: Bottom Chat Bar + Sheet */}
       <div className="lg:hidden">
-        {/* Bottom Chat Preview Bar */}
+        {/* Bottom Chat Preview Bar - hides while scrolling to avoid mobile browser jitter */}
         <div 
-          className={`fixed inset-x-0 bottom-0 z-40 transition-all duration-300 ${
-            isOpen ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'
+          className={`fixed inset-x-0 bottom-0 z-40 transition-all duration-150 transform-gpu ${
+            isOpen || isPageScrolling ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'
           }`}
+          style={{ 
+            willChange: 'transform',
+            WebkitBackfaceVisibility: 'hidden',
+            backfaceVisibility: 'hidden',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+          }}
         >
           {/* New message highlight effect */}
           {hasNewMessage && (
             <div className="absolute inset-0 bg-nfl-blue/20 animate-pulse rounded-t-2xl pointer-events-none" />
           )}
           
-          {/* Safe area background */}
-          <div className={`bg-slate-900/95 backdrop-blur-xl border-t transition-colors duration-300 ${
+          {/* Safe area background - solid color to avoid jank */}
+          <div className={`bg-slate-900 border-t transition-colors duration-300 ${
             hasNewMessage ? 'border-nfl-blue/50' : 'border-white/10'
           }`}>
             <button
@@ -1458,6 +1484,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             {/* iOS safe area spacer */}
             <div className="pb-safe" />
           </div>
+          
+          {/* Background extension for Chrome dynamic UI - fills space below when nav bar hides */}
+          <div className="absolute inset-x-0 top-full h-20 bg-slate-900" />
         </div>
 
         {/* Bottom sheet overlay with animation */}

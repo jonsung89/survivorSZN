@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Users, Crown, ChevronLeft } from 'lucide-react';
+import { MessageCircle, X, Send, Users, Crown, ChevronLeft, ChevronUp } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
@@ -47,18 +47,29 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const { connected, onlineUsers, typingUsers, sendMessage, startTyping, stopTyping, on, joinLeague, leaveLeague } = useSocket();
   
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [isAnimatingIn, setIsAnimatingIn] = useState(false); // For open animation
+  const [sheetSize, setSheetSize] = useState('full'); // 'full', 'half', 'closed'
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [selectedProfile, setSelectedProfile] = useState(null);
+  const [hasNewMessage, setHasNewMessage] = useState(false); // For preview bar animation
   
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
   const mobileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  
+  // Drag gesture tracking
+  const sheetRef = useRef(null);
+  const dragStartY = useRef(0);
+  const dragCurrentY = useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
 
   // Join league room when widget mounts
   useEffect(() => {
@@ -69,12 +80,22 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   }, [leagueId, connected, joinLeague, leaveLeague]);
 
   // Load initial messages when chat opens (mobile) or on mount (desktop)
+  // Also load a few messages initially for the preview bar
   useEffect(() => {
     if (leagueId) {
       const isDesktop = window.innerWidth >= 1024;
-      if (isDesktop || isOpen) {
+      if (isDesktop) {
         loadMessages();
         markAsRead();
+      } else {
+        // On mobile, load just a few messages for the preview bar
+        // Full load happens when sheet opens
+        if (!isOpen && messages.length === 0) {
+          loadMessages(); // Load initial messages for preview
+        } else if (isOpen) {
+          loadMessages();
+          markAsRead();
+        }
       }
     }
   }, [leagueId, isOpen]);
@@ -90,6 +111,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           markAsRead();
         } else {
           setUnreadCount(prev => prev + 1);
+          // Trigger preview bar animation
+          setHasNewMessage(true);
+          setTimeout(() => setHasNewMessage(false), 3000);
         }
       }
     });
@@ -233,6 +257,96 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
       status: member?.status || 'active',
       picks: picksArray
     });
+  };
+
+  // Touch handlers for drag-to-resize/close
+  const handleTouchStart = (e) => {
+    // Only handle touches on the header/handle area
+    const touch = e.touches[0];
+    dragStartY.current = touch.clientY;
+    dragCurrentY.current = touch.clientY;
+    setIsDragging(true);
+    setDragOffset(0);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+    
+    const touch = e.touches[0];
+    dragCurrentY.current = touch.clientY;
+    const delta = dragCurrentY.current - dragStartY.current;
+    
+    if (sheetSize === 'full') {
+      // From full: only allow dragging down, with slight resistance
+      if (delta > 0) {
+        setDragOffset(delta);
+      }
+    } else if (sheetSize === 'half') {
+      // From half: allow dragging up (to full) or down (to close)
+      // Limit upward drag
+      const clampedDelta = Math.max(delta, -150);
+      setDragOffset(clampedDelta);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    
+    const delta = dragCurrentY.current - dragStartY.current;
+    
+    // Determine snap point based on drag distance and current state
+    if (sheetSize === 'full') {
+      if (delta > 250) {
+        // Dragged down a lot - close completely
+        closeSheet();
+      } else if (delta > 120) {
+        // Dragged down moderately - go to half
+        setSheetSize('half');
+      }
+      // Otherwise snap back to full
+    } else if (sheetSize === 'half') {
+      if (delta > 80) {
+        // Dragged down from half - close
+        closeSheet();
+      } else if (delta < -60) {
+        // Dragged up from half - go to full
+        setSheetSize('full');
+      }
+      // Otherwise stay at half
+    }
+    
+    setDragOffset(0);
+  };
+
+  const closeSheet = () => {
+    setIsClosing(true);
+    setIsAnimatingIn(false);
+    setTimeout(() => {
+      setIsOpen(false);
+      setIsClosing(false);
+      setSheetSize('full'); // Reset for next open
+    }, 300);
+  };
+
+  const openSheet = () => {
+    setIsOpen(true);
+    setIsClosing(false);
+    setSheetSize('full');
+    // Trigger animation after a frame to ensure initial state is rendered
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsAnimatingIn(true);
+      });
+    });
+    markAsRead();
+  };
+
+  // Get sheet height based on size
+  const getSheetHeight = () => {
+    if (sheetSize === 'full') return 'calc(100% - 40px)';
+    if (sheetSize === 'half') return '50%';
+    return '0';
   };
 
   const formatTime = (dateStr) => {
@@ -545,82 +659,221 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
         </div>
       </div>
 
-      {/* Mobile: Floating button + overlay */}
+      {/* Mobile: Bottom Chat Bar + Sheet */}
       <div className="lg:hidden">
-        {/* FAB Button */}
-        {!isOpen && (
-          <button
-            onClick={() => {
-              setIsOpen(true);
-              markAsRead();
-            }}
-            className="fixed bottom-20 right-4 z-50 w-14 h-14 rounded-full bg-nfl-blue text-white shadow-lg flex items-center justify-center transition-all hover:scale-105"
-          >
-            <MessageCircle className="w-6 h-6" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </button>
-        )}
-
-        {/* Full-screen overlay */}
-        {isOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
-            {/* Profile Panel (overlay) */}
-            {selectedProfile && (
-              <ProfilePanel profile={selectedProfile} onClose={() => setSelectedProfile(null)} />
-            )}
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-white/10">
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-white">League Chat</h3>
-                <p className="text-xs text-white/50 flex items-center gap-1">
-                  <Users className="w-3 h-3" />
-                  {currentOnline.length} online
-                  {connected ? '' : ' • Reconnecting...'}
-                </p>
-              </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-white/60" />
-              </button>
-            </div>
-
-            {/* Messages */}
-            <div 
-              onScroll={handleScroll}
-              className="flex-1 overflow-y-auto p-4"
+        {/* Bottom Chat Preview Bar */}
+        <div 
+          className={`fixed inset-x-0 bottom-0 z-40 transition-all duration-300 ${
+            isOpen ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'
+          }`}
+        >
+          {/* New message highlight effect */}
+          {hasNewMessage && (
+            <div className="absolute inset-0 bg-nfl-blue/20 animate-pulse rounded-t-2xl pointer-events-none" />
+          )}
+          
+          {/* Safe area background */}
+          <div className={`bg-slate-900/95 backdrop-blur-xl border-t transition-colors duration-300 ${
+            hasNewMessage ? 'border-nfl-blue/50' : 'border-white/10'
+          }`}>
+            <button
+              onClick={openSheet}
+              className="w-full px-4 py-3 flex items-center gap-3 active:bg-white/5 transition-colors"
             >
-              {renderMessages()}
-            </div>
-
-            {/* Input */}
-            <div className="p-3 border-t border-white/10 bg-slate-800/50">
-              <div className="flex gap-2">
-                <input
-                  ref={mobileInputRef}
-                  type="text"
-                  value={inputValue}
-                  onChange={handleInputChange}
-                  onKeyDown={(e) => handleKeyDown(e, true)}
-                  placeholder="Type a message..."
-                  className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
-                />
-                <button
-                  onClick={() => handleSend(true)}
-                  disabled={!inputValue.trim()}
-                  className="p-2 bg-nfl-blue rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-nfl-blue/80 transition-colors"
-                >
-                  <Send className="w-5 h-5" />
-                </button>
+              {/* Left: Avatar or Icon */}
+              <div className="relative flex-shrink-0">
+                {messages.length > 0 && (messages[messages.length - 1]?.user_id || messages[messages.length - 1]?.userId) ? (
+                  <Avatar 
+                    userId={messages[messages.length - 1].user_id || messages[messages.length - 1].userId} 
+                    name={messages[messages.length - 1].display_name || messages[messages.length - 1].displayName || 'User'} 
+                    size="sm" 
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-nfl-blue/20 flex items-center justify-center">
+                    <MessageCircle className="w-5 h-5 text-nfl-blue" />
+                  </div>
+                )}
+                {/* Unread badge */}
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </div>
-            </div>
+
+              {/* Middle: Message Preview */}
+              <div className="flex-1 min-w-0 text-left">
+                {currentTyping.length > 0 ? (
+                  <>
+                    <p className="text-white font-medium text-sm">League Chat</p>
+                    <p className="text-nfl-blue text-sm flex items-center gap-1.5">
+                      <span className="flex gap-0.5">
+                        <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </span>
+                      <span className="truncate">
+                        {currentTyping.length === 1 
+                          ? `${currentTyping[0]} is typing` 
+                          : `${currentTyping.length} people typing`
+                        }
+                      </span>
+                    </p>
+                  </>
+                ) : messages.length > 0 ? (
+                  <>
+                    <p className="text-white font-medium text-sm truncate">
+                      {messages[messages.length - 1]?.display_name || messages[messages.length - 1]?.displayName || 'User'}
+                      {(messages[messages.length - 1]?.user_id || messages[messages.length - 1]?.userId) === commissionerId && (
+                        <span className="ml-1.5 text-yellow-400 text-xs">👑</span>
+                      )}
+                    </p>
+                    <p className="text-white/50 text-sm truncate">
+                      {messages[messages.length - 1]?.message || 'No messages yet'}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-white font-medium text-sm">League Chat</p>
+                    <p className="text-white/40 text-sm">Tap to start chatting</p>
+                  </>
+                )}
+              </div>
+
+              {/* Right: Time + Arrow */}
+              <div className="flex-shrink-0 flex items-center gap-2">
+                {messages.length > 0 && (
+                  <span className="text-white/30 text-xs">
+                    {formatTime(messages[messages.length - 1]?.created_at || messages[messages.length - 1]?.createdAt)}
+                  </span>
+                )}
+                <ChevronUp className="w-5 h-5 text-white/40" />
+              </div>
+            </button>
+            
+            {/* Online indicator bar */}
+            {currentOnline.length > 0 && (
+              <div className="px-4 pb-2 flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                <span className="text-white/40 text-xs">
+                  {currentOnline.length} online
+                </span>
+              </div>
+            )}
+            
+            {/* iOS safe area spacer */}
+            <div className="pb-safe" />
           </div>
+        </div>
+
+        {/* Bottom sheet overlay with animation */}
+        {(isOpen || isClosing) && (
+          <>
+            {/* Backdrop */}
+            <div 
+              className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
+                isAnimatingIn && !isClosing ? 'opacity-100' : 'opacity-0'
+              }`}
+              onClick={closeSheet}
+            />
+            
+            {/* Chat Panel - Bottom Sheet */}
+            <div 
+              ref={sheetRef}
+              className={`fixed inset-x-0 bottom-0 z-50 bg-slate-900 flex flex-col rounded-t-3xl shadow-2xl ${
+                isDragging ? '' : 'transition-all duration-300 ease-out'
+              }`}
+              style={{ 
+                height: getSheetHeight(),
+                maxHeight: 'calc(100dvh - 40px)',
+                transform: isAnimatingIn && !isClosing 
+                  ? `translateY(${dragOffset}px)` 
+                  : 'translateY(100%)',
+                opacity: isAnimatingIn && !isClosing ? 1 : 0
+              }}
+            >
+              {/* Profile Panel (overlay) */}
+              {selectedProfile && (
+                <ProfilePanel profile={selectedProfile} onClose={() => setSelectedProfile(null)} />
+              )}
+
+              {/* Drag Handle Area */}
+              <div 
+                className="touch-none cursor-grab active:cursor-grabbing"
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
+                {/* Handle bar */}
+                <div className="flex justify-center pt-3 pb-2">
+                  <div className="w-12 h-1.5 bg-white/30 rounded-full" />
+                </div>
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-white">League Chat</h3>
+                    <p className="text-xs text-white/50 flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      {currentOnline.length} online
+                      {connected ? '' : ' • Reconnecting...'}
+                      {sheetSize === 'half' && (
+                        <span className="ml-2 text-white/30">• Swipe up to expand</span>
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    onClick={closeSheet}
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5 text-white/60" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Messages */}
+              <div 
+                onScroll={handleScroll}
+                className="flex-1 overflow-y-auto p-4"
+              >
+                {renderMessages()}
+              </div>
+
+              {/* Input - only show in full mode */}
+              {sheetSize === 'full' && (
+                <div className="p-3 border-t border-white/10 bg-slate-800/50 pb-safe">
+                  <div className="flex gap-2">
+                    <input
+                      ref={mobileInputRef}
+                      type="text"
+                      value={inputValue}
+                      onChange={handleInputChange}
+                      onKeyDown={(e) => handleKeyDown(e, true)}
+                      placeholder="Type a message..."
+                      className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
+                    />
+                    <button
+                      onClick={() => handleSend(true)}
+                      disabled={!inputValue.trim()}
+                      className="p-2.5 bg-nfl-blue rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-nfl-blue/80 transition-colors"
+                    >
+                      <Send className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Half mode: tap to expand hint */}
+              {sheetSize === 'half' && (
+                <div 
+                  className="p-4 border-t border-white/10 bg-slate-800/30 text-center"
+                  onClick={() => setSheetSize('full')}
+                >
+                  <p className="text-white/40 text-sm">Tap to expand and type a message</p>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </>

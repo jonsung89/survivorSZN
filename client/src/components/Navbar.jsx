@@ -88,7 +88,7 @@ export default function Navbar() {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-nfl-red to-red-700 flex items-center justify-center shadow-lg">
                 <span className="text-white font-display font-bold text-lg">🏈</span>
               </div>
-              <div className="hidden sm:block">
+              <div className="block">
                 <h1 className="font-display font-bold text-xl text-white tracking-wide">
                   SurvivorSZN
                 </h1>

@@ -15,11 +15,27 @@
   box-sizing: border-box;
 }
 
+/* Ensure dark background extends everywhere (including iOS keyboard accessory area) */
+html {
+  background-color: #0a1628;
+}
+
 body {
   font-family: 'Source Sans 3', system-ui, -apple-system, sans-serif;
   background: linear-gradient(135deg, #0a1628 0%, #1a2744 50%, #0f1c30 100%);
   min-height: 100vh;
   color: #f0f4f8;
+}
+
+/* iOS safe area support */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .pb-safe {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
 }
 
 /* Custom scrollbar */
@@ -254,6 +270,20 @@ body {
   50% {
     opacity: 0.5;
   }
+}
+
+/* Chat new message glow */
+@keyframes newMessageGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(1, 51, 105, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px 2px rgba(1, 51, 105, 0.4);
+  }
+}
+
+.new-message-glow {
+  animation: newMessageGlow 1s ease-in-out 3;
 }
 
 /* Strike indicators */

@@ -277,12 +277,12 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
     const user = await getUser(req);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Get current NFL week
+    // Get current NFL week using helper that handles playoffs
     let currentWeek = 1;
     try {
-      const espnRes = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
-      const espnData = await espnRes.json();
-      currentWeek = espnData.week?.number || 1;
+      const { week, seasonType } = await getCurrentSeason();
+      // Convert ESPN week to internal week (playoffs: week 1-4 with seasonType=3 → internal 19-22)
+      currentWeek = seasonType === 3 ? week + 18 : week;
     } catch (e) {
       console.error('Failed to get current week:', e);
     }

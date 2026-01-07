@@ -134,7 +134,9 @@ router.get('/pending-picks', authMiddleware, async (req, res) => {
     const user = await db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { season, week } = await getCurrentSeason();
+    const { season, week, seasonType } = await getCurrentSeason();
+    // Convert ESPN week to internal week (playoffs: week 1-4 with seasonType=3 → internal 19-22)
+    const internalWeek = seasonType === 3 ? week + 18 : week;
 
     // Get all active league memberships
     const memberships = await db.getAll(`
@@ -148,26 +150,26 @@ router.get('/pending-picks', authMiddleware, async (req, res) => {
 
     for (const membership of memberships) {
       // Skip if week is before league start
-      if (week < membership.start_week) continue;
+      if (internalWeek < membership.start_week) continue;
 
       // Check if pick exists for current week
       const pick = await db.getOne(`
         SELECT * FROM picks 
         WHERE league_id = $1 AND user_id = $2 AND week = $3
-      `, [membership.league_id, user.id, week]);
+      `, [membership.league_id, user.id, internalWeek]);
 
       if (!pick) {
         pendingPicks.push({
           leagueId: membership.league_id,
           leagueName: membership.league_name,
-          week,
+          week: internalWeek,
           startWeek: membership.start_week
         });
       }
     }
 
     res.json({
-      currentWeek: week,
+      currentWeek: internalWeek,
       pendingPicks
     });
   } catch (error) {

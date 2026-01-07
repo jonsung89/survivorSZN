@@ -17,6 +17,14 @@ const getEspnWeekParams = (week) => {
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// Function to clear cache (for debugging)
+const clearCache = () => {
+  console.log(`[Cache] Clearing ${cache.size} cached entries`);
+  cache.clear();
+  leagueRankingsCache = null;
+  leagueRankingsCacheTime = 0;
+};
+
 // League-wide rankings cache (longer TTL since rankings don't change often)
 let leagueRankingsCache = null;
 let leagueRankingsCacheTime = 0;
@@ -54,7 +62,7 @@ const getLeagueRankings = async () => {
     return leagueRankingsCache;
   }
   
-  console.log('Calculating league-wide rankings...');
+  // console.log('Calculating league-wide rankings...');
   
   try {
     // Get current season first
@@ -163,7 +171,7 @@ const getLeagueRankings = async () => {
       pointsAgainst: calculateRanks(validStats, 'pointsAgainst', false) // Lower is better
     };
     
-    console.log('League rankings calculated for', validStats.length, 'teams');
+    // console.log('League rankings calculated for', validStats.length, 'teams');
     
     // Cache the results
     leagueRankingsCache = rankings;
@@ -185,7 +193,7 @@ const getCurrentSeasonYear = async () => {
   try {
     const data = await fetchWithCache(`${API_BASE}/scoreboard`, 60 * 60 * 1000);
     cachedCurrentSeasonYear = data.season?.year || new Date().getFullYear();
-    console.log('Current NFL season:', cachedCurrentSeasonYear);
+    // console.log('Current NFL season:', cachedCurrentSeasonYear);
     return cachedCurrentSeasonYear;
   } catch (error) {
     const now = new Date();
@@ -212,7 +220,7 @@ const getCurrentSeason = async () => {
     if (displayName === 'Offseason' || (seasonType === 2 && week >= 18)) {
       // Check if we're in January/February (playoff months)
       if (month === 0 || month === 1) {
-        console.log('Checking for playoff games...');
+        // console.log('Checking for playoff games...');
         
         // Try to fetch playoff schedule (seasonType=3)
         // Wild Card = week 1, Divisional = week 2, Conference = week 3, Super Bowl = week 5
@@ -250,7 +258,7 @@ const getCurrentSeason = async () => {
               }
             }
           } catch (playoffError) {
-            console.log(`No playoff week ${playoffWeek} games found`);
+            // console.log(`No playoff week ${playoffWeek} games found`);
           }
         }
       }
@@ -268,20 +276,44 @@ const getCurrentSeason = async () => {
 // Get team's season results (all completed games)
 const getTeamSeasonResults = async (teamId, season) => {
   try {
-    const url = `${API_BASE}/teams/${teamId}/schedule?season=${season}`;
-    console.log(`Fetching schedule for team ${teamId}...`);
-    const data = await fetchWithCache(url, 15 * 60 * 1000);
+    // During playoffs, ESPN only returns playoff games by default
+    // We need to explicitly fetch regular season games with seasontype=2
+    // Regular season games are what we need for PPG/streak calculations
+    
+    const url = `${API_BASE}/teams/${teamId}/schedule?season=${season}&seasontype=2`;
+    console.log(`[getTeamSeasonResults] Fetching: ${url}`);
+    
+    let data = await fetchWithCache(url, 5 * 60 * 1000);
 
-    if (!data.events) {
-      console.log(`No events found for team ${teamId}`);
+    if (!data) {
+      console.log(`[getTeamSeasonResults] No data returned for team ${teamId}`);
       return [];
     }
+    
+    if (!data.events) {
+      console.log(`[getTeamSeasonResults] No events in response for team ${teamId}. Keys:`, Object.keys(data));
+      return [];
+    }
+    
+    console.log(`[getTeamSeasonResults] Team ${teamId}: Found ${data.events.length} total events`);
 
     // Get ALL completed games for season stats
     const completedGames = data.events
       .filter(e => e.competitions?.[0]?.status?.type?.completed);
 
-    console.log(`Found ${completedGames.length} completed games for team ${teamId}`);
+    console.log(`[getTeamSeasonResults] Team ${teamId}: ${completedGames.length} completed games out of ${data.events.length}`);
+    
+    // Log first event to debug if no completed games
+    if (data.events.length > 0 && completedGames.length === 0) {
+      const firstEvent = data.events[0];
+      console.log(`[getTeamSeasonResults] Team ${teamId} - first event debug:`, {
+        week: firstEvent.week?.number,
+        completed: firstEvent.competitions?.[0]?.status?.type?.completed,
+        statusName: firstEvent.competitions?.[0]?.status?.type?.name,
+        state: firstEvent.competitions?.[0]?.status?.type?.state,
+        date: firstEvent.date
+      });
+    }
 
     return completedGames.map(event => {
       const competition = event.competitions[0];
@@ -335,17 +367,17 @@ const getTeamSeasonResults = async (teamId, season) => {
 const getWeekSchedule = async (season, week, seasonType = 2) => {
   try {
     const url = `${API_BASE}/scoreboard?seasontype=${seasonType}&week=${week}&dates=${season}`;
-    console.log(`=== ESPN API Call ===`);
-    console.log(`URL: ${url}`);
-    console.log(`Season: ${season}, Week: ${week}, SeasonType: ${seasonType}`);
+    console.log(`[getWeekSchedule] =================================`);
+    console.log(`[getWeekSchedule] URL: ${url}`);
+    console.log(`[getWeekSchedule] Season: ${season}, Week: ${week}, SeasonType: ${seasonType}`);
     const data = await fetchWithCache(url);
 
     if (!data.events) {
-      console.log('No events in scoreboard response');
+      console.log('[getWeekSchedule] No events in scoreboard response');
       return [];
     }
 
-    console.log(`Found ${data.events.length} games for ${seasonType === 3 ? 'playoff' : 'regular season'} week ${week}`);
+    console.log(`[getWeekSchedule] Found ${data.events.length} games for ${seasonType === 3 ? 'playoff' : 'regular season'} week ${week}`);
 
     // Collect team IDs
     const teamIds = new Set();
@@ -356,19 +388,30 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
     });
 
     // Fetch season results for all teams in parallel
-    console.log(`Fetching season results for ${teamIds.size} teams...`);
+    console.log(`[getWeekSchedule] Fetching season results for ${teamIds.size} teams with season=${season}...`);
     const seasonResultsPromises = Array.from(teamIds).map(async (id) => {
       try {
         const results = await getTeamSeasonResults(id, season);
         return [id, results];
       } catch (e) {
-        console.error(`Failed to get results for team ${id}:`, e.message);
+        console.error(`[getWeekSchedule] Failed to get results for team ${id}:`, e.message);
         return [id, []];
       }
     });
     
     const seasonResultsArray = await Promise.all(seasonResultsPromises);
     const seasonResultsMap = new Map(seasonResultsArray);
+    
+    // Debug: Log summary of what we fetched
+    console.log('[getWeekSchedule] === Season Results Summary ===');
+    let totalCompleted = 0;
+    for (const [id, results] of seasonResultsMap.entries()) {
+      // Verbose per-team logging commented out
+      // console.log(`[getWeekSchedule] Team ${id}: ${results.length} completed games`);
+      totalCompleted += results.length;
+    }
+    console.log(`[getWeekSchedule] Total: ${totalCompleted} completed games across ${teamIds.size} teams`);
+    console.log('[getWeekSchedule] ===============================');
 
     return data.events.map(event => {
       const competition = event.competitions?.[0];
@@ -449,7 +492,7 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
           gamesPlayed: validGames
         };
         
-        console.log(`Team ${teamId} season stats (${validGames} games):`, stats);
+        // console.log(`Team ${teamId} season stats (${validGames} games):`, stats);
         return stats;
       };
 
@@ -472,6 +515,9 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
         const seasonStats = getSeasonStats(teamId);
         const allResults = seasonResultsMap.get(teamId) || [];
         
+        // Debug: Log what we're building
+        console.log(`Building team data for ${competitor.team.abbreviation} (${teamId}): PPG=${seasonStats?.avgPointsFor}, OppPPG=${seasonStats?.avgPointsAgainst}, Streak=${JSON.stringify(streak)}, Last5=${allResults.length} games`);
+        
         return {
           id: teamId,
           name: competitor.team.displayName || competitor.team.name,
@@ -492,12 +538,12 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
 
       // Parse betting odds
       const parseOdds = () => {
-        // Log raw odds data for debugging
-        console.log(`Game ${event.id} odds data:`, JSON.stringify(competition?.odds, null, 2));
+        // Verbose logging commented out - uncomment for odds debugging
+        // console.log(`Game ${event.id} odds data:`, JSON.stringify(competition?.odds, null, 2));
         
         const odds = competition?.odds?.[0];
         if (!odds) {
-          console.log(`No odds found for game ${event.id}`);
+          // console.log(`No odds found for game ${event.id}`);
           return null;
         }
         
@@ -517,7 +563,7 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
           provider: odds.provider?.name || 'ESPN BET'
         };
         
-        console.log(`Parsed odds for game ${event.id}:`, parsed);
+        // console.log(`Parsed odds for game ${event.id}:`, parsed);
         return parsed;
       };
 
@@ -615,33 +661,33 @@ const getGameWinner = (game) => {
 const getGameDetails = async (gameId) => {
   try {
     const url = `${API_BASE}/summary?event=${gameId}`;
-    console.log(`Fetching game details for ${gameId}...`);
+    // console.log(`Fetching game details for ${gameId}...`);
     const data = await fetchWithCache(url, 2 * 60 * 1000); // 2 min cache for game details
 
     if (!data) {
-      console.log('No data returned for game details');
+      // console.log('No data returned for game details');
       return null;
     }
 
-    console.log('API response keys:', Object.keys(data));
+    // console.log('API response keys:', Object.keys(data));
     
     const boxscore = data.boxscore;
     const predictor = data.predictor;
     const pickcenter = data.pickcenter;
 
-    // Log available data
-    if (boxscore) {
-      console.log('Boxscore keys:', Object.keys(boxscore));
-      if (boxscore.players) {
-        console.log('Boxscore players count:', boxscore.players.length);
-        if (boxscore.players[0]) {
-          console.log('First player team keys:', Object.keys(boxscore.players[0]));
-          if (boxscore.players[0].statistics) {
-            console.log('First team statistics:', boxscore.players[0].statistics.map(s => s.name));
-          }
-        }
-      }
-    }
+    // Verbose logging commented out
+    // if (boxscore) {
+    //   console.log('Boxscore keys:', Object.keys(boxscore));
+    //   if (boxscore.players) {
+    //     console.log('Boxscore players count:', boxscore.players.length);
+    //     if (boxscore.players[0]) {
+    //       console.log('First player team keys:', Object.keys(boxscore.players[0]));
+    //       if (boxscore.players[0].statistics) {
+    //         console.log('First team statistics:', boxscore.players[0].statistics.map(s => s.name));
+    //       }
+    //     }
+    //   }
+    // }
 
     // Parse team stats from boxscore
     const parseTeamStats = (teamStats) => {
@@ -711,7 +757,7 @@ const getGameDetails = async (gameId) => {
       boxscore.players.forEach(teamPlayers => {
         const teamAbbr = teamPlayers.team?.abbreviation;
         const teamLogo = teamPlayers.team?.logo;
-        console.log(`Processing team: ${teamAbbr}`);
+        // console.log(`Processing team: ${teamAbbr}`);
         
         // Each team has statistics array with different stat groups
         teamPlayers.statistics?.forEach(statGroup => {
@@ -764,7 +810,7 @@ const getGameDetails = async (gameId) => {
         });
       });
       
-      console.log('All leaders:', allLeaders.length);
+      // console.log('All leaders:', allLeaders.length);
       return allLeaders;
     };
 
@@ -780,7 +826,7 @@ const getGameDetails = async (gameId) => {
       scoringPlays: parseScoringPlays(data.drives?.previous)
     };
 
-    console.log(`Game ${gameId} details loaded, leaders count: ${result.leaders.length}`);
+    // console.log(`Game ${gameId} details loaded, leaders count: ${result.leaders.length}`);
     return result;
   } catch (error) {
     console.error('Get game details error:', error);
@@ -793,7 +839,7 @@ const getTeamInjuries = async (teamId) => {
   try {
     // Use the core API for injuries - different from main API_BASE
     const url = `https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/teams/${teamId}/injuries`;
-    console.log(`Fetching injuries for team ${teamId}...`);
+    // console.log(`Fetching injuries for team ${teamId}...`);
     const data = await fetchWithCache(url, 30 * 60 * 1000); // 30 min cache for injuries
 
     // The core API returns items array with $ref links
@@ -815,13 +861,13 @@ const getTeamInjuries = async (teamId) => {
                 const athleteData = await fetchWithCache(athleteUrl, 60 * 60 * 1000);
                 injuryData.athlete = athleteData;
               } catch (e) {
-                console.log('Could not fetch athlete ref:', e.message);
+                // console.log('Could not fetch athlete ref:', e.message);
               }
             }
             
             return injuryData;
           } catch (e) {
-            console.log('Could not fetch injury ref:', e.message);
+            // console.log('Could not fetch injury ref:', e.message);
             return null;
           }
         }
@@ -833,27 +879,27 @@ const getTeamInjuries = async (teamId) => {
     }
     
     if (injuries.length === 0) {
-      console.log(`No injury data for team ${teamId}`);
+      // console.log(`No injury data for team ${teamId}`);
       return [];
     }
 
-    console.log(`Found ${injuries.length} raw injuries for team ${teamId}`);
+    // console.log(`Found ${injuries.length} raw injuries for team ${teamId}`);
     
-    // Log all unique statuses for debugging
-    const uniqueStatuses = [...new Set(injuries.map(i => i.status?.type || i.status || 'unknown'))];
-    console.log(`Unique statuses for team ${teamId}:`, uniqueStatuses);
+    // Log all unique statuses for debugging - commented out
+    // const uniqueStatuses = [...new Set(injuries.map(i => i.status?.type || i.status || 'unknown'))];
+    // console.log(`Unique statuses for team ${teamId}:`, uniqueStatuses);
     
-    // Log first injury structure for debugging
-    if (injuries[0]) {
-      console.log(`Sample injury structure:`, JSON.stringify({
-        status: injuries[0].status,
-        athlete: injuries[0].athlete ? {
-          displayName: injuries[0].athlete.displayName,
-          fullName: injuries[0].athlete.fullName,
-          position: injuries[0].athlete.position
-        } : 'no athlete'
-      }));
-    }
+    // Log first injury structure for debugging - commented out
+    // if (injuries[0]) {
+    //   console.log(`Sample injury structure:`, JSON.stringify({
+    //     status: injuries[0].status,
+    //     athlete: injuries[0].athlete ? {
+    //       displayName: injuries[0].athlete.displayName,
+    //       fullName: injuries[0].athlete.fullName,
+    //       position: injuries[0].athlete.position
+    //     } : 'no athlete'
+    //   }));
+    // }
     
     const mapped = injuries.map(injury => {
       // Handle both direct data and nested athlete refs
@@ -874,10 +920,10 @@ const getTeamInjuries = async (teamId) => {
       return result;
     }).filter(i => i.player.name && i.status);
     
-    console.log(`Returning ${mapped.length} processed injuries for team ${teamId}`);
-    if (mapped[0]) {
-      console.log('Sample processed injury:', JSON.stringify(mapped[0]));
-    }
+    // console.log(`Returning ${mapped.length} processed injuries for team ${teamId}`);
+    // if (mapped[0]) {
+    //   console.log('Sample processed injury:', JSON.stringify(mapped[0]));
+    // }
     
     return mapped;
   } catch (error) {
@@ -906,21 +952,21 @@ const getInjuriesForTeams = async (teamIds) => {
 
 const getTeamInfo = async (teamId) => {
   try {
-    console.log('Fetching comprehensive team info for:', teamId);
+    // console.log('Fetching comprehensive team info for:', teamId);
     
     // Get current season first
     const season = await getCurrentSeasonYear();
-    console.log('Using season:', season);
+    // console.log('Using season:', season);
     
     // Fetch all data in parallel (including league rankings, season results, and injuries)
     const [teamData, scheduleData, statsData, rosterData, leagueRankings, seasonResults, injuriesData] = await Promise.all([
-      fetchWithCache(`${API_BASE}/teams/${teamId}`, 30 * 60 * 1000).catch(e => { console.log('Team fetch error:', e.message); return null; }),
-      fetchWithCache(`${API_BASE}/teams/${teamId}/schedule?season=${season}`, 15 * 60 * 1000).catch(e => { console.log('Schedule fetch error:', e.message); return null; }),
-      fetchWithCache(`${API_BASE}/teams/${teamId}/statistics?season=${season}`, 30 * 60 * 1000).catch(e => { console.log('Stats fetch error:', e.message); return null; }),
-      fetchWithCache(`${API_BASE}/teams/${teamId}/roster`, 60 * 60 * 1000).catch(e => { console.log('Roster fetch error:', e.message); return null; }),
-      getLeagueRankings().catch(e => { console.log('League rankings error:', e.message); return null; }),
-      getTeamSeasonResults(teamId, season).catch(e => { console.log('Season results error:', e.message); return []; }),
-      getTeamInjuries(teamId).catch(e => { console.log('Injuries fetch error:', e.message); return []; })
+      fetchWithCache(`${API_BASE}/teams/${teamId}`, 30 * 60 * 1000).catch(e => { /* console.log('Team fetch error:', e.message); */ return null; }),
+      fetchWithCache(`${API_BASE}/teams/${teamId}/schedule?season=${season}&seasontype=2`, 15 * 60 * 1000).catch(e => { /* console.log('Schedule fetch error:', e.message); */ return null; }),
+      fetchWithCache(`${API_BASE}/teams/${teamId}/statistics?season=${season}`, 30 * 60 * 1000).catch(e => { /* console.log('Stats fetch error:', e.message); */ return null; }),
+      fetchWithCache(`${API_BASE}/teams/${teamId}/roster`, 60 * 60 * 1000).catch(e => { /* console.log('Roster fetch error:', e.message); */ return null; }),
+      getLeagueRankings().catch(e => { /* console.log('League rankings error:', e.message); */ return null; }),
+      getTeamSeasonResults(teamId, season).catch(e => { /* console.log('Season results error:', e.message); */ return []; }),
+      getTeamInjuries(teamId).catch(e => { /* console.log('Injuries fetch error:', e.message); */ return []; })
     ]);
     
     // Build injury map by player name (lowercase for matching)
@@ -935,13 +981,13 @@ const getTeamInfo = async (teamId) => {
           });
         }
       });
-      console.log('Injury map size:', injuryMap.size);
+      // console.log('Injury map size:', injuryMap.size);
     }
 
-    // Debug logging
-    console.log('=== Team Info Debug ===');
-    console.log('League rankings available:', !!leagueRankings);
-    console.log('Season results count:', seasonResults?.length || 0);
+    // Debug logging - commented out for cleaner logs
+    // console.log('=== Team Info Debug ===');
+    // console.log('League rankings available:', !!leagueRankings);
+    // console.log('Season results count:', seasonResults?.length || 0);
 
     // Parse team details
     const team = teamData?.team || {};
@@ -1208,7 +1254,7 @@ const getTeamInfo = async (teamId) => {
     // Parse top players - fetch multiple per position, pick best
     const parseTopPlayers = async () => {
       if (!rosterData?.athletes) {
-        console.log('No roster data available');
+        // console.log('No roster data available');
         return [];
       }
       
@@ -1240,7 +1286,7 @@ const getTeamInfo = async (teamId) => {
       
       // Flatten all candidates
       const allCandidates = Object.values(candidatesByPosition).flat();
-      console.log('Fetching stats for', allCandidates.length, 'candidates');
+      // console.log('Fetching stats for', allCandidates.length, 'candidates');
       
       // Fetch stats for all candidates in parallel
       const candidatesWithStats = await Promise.all(
@@ -1304,7 +1350,7 @@ const getTeamInfo = async (teamId) => {
       const qbCandidates = candidatesWithStats.filter(p => p.position === 'QB');
       qbCandidates.sort((a, b) => b.primaryStat - a.primaryStat);
       const qbsWhoStarted = qbCandidates.filter(p => p.gamesStarted >= 1);
-      console.log('QBs with games played:', qbsWhoStarted.map(q => `${q.name} (${q.gamesStarted} GP)`));
+      // console.log('QBs with games played:', qbsWhoStarted.map(q => `${q.name} (${q.gamesStarted} GP)`));
       
       if (qbsWhoStarted.length >= 2) {
         // Multiple QBs started - show top 2
@@ -1329,7 +1375,7 @@ const getTeamInfo = async (teamId) => {
       // Get best RBs (2)
       const rbCandidates = candidatesWithStats.filter(p => p.position === 'RB');
       rbCandidates.sort((a, b) => b.primaryStat - a.primaryStat);
-      console.log('RB candidates by rushing yards:', rbCandidates.slice(0, 5).map(r => `${r.name}: ${r.primaryStat} yds`));
+      // console.log('RB candidates by rushing yards:', rbCandidates.slice(0, 5).map(r => `${r.name}: ${r.primaryStat} yds`));
       rbCandidates.slice(0, 2).forEach(p => {
         if (p.primaryStat > 0) result.rb.push(buildPlayer(p));
       });
@@ -1362,13 +1408,13 @@ const getTeamInfo = async (teamId) => {
         if (p.primaryStat > 0) result.def.push(buildPlayer(p, true));
       });
       
-      console.log('Top players by position:', {
-        qb: result.qb.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`),
-        rb: result.rb.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`),
-        wr: result.wr.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`),
-        te: result.te.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`),
-        def: result.def.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`)
-      });
+      // console.log('Top players by position:', {
+      //   qb: result.qb.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`),
+      //   rb: result.rb.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`),
+      //   wr: result.wr.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`),
+      //   te: result.te.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`),
+      //   def: result.def.map(p => `${p.name}${p.injury ? ` (${p.injury.status})` : ''}`)
+      // });
       
       return result;
     };
@@ -1466,7 +1512,7 @@ const getTeamInfo = async (teamId) => {
         premium: article.premium || false
       })).filter(a => a.headline);
     } catch (e) {
-      console.log('News fetch failed:', e.message);
+      // console.log('News fetch failed:', e.message);
     }
 
     // Get top players with their stats (async)
@@ -1480,7 +1526,7 @@ const getTeamInfo = async (teamId) => {
       schedule
     };
     
-    console.log('=== End Team Info Debug ===');
+    // console.log('=== End Team Info Debug ===');
     return result;
   } catch (error) {
     console.error(`Get team info error for ${teamId}:`, error);
@@ -1608,5 +1654,6 @@ module.exports = {
   getTeamInjuries,
   getInjuriesForTeams,
   getTeamInfo,
-  getTeamGameStatus
+  getTeamGameStatus,
+  clearCache
 };

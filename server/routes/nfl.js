@@ -9,7 +9,8 @@ const {
   getTeamInjuries,
   getInjuriesForTeams,
   getTeamInfo,
-  getTeamGameStatus
+  getTeamGameStatus,
+  clearCache
 } = require('../services/nfl');
 
 // Get current season info
@@ -20,6 +21,17 @@ router.get('/season', async (req, res) => {
   } catch (error) {
     console.error('Get season error:', error);
     res.status(500).json({ error: 'Failed to get season info' });
+  }
+});
+
+// Clear cache (for debugging)
+router.post('/clear-cache', async (req, res) => {
+  try {
+    clearCache();
+    res.json({ success: true, message: 'Cache cleared' });
+  } catch (error) {
+    console.error('Clear cache error:', error);
+    res.status(500).json({ error: 'Failed to clear cache' });
   }
 });
 

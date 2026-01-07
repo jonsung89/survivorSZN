@@ -30,8 +30,14 @@ export default function CreateLeague() {
     const fetchCurrentWeek = async () => {
       try {
         const data = await nflAPI.getSeason();
-        setCurrentWeek(data.week);
-        setFormData(prev => ({ ...prev, startWeek: data.week }));
+        // Convert playoff weeks: ESPN returns week 1-4 with seasonType=3
+        // Frontend uses week 19-22 for playoffs
+        let week = data.week;
+        if (data.seasonType === 3) {
+          week = data.week + 18; // WC=19, DIV=20, CONF=21, SB=22
+        }
+        setCurrentWeek(week);
+        setFormData(prev => ({ ...prev, startWeek: week }));
       } catch (err) {
         console.error('Failed to fetch current week:', err);
       }
@@ -192,13 +198,29 @@ export default function CreateLeague() {
               onChange={handleChange}
               className="input-field"
             >
-              {Array.from({ length: 18 }, (_, i) => i + 1)
+              {Array.from({ length: 22 }, (_, i) => i + 1)
                 .filter(week => week >= currentWeek)
-                .map(week => (
-                  <option key={week} value={week}>
-                    {week === currentWeek ? `Week ${week} (Current Week)` : `Week ${week}`}
-                  </option>
-                ))}
+                .map(week => {
+                  // Get week label
+                  let label;
+                  if (week <= 18) {
+                    label = `Week ${week}`;
+                  } else if (week === 19) {
+                    label = 'Wild Card';
+                  } else if (week === 20) {
+                    label = 'Divisional';
+                  } else if (week === 21) {
+                    label = 'Conference';
+                  } else if (week === 22) {
+                    label = 'Super Bowl';
+                  }
+                  
+                  return (
+                    <option key={week} value={week}>
+                      {week === currentWeek ? `${label} (Current Week)` : label}
+                    </option>
+                  );
+                })}
             </select>
           </div>
         </div>

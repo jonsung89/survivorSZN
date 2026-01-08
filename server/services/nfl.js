@@ -209,8 +209,34 @@ const getCurrentSeason = async () => {
     // Get the base values from ESPN
     let season = data.season?.year || new Date().getFullYear();
     let seasonType = data.season?.type || 2;
-    let week = data.week?.number || 1;
+    let week = data.week?.number;
     let displayName = data.week?.teamsOnBye ? `Week ${week}` : 'Offseason';
+    
+    console.log(`[getCurrentSeason] ESPN returned: season=${season}, seasonType=${seasonType}, week=${week}, displayName=${displayName}`);
+    
+    // If ESPN didn't return a week number, calculate a reasonable default
+    if (!week) {
+      const now = new Date();
+      const month = now.getMonth(); // 0 = January
+      
+      if (month >= 8) {
+        // September-December: likely regular season
+        // NFL season starts first week of September
+        const septFirst = new Date(now.getFullYear(), 8, 1);
+        const weeksSinceSept = Math.floor((now - septFirst) / (7 * 24 * 60 * 60 * 1000));
+        week = Math.min(Math.max(1, weeksSinceSept + 1), 18);
+        console.log(`[getCurrentSeason] Calculated regular season week: ${week}`);
+      } else if (month <= 1) {
+        // January-February: likely playoffs
+        seasonType = 3;
+        week = month === 0 ? 1 : 3; // January = Wild Card/Divisional, February = Conference/Super Bowl
+        console.log(`[getCurrentSeason] Assumed playoff week: ${week}`);
+      } else {
+        // March-August: offseason, default to week 1
+        week = 1;
+        console.log(`[getCurrentSeason] Offseason, defaulting to week 1`);
+      }
+    }
     
     // If ESPN says offseason or we're past week 18, check if playoffs have started
     // Playoffs typically run in January, so check for playoff games
@@ -253,7 +279,7 @@ const getCurrentSeason = async () => {
                 };
                 displayName = playoffLabels[playoffWeek] || `Playoff Week ${playoffWeek}`;
                 
-                console.log(`Found playoff games: ${displayName} (Week ${week}, SeasonType ${seasonType})`);
+                console.log(`[getCurrentSeason] Found playoff games: ${displayName} (Week ${week}, SeasonType ${seasonType})`);
                 break;
               }
             }
@@ -264,12 +290,31 @@ const getCurrentSeason = async () => {
       }
     }
     
+    console.log(`[getCurrentSeason] Final result: season=${season}, seasonType=${seasonType}, week=${week}`);
     return { season, seasonType, week, displayName };
   } catch (error) {
     console.error('Get current season error:', error);
+    
+    // Smart fallback based on current date
     const now = new Date();
+    const month = now.getMonth();
     const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
-    return { season: year, seasonType: 2, week: 1 };
+    
+    let fallbackWeek = 1;
+    let fallbackSeasonType = 2;
+    
+    if (month >= 8) {
+      // September-December: estimate regular season week
+      const septFirst = new Date(now.getFullYear(), 8, 1);
+      fallbackWeek = Math.min(Math.max(1, Math.floor((now - septFirst) / (7 * 24 * 60 * 60 * 1000)) + 1), 18);
+    } else if (month <= 1) {
+      // January-February: likely playoffs
+      fallbackSeasonType = 3;
+      fallbackWeek = month === 0 ? 1 : 3;
+    }
+    
+    console.log(`[getCurrentSeason] Using fallback: season=${year}, seasonType=${fallbackSeasonType}, week=${fallbackWeek}`);
+    return { season: year, seasonType: fallbackSeasonType, week: fallbackWeek };
   }
 };
 

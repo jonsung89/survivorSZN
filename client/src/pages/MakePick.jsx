@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { 
   ArrowLeft, Calendar, Check, Lock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Loader2, TrendingUp, TrendingDown, AlertTriangle, X, ExternalLink, Newspaper,
-  BarChart3, MapPin, Trophy
+  BarChart3, MapPin, Trophy, Info, Lightbulb
 } from 'lucide-react';
 import { leagueAPI, picksAPI, nflAPI } from '../api';
 import { useToast } from '../components/Toast';
@@ -28,6 +28,22 @@ export default function MakePick() {
   const [usedTeams, setUsedTeams] = useState([]);
   const [injuries, setInjuries] = useState({});
   const [teamInfoDialog, setTeamInfoDialog] = useState({ open: false, team: null, data: null, loading: false });
+  const [showCoachMark, setShowCoachMark] = useState(false);
+
+  // Check if user has seen the team info tip
+  useEffect(() => {
+    const hasSeenTip = localStorage.getItem('hasSeenTeamInfoTip');
+    if (!hasSeenTip) {
+      // Delay showing the coach mark until games are loaded
+      const timer = setTimeout(() => setShowCoachMark(true), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const dismissCoachMark = () => {
+    setShowCoachMark(false);
+    localStorage.setItem('hasSeenTeamInfoTip', 'true');
+  };
 
   const openTeamInfo = async (team) => {
     setTeamInfoDialog({ open: true, team, data: null, loading: true });
@@ -74,8 +90,32 @@ export default function MakePick() {
       
       setLeague(leagueData);
 
-      const seasonResult = await nflAPI.getSeason();
-      const week = seasonResult.week || 18;
+      // Try to get current week from API, fall back to league start week if it fails
+      let week = leagueData.startWeek || 1;
+      try {
+        const seasonResult = await nflAPI.getSeason();
+        console.log('[MakePick] Season API response:', seasonResult);
+        
+        // Convert playoff weeks: ESPN returns week 1-4 with seasonType=3
+        // Frontend uses week 19-22 for playoffs
+        if (seasonResult.week) {
+          week = seasonResult.week;
+          if (seasonResult.seasonType === 3) {
+            week = seasonResult.week + 18; // WC=19, DIV=20, CONF=21, SB=22
+          }
+        }
+        
+        // Never go below the league's start week
+        if (week < leagueData.startWeek) {
+          week = leagueData.startWeek;
+          console.log('[MakePick] Week below league start, using startWeek:', week);
+        }
+      } catch (seasonError) {
+        console.error('[MakePick] Season API failed, using league startWeek:', seasonError);
+        week = leagueData.startWeek || 1;
+      }
+      
+      console.log('[MakePick] Final current week:', week);
       setCurrentWeek(week);
       
       // Check for week parameter in URL, otherwise use current week
@@ -131,6 +171,17 @@ export default function MakePick() {
             isUsed: item.isUsed || usedTeams.includes(item.team?.id),
             isCurrentPick: item.isPickedThisWeek || false
           };
+          
+          // Debug: Log team data to see if stats are present
+          if (game.homeTeam === null && game.awayTeam === null) {
+            console.log('Team data from API:', {
+              name: item.team?.name,
+              avgPointsFor: item.team?.avgPointsFor,
+              avgPointsAgainst: item.team?.avgPointsAgainst,
+              streak: item.team?.streak,
+              last5: item.team?.last5
+            });
+          }
           
           if (item.game.isHome) {
             game.homeTeam = teamData;
@@ -284,6 +335,62 @@ export default function MakePick() {
           <ChevronRight className="w-5 h-5 text-white" />
         </button>
       </div>
+
+      {/* Coach Mark - First time user tip */}
+      {showCoachMark && games.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={dismissCoachMark}>
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/70" />
+          
+          {/* Tooltip */}
+          <div 
+            className="relative bg-gray-800 border border-white/10 rounded-2xl p-5 max-w-sm w-full shadow-2xl animate-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative">
+              {/* Icon */}
+              <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center mb-3">
+                <Lightbulb className="w-5 h-5 text-emerald-400" />
+              </div>
+              
+              {/* Content */}
+              <h3 className="text-base font-semibold text-white mb-2">
+                Pro Tip
+              </h3>
+              <p className="text-white/70 text-sm leading-relaxed mb-4">
+                Tap any team logo or name to view detailed stats, news, schedule, and injury reports.
+              </p>
+              
+              {/* Visual example */}
+              <div className="bg-white/5 rounded-xl p-3 mb-4 flex items-center gap-3">
+                <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center">
+                  <Info className="w-4 h-4 text-white/50" />
+                </div>
+                <div className="text-xs text-white/50">
+                  <span className="font-medium text-white/70">Includes:</span>{' '}
+                  News • Stats • Schedule • Injuries
+                </div>
+              </div>
+              
+              {/* Dismiss button */}
+              <button
+                onClick={dismissCoachMark}
+                className="w-full bg-white/10 hover:bg-white/15 text-white font-medium py-2.5 rounded-xl transition-colors"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Subtle persistent hint - shows after coach mark dismissed or if already seen */}
+      {!showCoachMark && games.length > 0 && !loadingWeek && (
+        <div className="flex items-center justify-center gap-2 text-white/40 text-xs mb-3 sm:mb-4">
+          <Info className="w-3.5 h-3.5" />
+          <span>Tap any team for detailed stats, news & schedule</span>
+        </div>
+      )}
 
       {/* Current Pick Display */}
       {currentPick && !loadingWeek && (

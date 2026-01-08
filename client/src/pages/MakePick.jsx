@@ -344,51 +344,46 @@ export default function MakePick() {
           
           {/* Tooltip */}
           <div 
-            className="relative bg-gray-800 border border-white/10 rounded-2xl p-5 max-w-sm w-full shadow-2xl animate-in"
+            className="relative bg-gray-800 border border-white/10 rounded-2xl p-5 max-w-xs w-full shadow-2xl animate-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative">
-              {/* Icon */}
-              <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center mb-3">
-                <Lightbulb className="w-5 h-5 text-emerald-400" />
+            <div className="space-y-3">
+              {/* Tip 1: Team info */}
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Lightbulb className="w-4 h-4 text-emerald-400" />
+                </div>
+                <p className="text-white/80 text-sm leading-relaxed pt-1">
+                  Tap any <span className="text-white font-medium">team logo or name</span> for detailed stats, news, schedule & injuries
+                </p>
               </div>
               
-              {/* Content */}
-              <h3 className="text-base font-semibold text-white mb-2">
-                Pro Tip
-              </h3>
-              <p className="text-white/70 text-sm leading-relaxed mb-4">
-                Tap any team logo or name to view detailed stats, news, schedule, and injury reports.
-              </p>
-              
-              {/* Visual example */}
-              <div className="bg-white/5 rounded-xl p-3 mb-4 flex items-center gap-3">
-                <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center">
-                  <Info className="w-4 h-4 text-white/50" />
+              {/* Tip 2: Matchup info */}
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Info className="w-4 h-4 text-blue-400" />
                 </div>
-                <div className="text-xs text-white/50">
-                  <span className="font-medium text-white/70">Includes:</span>{' '}
-                  News • Stats • Schedule • Injuries
-                </div>
+                <p className="text-white/80 text-sm leading-relaxed pt-1">
+                  Tap <span className="text-white font-medium">More Info</span> on any game card for matchup details
+                </p>
               </div>
-              
-              {/* Dismiss button */}
-              <button
-                onClick={dismissCoachMark}
-                className="w-full bg-white/10 hover:bg-white/15 text-white font-medium py-2.5 rounded-xl transition-colors"
-              >
-                Got it
-              </button>
             </div>
+            
+            <button
+              onClick={dismissCoachMark}
+              className="w-full mt-4 bg-white/10 hover:bg-white/15 text-white font-medium py-2 rounded-xl transition-colors text-sm"
+            >
+              Got it
+            </button>
           </div>
         </div>
       )}
 
       {/* Subtle persistent hint - shows after coach mark dismissed or if already seen */}
       {!showCoachMark && games.length > 0 && !loadingWeek && (
-        <div className="flex items-center justify-center gap-2 text-white/40 text-xs mb-3 sm:mb-4">
-          <Info className="w-3.5 h-3.5" />
-          <span>Tap any team for detailed stats, news & schedule</span>
+        <div className="flex items-center justify-center gap-1.5 text-white/40 text-xs mb-3 sm:mb-4">
+          <Info className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>Tap teams for stats & news • Tap More Info for matchup details</span>
         </div>
       )}
 

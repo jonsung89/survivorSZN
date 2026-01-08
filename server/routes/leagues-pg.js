@@ -37,8 +37,8 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Max strikes must be between 1 and 5' });
     }
 
-    if (startWeek < 1 || startWeek > 18) {
-      return res.status(400).json({ error: 'Start week must be between 1 and 18' });
+    if (startWeek < 1 || startWeek > 22) {
+      return res.status(400).json({ error: 'Start week must be between 1 and 22' });
     }
 
     const { season } = await getCurrentSeason();
@@ -463,8 +463,8 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     }
 
     if (startWeek !== undefined && startWeek !== league.start_week) {
-      if (startWeek < 1 || startWeek > 18) {
-        return res.status(400).json({ error: 'Start week must be between 1 and 18' });
+      if (startWeek < 1 || startWeek > 22) {
+        return res.status(400).json({ error: 'Start week must be between 1 and 22' });
       }
       updates.push(`start_week = $${paramIndex++}`);
       params.push(startWeek);

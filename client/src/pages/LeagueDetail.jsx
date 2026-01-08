@@ -625,7 +625,8 @@ export default function LeagueDetail() {
   return (
     <div className={`transition-all duration-300 ${isChatCollapsed ? 'lg:pr-16' : 'lg:pr-96 xl:pr-[420px]'}`}>
       {/* Main content - scrolls naturally, with padding for fixed chat sidebar */}
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+      {/* pb-32 on mobile/tablet for chat bar, normal padding on lg+ where chat is sidebar */}
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 pt-4 sm:pt-8 pb-32 lg:pb-8">
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-3 sm:gap-4 animate-in">
@@ -1493,8 +1494,22 @@ export default function LeagueDetail() {
         </div>
         
         <div className="p-4">
-          <div className="flex flex-wrap gap-3">
-            {weeks.map(week => {
+          {/* Horizontal scroll container - pt-1 and pb-3 to prevent ring clipping */}
+          <div 
+            className="flex gap-3 overflow-x-auto pt-1 pb-3 px-1 -mx-1 snap-x snap-mandatory scrollbar-hide"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            ref={(el) => {
+              // Auto-scroll to current week on mount
+              if (el && currentWeek) {
+                const currentIndex = weeks.indexOf(currentWeek);
+                if (currentIndex > 0) {
+                  const scrollTarget = currentIndex * (96 + 12) - 12; // card width + gap - offset
+                  el.scrollLeft = Math.max(0, scrollTarget - 50);
+                }
+              }
+            }}
+          >
+            {weeks.filter(week => week <= currentWeek + 1).map(week => {
               const weekPicks = getPicksForWeek(week);
               const isDoublePick = (league.doublePickWeeks || []).includes(week);
               const requiredPicks = isDoublePick ? 2 : 1;
@@ -1525,9 +1540,9 @@ export default function LeagueDetail() {
               return (
                 <div
                   key={week}
-                  className={`flex flex-col items-center p-3 rounded-xl min-w-[80px] ${bgClass} ${isCurrent ? 'ring-2 ring-emerald-500' : ''}`}
+                  className={`flex-shrink-0 flex flex-col items-center p-3 rounded-xl w-24 h-28 snap-start ${bgClass} ${isCurrent ? 'ring-2 ring-emerald-500' : ''}`}
                 >
-                  <span className="text-xs text-white/50 mb-2">
+                  <span className="text-xs text-white/50 mb-2 text-center whitespace-nowrap">
                     {week <= 18 ? `Week ${week}` : week === 19 ? 'Wild Card' : week === 20 ? 'Divisional' : week === 21 ? 'Conf' : week === 22 ? 'Super Bowl' : `Week ${week}`}
                     {isDoublePick && <span className="text-orange-400 ml-1">×2</span>}
                   </span>

@@ -120,7 +120,7 @@ export default function JoinByInvite() {
           {/* League Stats */}
           <div className="grid grid-cols-3 gap-3 mb-6">
             <div className="bg-white/5 rounded-xl p-3 text-center">
-              <Users className="w-5 h-5 text-nfl-blue mx-auto mb-1" />
+              <Users className="w-5 h-5 text-white mx-auto mb-1" />
               <p className="text-white font-bold">{league.memberCount}</p>
               <p className="text-white/40 text-xs">Members</p>
             </div>

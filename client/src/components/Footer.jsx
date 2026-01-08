@@ -2,7 +2,7 @@ import { Mail, Heart } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer className="mt-auto border-t border-white/5 bg-black/20 mb-24 lg:mb-0">
+    <footer className="mt-auto border-t border-white/5 bg-black/20">
       <div className="max-w-7xl mx-auto px-4 py-5">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Left - Branding */}

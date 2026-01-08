@@ -17,7 +17,14 @@ export default function Login() {
   // Redirect when user is authenticated (handles the case where AuthContext updates)
   useEffect(() => {
     if (user) {
-      navigate('/dashboard', { replace: true });
+      // Check for pending invite code from invite link flow
+      const pendingInvite = sessionStorage.getItem('pendingInvite');
+      if (pendingInvite) {
+        sessionStorage.removeItem('pendingInvite');
+        navigate(`/join/${pendingInvite}`, { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }
   }, [user, navigate]);
 
@@ -85,7 +92,13 @@ export default function Login() {
       // Navigation will happen via the useEffect when user state updates
       // Add a fallback navigation in case AuthContext doesn't update fast enough
       setTimeout(() => {
-        navigate('/dashboard', { replace: true });
+        const pendingInvite = sessionStorage.getItem('pendingInvite');
+        if (pendingInvite) {
+          sessionStorage.removeItem('pendingInvite');
+          navigate(`/join/${pendingInvite}`, { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
       }, 1000);
     } catch (err) {
       console.error('Google sign-in error:', err);

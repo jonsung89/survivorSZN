@@ -64,14 +64,17 @@ function PublicRoute({ children }) {
 }
 
 // Main layout with navbar and footer
-function AppLayout({ children }) {
+// hideFooterMobile: hides footer on mobile/tablet for pages with bottom chat bar
+function AppLayout({ children, hideFooterMobile = false }) {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
       <main className="pt-4 flex-1">
         {children}
       </main>
-      <Footer />
+      <div className={hideFooterMobile ? 'hidden lg:block' : ''}>
+        <Footer />
+      </div>
     </div>
   );
 }
@@ -125,9 +128,10 @@ function AppRoutes() {
       } />
       
       {/* League detail routes - use singular /league/ */}
+      {/* hideFooterMobile: chat bar replaces footer on mobile */}
       <Route path="/league/:leagueId" element={
         <ProtectedRoute>
-          <AppLayout>
+          <AppLayout hideFooterMobile>
             <LeagueDetail />
           </AppLayout>
         </ProtectedRoute>

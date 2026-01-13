@@ -15,6 +15,7 @@ import {
 import { useState, useRef, useEffect } from 'react';
 import { useToast } from './Toast';
 import Avatar from './Avatar';
+import NotificationPanel from './NotificationPanel';
 
 export default function Navbar() {
   const { user, signOut, updateDisplayName } = useAuth();
@@ -80,7 +81,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="glass-card sticky top-0 z-40">
+      <nav className="glass-card sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -114,6 +115,9 @@ export default function Navbar() {
 
             {/* User Menu - Desktop */}
             <div className="hidden md:flex items-center gap-2" ref={dropdownRef}>
+              {/* Notifications */}
+              <NotificationPanel />
+              
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
@@ -131,7 +135,7 @@ export default function Navbar() {
               
               {/* Dropdown Menu */}
               {dropdownOpen && (
-                <div className="absolute top-14 right-4 w-48 bg-gray-800 border border-white/10 rounded-xl shadow-xl overflow-hidden animate-in">
+                <div className="absolute top-14 right-4 w-48 bg-gray-800 border border-white/10 rounded-xl shadow-xl overflow-hidden animate-in z-50">
                   <div className="p-2">
                     <button
                       onClick={openEditModal}
@@ -152,17 +156,20 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
-            >
-              {mobileMenuOpen ? (
-                <X className="w-6 h-6 text-white" />
-              ) : (
-                <Menu className="w-6 h-6 text-white" />
-              )}
-            </button>
+            {/* Mobile: Notifications + Menu Button */}
+            <div className="md:hidden flex items-center gap-1">
+              <NotificationPanel />
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                {mobileMenuOpen ? (
+                  <X className="w-6 h-6 text-white" />
+                ) : (
+                  <Menu className="w-6 h-6 text-white" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
 

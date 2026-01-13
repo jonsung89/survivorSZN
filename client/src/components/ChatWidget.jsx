@@ -443,8 +443,10 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     }
   };
 
-  // Filter members for mentions
+  // Filter members for mentions (exclude self)
   const filteredMembers = members.filter(m => 
+    m.id !== user?.id && 
+    m.userId !== user?.id &&
     (m.displayName || m.display_name || '').toLowerCase().includes(mentionQuery)
   ).slice(0, 5);
 
@@ -1342,7 +1344,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     key={member.userId || member.user_id}
                     onClick={() => insertMention(member)}
                     className={`w-full px-3 py-2 flex items-center gap-2 text-left text-sm transition-colors ${
-                      idx === mentionIndex ? 'bg-nfl-blue/20' : 'hover:bg-white/5'
+                      idx === mentionIndex ? 'bg-emerald-600/30 border-l-2 border-emerald-500' : 'hover:bg-white/5'
                     }`}
                   >
                     <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} size="xs" />
@@ -1439,14 +1441,14 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             )}
             
             {/* Input row */}
-            <div className="p-3 flex gap-2">
+            <div className="p-3 flex gap-2 items-center">
               {/* Emoji button */}
               <button
                 onClick={() => {
                   setShowEmojiPicker(!showEmojiPicker);
                   setShowGifPicker(false);
                 }}
-                className={`p-2 rounded-lg transition-colors ${showEmojiPicker ? 'bg-nfl-blue text-white' : 'text-white/50 hover:bg-white/10'}`}
+                className={`p-2.5 rounded-xl transition-colors flex items-center justify-center ${showEmojiPicker ? 'bg-nfl-blue text-white' : 'text-white/50 hover:bg-white/10'}`}
               >
                 <Smile className="w-5 h-5" />
               </button>
@@ -1456,24 +1458,62 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   setShowGifPicker(!showGifPicker);
                   setShowEmojiPicker(false);
                 }}
-                className={`p-2 rounded-lg transition-colors ${showGifPicker ? 'bg-nfl-blue text-white' : 'text-white/50 hover:bg-white/10'}`}
+                className={`p-2.5 rounded-xl transition-colors flex items-center justify-center ${showGifPicker ? 'bg-nfl-blue text-white' : 'text-white/50 hover:bg-white/10'}`}
               >
                 <span className="text-xs font-bold">GIF</span>
               </button>
-              <input
+              <textarea
                 ref={inputRef}
-                type="text"
                 value={inputValue}
-                onChange={handleInputChange}
-                onKeyDown={(e) => handleKeyDown(e, false)}
+                onChange={(e) => {
+                  handleInputChange(e);
+                  // Auto-resize
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                }}
+                onKeyDown={(e) => {
+                  // Handle mention navigation first
+                  if (showMentions && filteredMembers.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setMentionIndex(prev => Math.min(prev + 1, filteredMembers.length - 1));
+                      return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setMentionIndex(prev => Math.max(prev - 1, 0));
+                      return;
+                    }
+                    if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault();
+                      insertMention(filteredMembers[mentionIndex]);
+                      return;
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setShowMentions(false);
+                      return;
+                    }
+                  }
+                  // Send on Enter (without shift) - only if not handling mentions
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (inputValue.trim()) {
+                      handleSend(false);
+                      e.target.style.height = 'auto';
+                    }
+                  }
+                }}
                 onFocus={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
                 placeholder={replyingTo ? "Type your reply..." : "Type a message... Use @ to mention"}
-                className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
+                rows={1}
+                className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50 text-sm resize-none overflow-hidden"
+                style={{ lineHeight: '1.5rem', maxHeight: '120px' }}
               />
               <button
                 onClick={() => handleSend(false)}
                 disabled={!inputValue.trim()}
-                className="p-2 bg-nfl-blue rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-nfl-blue/80 transition-colors"
+                className="p-2.5 bg-emerald-600 rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-500 transition-colors flex items-center justify-center"
               >
                 <Send className="w-5 h-5" />
               </button>
@@ -1727,7 +1767,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         key={member.userId || member.user_id}
                         onClick={() => insertMention(member)}
                         className={`w-full px-3 py-2 flex items-center gap-2 text-left transition-colors ${
-                          idx === mentionIndex ? 'bg-nfl-blue/20' : 'hover:bg-white/5'
+                          idx === mentionIndex ? 'bg-emerald-600/30 border-l-2 border-emerald-500' : 'hover:bg-white/5'
                         }`}
                       >
                         <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} size="xs" />
@@ -1880,27 +1920,65 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     </button>
                   )}
                   
+                  {/* Text input with mention highlighting */}
                   {/* Text input */}
-                  <input
+                  <textarea
                     ref={mobileInputRef}
-                    type="text"
                     value={inputValue}
-                    onChange={handleInputChange}
-                    onKeyDown={(e) => handleKeyDown(e, true)}
+                    onChange={(e) => {
+                      handleInputChange(e);
+                      // Auto-resize
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+                    }}
+                    onKeyDown={(e) => {
+                      // Handle mention navigation first
+                      if (showMentions && filteredMembers.length > 0) {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          setMentionIndex(prev => Math.min(prev + 1, filteredMembers.length - 1));
+                          return;
+                        }
+                        if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          setMentionIndex(prev => Math.max(prev - 1, 0));
+                          return;
+                        }
+                        if (e.key === 'Enter' || e.key === 'Tab') {
+                          e.preventDefault();
+                          insertMention(filteredMembers[mentionIndex]);
+                          return;
+                        }
+                        if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setShowMentions(false);
+                          return;
+                        }
+                      }
+                      // Send on Enter (without shift) - only if not handling mentions
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (inputValue.trim()) {
+                          handleSend(true);
+                          e.target.style.height = 'auto';
+                        }
+                      }
+                    }}
                     onFocus={() => { 
                       setShowEmojiPicker(false); 
                       setShowGifPicker(false);
                     }}
                     placeholder={sheetSize === 'half' ? "Type a message..." : (replyingTo ? "Type your reply..." : "Type a message... @ to mention")}
-                    className="flex-1 bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50 text-[16px]"
-                    style={{ fontSize: '16px', touchAction: 'manipulation' }}
+                    rows={1}
+                    className="flex-1 bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50 resize-none overflow-hidden"
+                    style={{ fontSize: '16px', lineHeight: '1.5rem', touchAction: 'manipulation', maxHeight: '100px' }}
                   />
                   
                   {/* Send button */}
                   <button
                     onClick={() => handleSend(true)}
                     disabled={!inputValue.trim()}
-                    className="p-2 bg-nfl-blue rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-nfl-blue/80 transition-colors"
+                    className="p-2.5 bg-emerald-600 rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-500 transition-colors flex items-center justify-center"
                   >
                     <Send className="w-5 h-5" />
                   </button>

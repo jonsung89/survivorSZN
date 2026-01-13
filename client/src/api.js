@@ -285,10 +285,59 @@ export const userAPI = {
   }
 };
 
+// Notification API
+export const notificationAPI = {
+  // Get notifications with pagination
+  getNotifications: async (limit = 20, offset = 0, unreadOnly = false) => {
+    const params = new URLSearchParams({ limit, offset, unreadOnly });
+    const res = await authFetch(`/notifications?${params}`);
+    return res.json();
+  },
+
+  // Get unread count only
+  getUnreadCount: async () => {
+    const res = await authFetch('/notifications/unread-count');
+    return res.json();
+  },
+
+  // Mark single notification as read
+  markAsRead: async (notificationId) => {
+    const res = await authFetch(`/notifications/${notificationId}/read`, {
+      method: 'PUT'
+    });
+    return res.json();
+  },
+
+  // Mark all notifications as read
+  markAllAsRead: async () => {
+    const res = await authFetch('/notifications/read-all', {
+      method: 'PUT'
+    });
+    return res.json();
+  },
+
+  // Delete a notification
+  delete: async (notificationId) => {
+    const res = await authFetch(`/notifications/${notificationId}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  // Clear all notifications
+  clearAll: async () => {
+    const res = await authFetch('/notifications', {
+      method: 'DELETE'
+    });
+    return res.json();
+  }
+};
+
 export default {
   auth: authAPI,
   league: leagueAPI,
   picks: picksAPI,
   nfl: nflAPI,
-  user: userAPI
+  user: userAPI,
+  notification: notificationAPI
 };

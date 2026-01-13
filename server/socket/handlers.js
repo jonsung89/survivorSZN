@@ -156,6 +156,17 @@ function setupSocketHandlers(io) {
           created_at: result.created_at
         });
 
+        // Process mentions and create notifications
+        if (message) {
+          await processMentions(io, {
+            leagueId,
+            messageId: result.id,
+            senderId: socket.userId,
+            senderName: socket.displayName,
+            messageText: message.trim()
+          });
+        }
+
         // Clear typing indicator
         clearTyping(socket, io, leagueId);
       } catch (error) {
@@ -358,6 +369,97 @@ function clearTyping(socket, io, leagueId) {
     io.to(`league:${leagueId}`).emit('typing-update', {
       users: Array.from(typingUsers.get(leagueId).values())
     });
+  }
+}
+
+// Process @mentions in a message and create notifications
+async function processMentions(io, { leagueId, messageId, senderId, senderName, messageText }) {
+  try {
+    // Get all league members with their display names
+    const members = await db.getAll(
+      `SELECT u.id, u.display_name 
+       FROM league_members lm
+       JOIN users u ON lm.user_id = u.id
+       WHERE lm.league_id = $1 AND u.id != $2`,
+      [leagueId, senderId]
+    );
+
+    if (!members || members.length === 0) return;
+
+    // Get league name for notification
+    const league = await db.getOne(
+      'SELECT name FROM leagues WHERE id = $1',
+      [leagueId]
+    );
+
+    // Find mentioned users by matching @displayName patterns
+    const mentionedUsers = [];
+    
+    for (const member of members) {
+      const displayName = member.display_name;
+      if (!displayName) continue;
+      
+      // Check if this user's name appears after @ in the message (case insensitive)
+      const mentionPattern = new RegExp(`@${escapeRegex(displayName)}(?:\\s|$|[.,!?])`, 'i');
+      if (mentionPattern.test(messageText)) {
+        mentionedUsers.push(member);
+      }
+    }
+
+    if (mentionedUsers.length === 0) return;
+
+    // Create preview (truncate message)
+    const preview = messageText.length > 100 
+      ? messageText.substring(0, 100) + '...' 
+      : messageText;
+
+    // Create notifications for each mentioned user
+    for (const user of mentionedUsers) {
+      // Insert notification
+      const notification = await db.getOne(
+        `INSERT INTO notifications (user_id, type, league_id, message_id, from_user_id, from_user_name, preview, league_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, created_at`,
+        [user.id, 'mention', leagueId, messageId, senderId, senderName, preview, league?.name]
+      );
+
+      // Emit real-time notification to the mentioned user
+      // We need to find their socket(s) and emit directly
+      emitToUser(io, user.id, 'notification', {
+        id: notification.id,
+        type: 'mention',
+        leagueId,
+        messageId,
+        fromUserId: senderId,
+        fromUserName: senderName,
+        preview,
+        leagueName: league?.name,
+        read: false,
+        createdAt: notification.created_at
+      });
+    }
+
+    console.log(`Created ${mentionedUsers.length} mention notification(s) for message ${messageId}`);
+  } catch (error) {
+    console.error('Process mentions error:', error);
+    // Don't throw - notifications failing shouldn't break message sending
+  }
+}
+
+// Helper to escape regex special characters
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Emit event to all sockets belonging to a specific user
+function emitToUser(io, userId, event, data) {
+  // Find all sockets for this user across all leagues
+  for (const [leagueId, leagueUsers] of onlineUsers.entries()) {
+    for (const [socketId, userData] of leagueUsers.entries()) {
+      if (userData.userId === userId) {
+        io.to(socketId).emit(event, data);
+      }
+    }
   }
 }
 

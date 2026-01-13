@@ -11,6 +11,7 @@ const pickRoutes = require('./routes/picks-pg');
 const nflRoutes = require('./routes/nfl');
 const userRoutes = require('./routes/users-pg');
 const chatRoutes = require('./routes/chat');
+const notificationRoutes = require('./routes/notifications-pg');
 
 // Initialize database
 const { initDb } = require('./db/supabase');
@@ -52,6 +53,7 @@ app.use('/api/picks', pickRoutes);
 app.use('/api/nfl', nflRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

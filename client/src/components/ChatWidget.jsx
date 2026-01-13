@@ -23,6 +23,44 @@ const EMOJI_CATEGORIES = {
 // Quick reactions for messages
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
+// Helper function to parse mentions in message text
+// Matches @mentions against actual member names for full name highlighting
+const parseMentions = (text, members) => {
+  if (!text || !members || members.length === 0) return [text];
+  
+  // Get all member display names, sorted by length (longest first to match longer names first)
+  const memberNames = members
+    .map(m => m.displayName || m.display_name || '')
+    .filter(name => name.length > 0)
+    .sort((a, b) => b.length - a.length);
+  
+  if (memberNames.length === 0) return [text];
+  
+  // Build regex pattern that matches @followed by any member name
+  // Escape special regex characters in names
+  const escapedNames = memberNames.map(name => 
+    name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  );
+  const pattern = new RegExp(`(@(?:${escapedNames.join('|')}))`, 'gi');
+  
+  // Split text by mentions
+  const parts = text.split(pattern);
+  
+  return parts.map((part, i) => {
+    // Check if this part is a mention (starts with @ and matches a member name)
+    if (part.startsWith('@')) {
+      const nameAfterAt = part.substring(1).toLowerCase();
+      const isValidMention = memberNames.some(
+        name => name.toLowerCase() === nameAfterAt
+      );
+      if (isValidMention) {
+        return { type: 'mention', text: part, key: i };
+      }
+    }
+    return part;
+  });
+};
+
 // NFL team data for profile picks display
 const NFL_TEAMS = {
   '1': { name: 'Falcons', abbreviation: 'ATL', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/atl.png' },
@@ -1112,9 +1150,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                           onClick={(e) => handleMessageTap(e, message)}
                         >
                           <p className="text-sm whitespace-pre-wrap break-words">
-                            {message.message.split(/(@\w+)/g).map((part, i) => 
-                              part.startsWith('@') ? (
-                                <span key={i} className="text-nfl-blue font-medium">{part}</span>
+                            {parseMentions(message.message, members).map((part, i) => 
+                              typeof part === 'object' && part.type === 'mention' ? (
+                                <span key={part.key} className="text-blue-400 font-medium">{part.text}</span>
                               ) : part
                             )}
                           </p>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
-  Trophy, Users, Settings, ChevronLeft, ChevronRight, 
+  Trophy, Users, Settings, ChevronLeft, ChevronRight,
   Crown, Plus, Minus, Check, X, Calendar, Loader2,
   AlertCircle, Eye, EyeOff, History, AlertTriangle, Edit3,
   Pencil, CalendarCheck, DollarSign, Lock
@@ -82,6 +82,7 @@ export default function LeagueDetail() {
   const [togglingPayment, setTogglingPayment] = useState(null);
   const [gameStatuses, setGameStatuses] = useState({}); // { teamId: gameStatus }
   const [isChatCollapsed, setIsChatCollapsed] = useState(true); // Track chat sidebar state
+  const [currentWeekTeams, setCurrentWeekTeams] = useState([]); // Teams playing this week
   const hasTriggeredUpdateRef = useRef(false);
 
   const isCommissioner = league?.commissionerId === user?.id;
@@ -166,6 +167,87 @@ export default function LeagueDetail() {
     });
   }, [standings, currentWeek, gameStatuses, league?.startWeek, league?.maxStrikes]);
 
+  // Get teams already used by a member
+  const getMemberUsedTeams = (member, excludeWeek = null) => {
+    if (!member.picks) return new Set();
+    const used = new Set();
+    Object.entries(member.picks).forEach(([week, pick]) => {
+      if (excludeWeek && parseInt(week) === excludeWeek) return;
+      
+      // Handle single pick (teamId directly on pick)
+      if (pick?.teamId) {
+        used.add(String(pick.teamId));
+      }
+      
+      // Handle double pick weeks (picks array)
+      if (pick?.picks && Array.isArray(pick.picks)) {
+        pick.picks.forEach(p => {
+          if (p?.teamId) {
+            used.add(String(p.teamId));
+          }
+        });
+      }
+    });
+    return used;
+  };
+
+  // Calculate matchup availability for current week (which players have which teams available)
+  // Only shows for playoff weeks or when there are 4 or fewer games
+  const matchupAvailability = useMemo(() => {
+    if (!standings || standings.length === 0 || !currentWeekTeams || currentWeekTeams.length === 0) {
+      return null;
+    }
+    
+    // Only show for playoff weeks (19+) or when 4 or fewer games (8 or fewer teams)
+    const isPlayoffWeek = selectedWeek >= 19;
+    const isFewGames = currentWeekTeams.length <= 8;
+    
+    if (!isPlayoffWeek && !isFewGames) {
+      return null;
+    }
+    
+    // Group members by their available options
+    const groups = {
+      bothAvailable: [],    // Has all teams available
+      oneTeamOnly: {},      // { teamId: [members] }
+      noOptions: []         // Used all teams playing this week
+    };
+    
+    // Only consider active members
+    const activeMembers = standings.filter(m => m.status === 'active');
+    
+    for (const member of activeMembers) {
+      // Exclude current week when calculating used teams (show options going into the week)
+      const usedTeams = getMemberUsedTeams(member, selectedWeek);
+      const availableThisWeek = currentWeekTeams.filter(teamId => !usedTeams.has(String(teamId)));
+      
+      if (availableThisWeek.length === currentWeekTeams.length) {
+        // Has all teams available
+        groups.bothAvailable.push(member);
+      } else if (availableThisWeek.length === 0) {
+        // No options left
+        groups.noOptions.push(member);
+      } else {
+        // Has some but not all teams
+        for (const teamId of availableThisWeek) {
+          if (!groups.oneTeamOnly[teamId]) {
+            groups.oneTeamOnly[teamId] = [];
+          }
+          groups.oneTeamOnly[teamId].push(member);
+        }
+      }
+    }
+    
+    return {
+      groups,
+      teamsPlaying: currentWeekTeams,
+      weekLabel: selectedWeek === 22 ? 'Super Bowl' : 
+                 selectedWeek === 21 ? 'Conference Championships' :
+                 selectedWeek === 20 ? 'Divisional Round' :
+                 selectedWeek === 19 ? 'Wild Card' : `Week ${selectedWeek}`
+    };
+  }, [standings, currentWeekTeams, selectedWeek]);
+
   useEffect(() => {
     loadData();
   }, [leagueId]);
@@ -245,6 +327,38 @@ export default function LeagueDetail() {
         }
         setCurrentWeek(displayWeek);
         setSelectedWeek(displayWeek);
+        
+        // Fetch teams playing this week for the matchup options card
+        try {
+          // For playoff weeks, we need to pass seasonType=3
+          const seasonType = displayWeek > 18 ? 3 : 2;
+          // Convert to ESPN week format for playoffs (19->1, 20->2, 21->3, 22->5)
+          let scheduleWeek = displayWeek;
+          if (displayWeek > 18) {
+            if (displayWeek === 22) scheduleWeek = 5; // Super Bowl is ESPN week 5
+            else scheduleWeek = displayWeek - 18;
+          }
+          
+          const scheduleResult = await nflAPI.getSchedule(scheduleWeek, null, seasonType);
+          // Handle both array response and { games: [] } response
+          const games = Array.isArray(scheduleResult) ? scheduleResult : 
+                        (scheduleResult?.games || scheduleResult?.events || []);
+          
+          if (games.length > 0) {
+            // Extract unique team IDs from all games
+            const teamIds = new Set();
+            games.forEach(game => {
+              // Handle different response formats
+              const homeId = game.homeTeam?.id || game.home?.id;
+              const awayId = game.awayTeam?.id || game.away?.id;
+              if (homeId) teamIds.add(String(homeId));
+              if (awayId) teamIds.add(String(awayId));
+            });
+            setCurrentWeekTeams(Array.from(teamIds));
+          }
+        } catch (e) {
+          console.log('Could not fetch week schedule:', e);
+        }
       }
 
       // Get my picks
@@ -494,19 +608,6 @@ export default function LeagueDetail() {
     setTogglingPayment(null);
   };
 
-  // Get teams already used by a member
-  const getMemberUsedTeams = (member, excludeWeek = null) => {
-    if (!member.picks) return new Set();
-    const used = new Set();
-    Object.entries(member.picks).forEach(([week, pick]) => {
-      if (excludeWeek && parseInt(week) === excludeWeek) return;
-      if (pick?.teamId) {
-        used.add(String(pick.teamId));
-      }
-    });
-    return used;
-  };
-
   // Commissioner: Set pick for a member
   const handleSetMemberPick = async () => {
     if (!pickDialog || selectedTeamsForPick.length === 0) return;
@@ -753,6 +854,181 @@ export default function LeagueDetail() {
             <p className="text-white/50 text-sm">
               💰 Pot splits evenly among all survivors at season end, or winner-takes-all if one remains.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Matchup Options Card - Shows for playoff weeks or few games */}
+      {matchupAvailability && (
+        <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 animate-in" style={{ animationDelay: '35ms' }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+              <Trophy className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">{matchupAvailability.weekLabel} Options</h3>
+              <p className="text-white/50 text-sm">Who can pick which team</p>
+            </div>
+          </div>
+          
+          {/* Mobile: horizontal scroll, Desktop: grid */}
+          <div 
+            className={`flex sm:grid gap-3 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory sm:snap-none scrollbar-hide ${
+              matchupAvailability.teamsPlaying.length === 2 
+                ? 'sm:grid-cols-4' 
+                : 'sm:grid-cols-2 lg:grid-cols-4'
+            }`}
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {/* All teams available */}
+            <div 
+              className="relative overflow-hidden rounded-xl p-3 border border-emerald-500/20 h-[200px] flex flex-col flex-shrink-0 w-[200px] sm:w-auto snap-start sm:snap-align-none"
+              style={{
+                background: 'linear-gradient(160deg, rgba(16, 185, 129, 0.12) 0%, rgba(0,0,0,0.2) 100%)'
+              }}
+            >
+              {/* Watermark - logos always overlapping in center */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                {matchupAvailability.teamsPlaying[0] && (
+                  <img 
+                    src={NFL_TEAMS[matchupAvailability.teamsPlaying[0]]?.logo} 
+                    alt="" 
+                    className="absolute w-20 h-20 object-contain opacity-[0.06] -translate-x-6 -translate-y-6"
+                  />
+                )}
+                {matchupAvailability.teamsPlaying[1] && (
+                  <img 
+                    src={NFL_TEAMS[matchupAvailability.teamsPlaying[1]]?.logo} 
+                    alt="" 
+                    className="absolute w-20 h-20 object-contain opacity-[0.06] translate-x-6 translate-y-6"
+                  />
+                )}
+              </div>
+              <div className="relative flex flex-col items-start gap-1 mb-2">
+                <div className="flex -space-x-3 h-10 items-center">
+                  {matchupAvailability.teamsPlaying.map(teamId => {
+                    const team = NFL_TEAMS[teamId];
+                    return team?.logo ? (
+                      <img key={teamId} src={team.logo} alt="" className="w-10 h-10 object-contain bg-black/20 rounded-full p-1 drop-shadow-lg" />
+                    ) : null;
+                  })}
+                </div>
+                <span className="text-emerald-400 text-sm font-semibold">
+                  Both Available ({matchupAvailability.groups.bothAvailable.length})
+                </span>
+              </div>
+              <div className="relative flex-1 overflow-y-auto">
+                {matchupAvailability.groups.bothAvailable.length > 0 ? (
+                  <div className="flex flex-col gap-1 pr-1">
+                    {matchupAvailability.groups.bothAvailable.map(member => (
+                      <span 
+                        key={member.id || member.userId}
+                        className="inline-flex items-center gap-1.5 text-xs text-white/80"
+                      >
+                        <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
+                        {member.displayName}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-white/50 text-sm">No one</p>
+                )}
+              </div>
+            </div>
+            
+            {/* One team only groups - show all teams playing */}
+            {matchupAvailability.teamsPlaying.map(teamId => {
+              const team = NFL_TEAMS[teamId];
+              if (!team) return null;
+              const members = matchupAvailability.groups.oneTeamOnly[teamId] || [];
+              const teamColor = team.color || '#6B7280';
+              
+              return (
+                <div 
+                  key={teamId} 
+                  className="relative overflow-hidden rounded-xl p-3 h-[200px] flex flex-col flex-shrink-0 w-[200px] sm:w-auto snap-start"
+                  style={{ 
+                    background: `linear-gradient(160deg, ${teamColor}20 0%, rgba(0,0,0,0.2) 100%)`,
+                    borderColor: `${teamColor}30`,
+                    borderWidth: '1px'
+                  }}
+                >
+                  {/* Centered large logo watermark */}
+                  <div 
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                  >
+                    <img 
+                      src={team.logo} 
+                      alt="" 
+                      className="w-28 h-28 object-contain opacity-[0.06]"
+                    />
+                  </div>
+                  <div className="relative flex flex-col items-start gap-1 mb-2">
+                    {team.logo && (
+                      <img src={team.logo} alt={team.name} className="w-10 h-10 object-contain drop-shadow-lg" />
+                    )}
+                    <span className="text-sm font-semibold text-white drop-shadow-sm">
+                      {team.name} Only ({members.length})
+                    </span>
+                  </div>
+                  <div className="relative flex-1 overflow-y-auto">
+                    {members.length > 0 ? (
+                      <div className="flex flex-col gap-1 pr-1">
+                        {members.map(member => (
+                          <span 
+                            key={member.id || member.userId}
+                            className="inline-flex items-center gap-1.5 text-xs text-white/80"
+                          >
+                            <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
+                            {member.displayName}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-white/50 text-sm">No one</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            
+            {/* No options */}
+            <div 
+              className="relative overflow-hidden rounded-xl p-3 border border-red-500/20 h-[200px] flex flex-col flex-shrink-0 w-[200px] sm:w-auto snap-start"
+              style={{
+                background: 'linear-gradient(160deg, rgba(239, 68, 68, 0.12) 0%, rgba(0,0,0,0.2) 100%)'
+              }}
+            >
+              {/* Watermark - X icon */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <X className="w-24 h-24 text-red-500 opacity-[0.06]" />
+              </div>
+              <div className="relative flex flex-col items-start gap-1 mb-2">
+                <div className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 text-red-400" />
+                </div>
+                <span className="text-red-400 text-sm font-semibold">
+                  No Options ({matchupAvailability.groups.noOptions.length})
+                </span>
+              </div>
+              <div className="relative flex-1 overflow-y-auto">
+                {matchupAvailability.groups.noOptions.length > 0 ? (
+                  <div className="flex flex-col gap-1 pr-1">
+                    {matchupAvailability.groups.noOptions.map(member => (
+                      <span 
+                        key={member.id || member.userId}
+                        className="inline-flex items-center gap-1.5 text-xs text-white/80"
+                      >
+                        <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
+                        {member.displayName}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-white/50 text-sm">No one</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

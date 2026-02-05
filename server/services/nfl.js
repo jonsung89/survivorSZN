@@ -4,12 +4,16 @@ const API_BASE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 // Helper to convert our app week numbers to ESPN API format
 // Our app: weeks 1-18 = regular season, weeks 19-22 = playoffs
 // ESPN API: seasonType 2 + weeks 1-18 = regular season
-//           seasonType 3 + weeks 1-4 = playoffs (Wild Card, Divisional, Conference, Super Bowl)
+//           seasonType 3 + weeks 1-5 = playoffs (Wild Card=1, Divisional=2, Conference=3, Pro Bowl=4, Super Bowl=5)
 const getEspnWeekParams = (week) => {
   if (week <= 18) {
     return { espnWeek: week, seasonType: 2 };
   }
-  // Playoff weeks: 19=Wild Card(1), 20=Divisional(2), 21=Conference(3), 22=Super Bowl(4)
+  // Playoff weeks: 19=Wild Card(1), 20=Divisional(2), 21=Conference(3), 22=Super Bowl(5)
+  // Note: ESPN week 4 is Pro Bowl, we skip it
+  if (week === 22) {
+    return { espnWeek: 5, seasonType: 3 }; // Super Bowl is week 5 in ESPN
+  }
   return { espnWeek: week - 18, seasonType: 3 };
 };
 

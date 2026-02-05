@@ -96,12 +96,20 @@ export default function MakePick() {
         const seasonResult = await nflAPI.getSeason();
         console.log('[MakePick] Season API response:', seasonResult);
         
-        // Convert playoff weeks: ESPN returns week 1-4 with seasonType=3
+        // Convert playoff weeks: ESPN returns week 1-5 with seasonType=3
+        // ESPN: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl (skip), 5=Super Bowl
         // Frontend uses week 19-22 for playoffs
         if (seasonResult.week) {
           week = seasonResult.week;
           if (seasonResult.seasonType === 3) {
-            week = seasonResult.week + 18; // WC=19, DIV=20, CONF=21, SB=22
+            // Special handling: ESPN week 5 = Super Bowl = our week 22
+            if (seasonResult.week === 5) {
+              week = 22; // Super Bowl
+            } else if (seasonResult.week === 4) {
+              week = 22; // Pro Bowl week - treat as Super Bowl for our purposes
+            } else {
+              week = seasonResult.week + 18; // WC=19, DIV=20, CONF=21
+            }
           }
         }
         

@@ -135,8 +135,21 @@ router.get('/pending-picks', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const { season, week, seasonType } = await getCurrentSeason();
-    // Convert ESPN week to internal week (playoffs: week 1-4 with seasonType=3 → internal 19-22)
-    const internalWeek = seasonType === 3 ? week + 18 : week;
+    // Convert ESPN week to internal week
+    // ESPN playoffs: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
+    // Internal: 19=Wild Card, 20=Divisional, 21=Conference, 22=Super Bowl
+    let internalWeek;
+    if (seasonType === 3) {
+      if (week === 5) {
+        internalWeek = 22; // Super Bowl
+      } else if (week === 4) {
+        internalWeek = 22; // Pro Bowl week - treat as Super Bowl
+      } else {
+        internalWeek = week + 18;
+      }
+    } else {
+      internalWeek = week;
+    }
 
     // Get all active league memberships
     const memberships = await db.getAll(`

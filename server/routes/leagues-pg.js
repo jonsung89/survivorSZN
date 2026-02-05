@@ -37,8 +37,8 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Max strikes must be between 1 and 5' });
     }
 
-    if (startWeek < 1 || startWeek > 22) {
-      return res.status(400).json({ error: 'Start week must be between 1 and 22' });
+    if (startWeek < 1 || startWeek > 18) {
+      return res.status(400).json({ error: 'Start week must be between 1 and 18' });
     }
 
     const { season } = await getCurrentSeason();
@@ -281,8 +281,20 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
     let currentWeek = 1;
     try {
       const { week, seasonType } = await getCurrentSeason();
-      // Convert ESPN week to internal week (playoffs: week 1-4 with seasonType=3 → internal 19-22)
-      currentWeek = seasonType === 3 ? week + 18 : week;
+      // Convert ESPN week to internal week
+      // ESPN playoffs: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
+      // Internal: 19=Wild Card, 20=Divisional, 21=Conference, 22=Super Bowl
+      if (seasonType === 3) {
+        if (week === 5) {
+          currentWeek = 22; // Super Bowl
+        } else if (week === 4) {
+          currentWeek = 22; // Pro Bowl week - treat as Super Bowl
+        } else {
+          currentWeek = week + 18;
+        }
+      } else {
+        currentWeek = week;
+      }
     } catch (e) {
       console.error('Failed to get current week:', e);
     }
@@ -463,8 +475,8 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     }
 
     if (startWeek !== undefined && startWeek !== league.start_week) {
-      if (startWeek < 1 || startWeek > 22) {
-        return res.status(400).json({ error: 'Start week must be between 1 and 22' });
+      if (startWeek < 1 || startWeek > 18) {
+        return res.status(400).json({ error: 'Start week must be between 1 and 18' });
       }
       updates.push(`start_week = $${paramIndex++}`);
       params.push(startWeek);

@@ -156,6 +156,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const gifSearchTimeout = useRef(null);
   const swipeStartX = useRef(0);
   const isSwipeDragging = useRef(false); // Track if user is dragging to reply
+  const initialLoadRef = useRef(true); // Track initial load for scroll behavior
   
   // Drag gesture tracking
   const sheetRef = useRef(null);
@@ -277,8 +278,26 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current && messages.length > 0) {
+      if (initialLoadRef.current) {
+        // Initial load: wait for images to render, then scroll instantly
+        initialLoadRef.current = false;
+        // Multiple attempts to ensure images have loaded
+        const scrollToBottom = () => {
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'instant' });
+          }
+        };
+        // Immediate scroll
+        scrollToBottom();
+        // Scroll again after short delay for images starting to load
+        setTimeout(scrollToBottom, 100);
+        // Scroll again after longer delay for slower images/GIFs
+        setTimeout(scrollToBottom, 500);
+      } else {
+        // Subsequent messages: smooth scroll
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
     }
   }, [messages]);
 
@@ -317,6 +336,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const loadMessages = async (before = null) => {
     if (loading) return;
     setLoading(true);
+    
+    // Reset initial load flag when loading fresh (not pagination)
+    if (!before) {
+      initialLoadRef.current = true;
+    }
     
     try {
       const token = await getIdToken();

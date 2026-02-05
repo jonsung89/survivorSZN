@@ -926,7 +926,12 @@ export default function LeagueDetail() {
                         className="inline-flex items-center gap-1.5 text-xs text-white/80"
                       >
                         <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
-                        {member.displayName}
+                        <span className="truncate">{member.displayName}</span>
+                        {member.strikes > 0 && (
+                          <span className="text-red-400 flex-shrink-0 text-[10px]">
+                            {'✕'.repeat(member.strikes)}
+                          </span>
+                        )}
                       </span>
                     ))}
                   </div>
@@ -980,7 +985,12 @@ export default function LeagueDetail() {
                             className="inline-flex items-center gap-1.5 text-xs text-white/80"
                           >
                             <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
-                            {member.displayName}
+                            <span className="truncate">{member.displayName}</span>
+                            {member.strikes > 0 && (
+                              <span className="text-red-400 flex-shrink-0 text-[10px]">
+                                {'✕'.repeat(member.strikes)}
+                              </span>
+                            )}
                           </span>
                         ))}
                       </div>
@@ -1020,7 +1030,12 @@ export default function LeagueDetail() {
                         className="inline-flex items-center gap-1.5 text-xs text-white/80"
                       >
                         <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
-                        {member.displayName}
+                        <span className="truncate">{member.displayName}</span>
+                        {member.strikes > 0 && (
+                          <span className="text-red-400 flex-shrink-0 text-[10px]">
+                            {'✕'.repeat(member.strikes)}
+                          </span>
+                        )}
                       </span>
                     ))}
                   </div>

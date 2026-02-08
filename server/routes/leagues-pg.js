@@ -283,12 +283,12 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
       const { week, seasonType } = await getCurrentSeason();
       // Convert ESPN week to internal week
       // ESPN playoffs: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
-      // Internal: 19=Wild Card, 20=Divisional, 21=Conference, 22=Super Bowl
+      // Internal: 19=Wild Card, 20=Divisional, 21=Conference, 23=Super Bowl (skip 22 Pro Bowl)
       if (seasonType === 3) {
         if (week === 5) {
-          currentWeek = 22; // Super Bowl
+          currentWeek = 23; // Super Bowl
         } else if (week === 4) {
-          currentWeek = 22; // Pro Bowl week - treat as Super Bowl
+          currentWeek = 23; // Pro Bowl week - treat as Super Bowl
         } else {
           currentWeek = week + 18;
         }
@@ -484,9 +484,9 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     }
 
     if (doublePickWeeks !== undefined) {
-      // Validate weeks array
+      // Validate weeks array (1-21, 23 - skip 22 Pro Bowl)
       const validWeeks = Array.isArray(doublePickWeeks) 
-        ? doublePickWeeks.filter(w => w >= 1 && w <= 22)
+        ? doublePickWeeks.filter(w => w >= 1 && w <= 23 && w !== 22)
         : [];
       const currentWeeks = league.double_pick_weeks || [];
       
@@ -797,6 +797,12 @@ router.post('/:leagueId/members/:memberId/pick', authMiddleware, async (req, res
       return res.status(400).json({ error: 'Week and teamId are required' });
     }
 
+    // Validate week is within valid range (max 23 = Super Bowl)
+    const weekNum = parseInt(week);
+    if (weekNum > 23) {
+      return res.status(400).json({ error: 'Invalid week. Season ends at Super Bowl (week 23)' });
+    }
+
     if (pickNumber !== 1 && pickNumber !== 2) {
       return res.status(400).json({ error: 'Pick number must be 1 or 2' });
     }
@@ -809,6 +815,11 @@ router.post('/:leagueId/members/:memberId/pick', authMiddleware, async (req, res
 
     if (league.commissioner_id !== user.id) {
       return res.status(403).json({ error: 'Only the commissioner can set picks for members' });
+    }
+
+    // Validate week is within league range
+    if (weekNum < league.start_week) {
+      return res.status(400).json({ error: `Picks start from week ${league.start_week}` });
     }
 
     // Check if this is a double pick week

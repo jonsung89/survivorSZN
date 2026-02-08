@@ -198,8 +198,8 @@ export default function CreateLeague() {
               onChange={handleChange}
               className="input-field"
             >
-              {Array.from({ length: 22 }, (_, i) => i + 1)
-                .filter(week => week >= currentWeek)
+              {Array.from({ length: 23 }, (_, i) => i + 1)
+                .filter(week => week >= currentWeek && week !== 22) // Skip Pro Bowl week
                 .map(week => {
                   // Get week label
                   let label;
@@ -211,7 +211,7 @@ export default function CreateLeague() {
                     label = 'Divisional';
                   } else if (week === 21) {
                     label = 'Conference';
-                  } else if (week === 22) {
+                  } else if (week === 23) {
                     label = 'Super Bowl';
                   }
                   

@@ -137,13 +137,13 @@ router.get('/pending-picks', authMiddleware, async (req, res) => {
     const { season, week, seasonType } = await getCurrentSeason();
     // Convert ESPN week to internal week
     // ESPN playoffs: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
-    // Internal: 19=Wild Card, 20=Divisional, 21=Conference, 22=Super Bowl
+    // Internal: 19=Wild Card, 20=Divisional, 21=Conference, 23=Super Bowl (skip 22 Pro Bowl)
     let internalWeek;
     if (seasonType === 3) {
       if (week === 5) {
-        internalWeek = 22; // Super Bowl
+        internalWeek = 23; // Super Bowl
       } else if (week === 4) {
-        internalWeek = 22; // Pro Bowl week - treat as Super Bowl
+        internalWeek = 23; // Pro Bowl week - treat as Super Bowl
       } else {
         internalWeek = week + 18;
       }

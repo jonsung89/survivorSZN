@@ -62,7 +62,7 @@ export default function MakePick() {
     if (week === 19) return 'Wild Card';
     if (week === 20) return 'Divisional';
     if (week === 21) return 'Conference';
-    if (week === 22) return 'Super Bowl';
+    if (week === 23) return 'Super Bowl';
     return `Week ${week}`;
   };
 
@@ -98,15 +98,15 @@ export default function MakePick() {
         
         // Convert playoff weeks: ESPN returns week 1-5 with seasonType=3
         // ESPN: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl (skip), 5=Super Bowl
-        // Frontend uses week 19-22 for playoffs
+        // Frontend uses week 19-21, 23 for playoffs (skip 22 Pro Bowl)
         if (seasonResult.week) {
           week = seasonResult.week;
           if (seasonResult.seasonType === 3) {
-            // Special handling: ESPN week 5 = Super Bowl = our week 22
+            // Special handling: ESPN week 5 = Super Bowl = our week 23
             if (seasonResult.week === 5) {
-              week = 22; // Super Bowl
+              week = 23; // Super Bowl
             } else if (seasonResult.week === 4) {
-              week = 22; // Pro Bowl week - treat as Super Bowl for our purposes
+              week = 23; // Pro Bowl week - treat as Super Bowl for our purposes
             } else {
               week = seasonResult.week + 18; // WC=19, DIV=20, CONF=21
             }
@@ -128,7 +128,10 @@ export default function MakePick() {
       
       // Check for week parameter in URL, otherwise use current week
       const urlWeek = searchParams.get('week');
-      const targetWeek = urlWeek ? parseInt(urlWeek) : week;
+      // Validate URL week is within valid range (league start to 23)
+      let targetWeek = urlWeek ? parseInt(urlWeek) : week;
+      if (targetWeek > 23) targetWeek = 23;
+      if (targetWeek < leagueData.startWeek) targetWeek = leagueData.startWeek;
       setSelectedWeek(targetWeek);
 
       const picksResult = await picksAPI.getLeaguePicks(leagueId);
@@ -336,8 +339,8 @@ export default function MakePick() {
           )}
         </div>
         <button
-          onClick={() => setSelectedWeek(Math.min(22, selectedWeek + 1))}
-          disabled={selectedWeek >= 22 || loadingWeek}
+          onClick={() => setSelectedWeek(Math.min(23, selectedWeek + 1))}
+          disabled={selectedWeek >= 23 || loadingWeek}
           className="p-2 sm:p-3 hover:bg-white/10 rounded-lg disabled:opacity-30"
         >
           <ChevronRight className="w-5 h-5 text-white" />
@@ -441,7 +444,7 @@ export default function MakePick() {
                 {selectedWeek === 19 && 'Wild Card'}
                 {selectedWeek === 20 && 'Divisional Round'}
                 {selectedWeek === 21 && 'Conference Championships'}
-                {selectedWeek === 22 && 'Super Bowl'}
+                {selectedWeek === 23 && 'Super Bowl'}
                 {' '}matchups are TBD
               </p>
               <p className="text-white/40 text-sm mt-2">

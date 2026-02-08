@@ -241,7 +241,7 @@ export default function LeagueDetail() {
     return {
       groups,
       teamsPlaying: currentWeekTeams,
-      weekLabel: selectedWeek === 22 ? 'Super Bowl' : 
+      weekLabel: selectedWeek === 23 ? 'Super Bowl' : 
                  selectedWeek === 21 ? 'Conference Championships' :
                  selectedWeek === 20 ? 'Divisional Round' :
                  selectedWeek === 19 ? 'Wild Card' : `Week ${selectedWeek}`
@@ -317,12 +317,12 @@ export default function LeagueDetail() {
       const seasonResult = await nflAPI.getSeason();
       if (seasonResult.week) {
         // Convert playoff weeks: backend returns week 1-5 with seasonType=3
-        // Frontend uses week 19-22 for playoffs (19=WC, 20=DIV, 21=CONF, 22=SB)
+        // Frontend uses week 19-21, 23 for playoffs (19=WC, 20=DIV, 21=CONF, 23=SB, skip 22 Pro Bowl)
         let displayWeek = seasonResult.week;
         if (seasonResult.seasonType === 3) {
-          // Map playoff week 1-5 to frontend weeks 19-22
-          // Week 1 = Wild Card (19), Week 2 = Divisional (20), Week 3 = Conference (21), Week 4 = Pro Bowl (skip), Week 5 = Super Bowl (22)
-          const playoffWeekMap = { 1: 19, 2: 20, 3: 21, 4: 21, 5: 22 };
+          // Map playoff week 1-5 to frontend weeks 19-21, 23
+          // Week 1 = Wild Card (19), Week 2 = Divisional (20), Week 3 = Conference (21), Week 4 = Pro Bowl (skip), Week 5 = Super Bowl (23)
+          const playoffWeekMap = { 1: 19, 2: 20, 3: 21, 4: 23, 5: 23 };
           displayWeek = playoffWeekMap[seasonResult.week] || 19;
         }
         setCurrentWeek(displayWeek);
@@ -332,10 +332,10 @@ export default function LeagueDetail() {
         try {
           // For playoff weeks, we need to pass seasonType=3
           const seasonType = displayWeek > 18 ? 3 : 2;
-          // Convert to ESPN week format for playoffs (19->1, 20->2, 21->3, 22->5)
+          // Convert to ESPN week format for playoffs (19->1, 20->2, 21->3, 23->5)
           let scheduleWeek = displayWeek;
           if (displayWeek > 18) {
-            if (displayWeek === 22) scheduleWeek = 5; // Super Bowl is ESPN week 5
+            if (displayWeek === 23) scheduleWeek = 5; // Super Bowl is ESPN week 5
             else scheduleWeek = displayWeek - 18;
           }
           
@@ -707,11 +707,12 @@ export default function LeagueDetail() {
     return null;
   }
 
-  // Generate weeks from league start through end of playoffs (week 22 = Super Bowl)
+  // Generate weeks from league start through end of playoffs (week 23 = Super Bowl)
+  // Skip week 22 (Pro Bowl - no survivor picks)
   const weeks = Array.from(
-    { length: 22 - league.startWeek + 1 }, 
+    { length: 23 - league.startWeek + 1 }, 
     (_, i) => league.startWeek + i
-  );
+  ).filter(w => w !== 22); // Skip Pro Bowl week
 
   // Helper to get week label for display
   const getWeekLabel = (week) => {
@@ -719,7 +720,7 @@ export default function LeagueDetail() {
     if (week === 19) return 'Wild Card';
     if (week === 20) return 'Divisional';
     if (week === 21) return 'Conference';
-    if (week === 22) return 'Super Bowl';
+    if (week === 23) return 'Super Bowl';
     return `Week ${week}`;
   };
 
@@ -843,7 +844,7 @@ export default function LeagueDetail() {
                 <p className="text-lg sm:text-xl font-semibold text-white">
                   {currentWeek <= 18 
                     ? `${Math.max(0, 18 - currentWeek + 1)}+4`
-                    : Math.max(0, 22 - currentWeek + 1)
+                    : Math.max(0, 23 - currentWeek + 1)
                   }
                 </p>
               </div>
@@ -1066,12 +1067,12 @@ export default function LeagueDetail() {
                 week === 19 ? 'WC' : 
                 week === 20 ? 'DIV' : 
                 week === 21 ? 'CONF' : 
-                week === 22 ? 'SB' : week;
+                week === 23 ? 'SB' : week;
               const weekFullLabel = week <= 18 ? `Week ${week}` : 
                 week === 19 ? 'Wild Card' : 
                 week === 20 ? 'Divisional' : 
                 week === 21 ? 'Conference' : 
-                week === 22 ? 'Super Bowl' : `Week ${week}`;
+                week === 23 ? 'Super Bowl' : `Week ${week}`;
               
               return (
                 <button
@@ -1096,8 +1097,8 @@ export default function LeagueDetail() {
           </div>
 
           <button
-            onClick={() => handleWeekChange(Math.min(22, selectedWeek + 1))}
-            disabled={selectedWeek >= 22}
+            onClick={() => handleWeekChange(Math.min(23, selectedWeek + 1))}
+            disabled={selectedWeek >= 23}
             className="p-2 sm:p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
           >
             <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -1834,7 +1835,7 @@ export default function LeagueDetail() {
                   className={`flex-shrink-0 flex flex-col items-center p-3 rounded-xl w-24 h-28 snap-start ${bgClass} ${isCurrent ? 'ring-2 ring-emerald-500' : ''}`}
                 >
                   <span className="text-xs text-white/50 mb-2 text-center whitespace-nowrap">
-                    {week <= 18 ? `Week ${week}` : week === 19 ? 'Wild Card' : week === 20 ? 'Divisional' : week === 21 ? 'Conf' : week === 22 ? 'Super Bowl' : `Week ${week}`}
+                    {week <= 18 ? `Week ${week}` : week === 19 ? 'Wild Card' : week === 20 ? 'Divisional' : week === 21 ? 'Conf' : week === 23 ? 'Super Bowl' : `Week ${week}`}
                     {isDoublePick && <span className="text-orange-400 ml-1">×2</span>}
                   </span>
                   
@@ -1981,10 +1982,10 @@ export default function LeagueDetail() {
                     <button
                       onClick={() => setSettings({ 
                         ...settings, 
-                        doublePickWeeks: Array.from({ length: 22 - league.startWeek + 1 }, (_, i) => league.startWeek + i)
+                        doublePickWeeks: Array.from({ length: 23 - league.startWeek + 1 }, (_, i) => league.startWeek + i).filter(w => w !== 22)
                       })}
                       className={`px-2 py-1 text-xs rounded-lg transition-all ${
-                        settings.doublePickWeeks.length === (22 - league.startWeek + 1)
+                        settings.doublePickWeeks.length === Array.from({ length: 23 - league.startWeek + 1 }, (_, i) => league.startWeek + i).filter(w => w !== 22).length
                           ? 'bg-nfl-blue text-white'
                           : 'bg-white/10 text-white/60 hover:bg-white/15'
                       }`}
@@ -1994,7 +1995,7 @@ export default function LeagueDetail() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {Array.from({ length: 22 - league.startWeek + 1 }, (_, i) => league.startWeek + i).map(weekNum => (
+                  {Array.from({ length: 23 - league.startWeek + 1 }, (_, i) => league.startWeek + i).filter(w => w !== 22).map(weekNum => (
                     <button
                       key={weekNum}
                       onClick={() => {
@@ -2232,7 +2233,7 @@ export default function LeagueDetail() {
                               : 'bg-white/10 text-white/60 hover:bg-white/20'
                           }`}
                         >
-                          {week <= 18 ? week : week === 19 ? 'WC' : week === 20 ? 'DIV' : week === 21 ? 'CONF' : week === 22 ? 'SB' : week}
+                          {week <= 18 ? week : week === 19 ? 'WC' : week === 20 ? 'DIV' : week === 21 ? 'CONF' : week === 23 ? 'SB' : week}
                         </button>
                       ))}
                     </div>
@@ -2332,7 +2333,7 @@ export default function LeagueDetail() {
                 <div className="flex flex-wrap gap-2">
                   {weeks.map(week => {
                     const weekIsDouble = (league.doublePickWeeks || []).includes(week);
-                    const shortLabel = week <= 18 ? week : week === 19 ? 'WC' : week === 20 ? 'DIV' : week === 21 ? 'CONF' : week === 22 ? 'SB' : week;
+                    const shortLabel = week <= 18 ? week : week === 19 ? 'WC' : week === 20 ? 'DIV' : week === 21 ? 'CONF' : week === 23 ? 'SB' : week;
                     return (
                       <button
                         key={week}

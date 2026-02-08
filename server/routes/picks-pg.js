@@ -13,9 +13,9 @@ const getEspnWeekParams = (week) => {
   if (week <= 18) {
     return { espnWeek: week, seasonType: 2 };
   }
-  // Playoff weeks: 19=Wild Card(1), 20=Divisional(2), 21=Conference(3), 22=Super Bowl(5)
-  // Note: ESPN week 4 is Pro Bowl, we skip it
-  if (week === 22) {
+  // Playoff weeks: 19=Wild Card(1), 20=Divisional(2), 21=Conference(3), 23=Super Bowl(5)
+  // Note: Week 22 is Pro Bowl - skip it (no survivor picks)
+  if (week === 23) {
     return { espnWeek: 5, seasonType: 3 }; // Super Bowl is week 5 in ESPN
   }
   return { espnWeek: week - 18, seasonType: 3 };
@@ -66,6 +66,11 @@ router.post('/', authMiddleware, async (req, res) => {
 
     if (week < league.start_week) {
       return res.status(400).json({ error: `Picks start from week ${league.start_week}` });
+    }
+
+    // Validate max week (23 = Super Bowl)
+    if (week > 23) {
+      return res.status(400).json({ error: 'Invalid week. Season ends at Super Bowl (week 23)' });
     }
 
     // Check if this is a double pick week

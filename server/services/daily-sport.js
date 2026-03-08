@@ -87,7 +87,7 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
           (competitor.statistics || []).forEach(s => {
             seasonStats[s.name] = {
               displayValue: s.displayValue,
-              rank: s.rankDisplayValue || null
+              rank: s.rank ?? s.rankDisplayValue ?? null
             };
           });
 
@@ -143,7 +143,7 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
    */
   const getTeams = async () => {
     try {
-      const data = await fetchWithCache(`${apiBase}/teams`, TEAMS_CACHE_TTL);
+      const data = await fetchWithCache(`${apiBase}/teams?limit=500`, TEAMS_CACHE_TTL);
       const teams = data.sports?.[0]?.leagues?.[0]?.teams;
       if (!teams) {
         console.warn(`[${sportName}] No teams found in API response`);
@@ -379,9 +379,6 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
   let leagueRankingsCacheTime = 0;
 
   const getLeagueStatRankings = async (statKey) => {
-    // NCAAB has 350+ teams — not feasible to fetch all
-    if (sportName === 'NCAAB') return null;
-
     try {
       // Fetch ALL teams' stats (cached as a batch for 1 hour)
       if (!leagueRankingsCache || Date.now() - leagueRankingsCacheTime > LEAGUE_RANKINGS_CACHE_TTL) {
@@ -410,11 +407,165 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
         console.log(`[${sportName}] League rankings cached for ${leagueRankingsCache.length} teams`);
       }
 
+      // Stats where a lower value is better (defensive/error metrics)
+      const lowerIsBetterStats = new Set([
+        'avgPointsAgainst',
+        'turnovers',
+        'avgTurnovers',
+        'earnedRunAverage',
+        'ERA',
+        'errors',
+      ]);
+      const lowerIsBetter = lowerIsBetterStats.has(statKey);
+
+      const STAT_KEY_ALIASES = {
+        ytdGoals: ['goals'],
+        threePointPct: ['threePointFieldGoalPct'],
+        threePointFieldGoalPct: ['threePointPct'],
+        errors: ['totalErrors', 'teamErrors'],
+      };
+
+      const getStatFromMap = (statsMap, key) => {
+        const candidates = [key, ...(STAT_KEY_ALIASES[key] || [])];
+        for (const candidate of candidates) {
+          if (statsMap?.[candidate]) return statsMap[candidate];
+        }
+        return null;
+      };
+
+      // Parse rank values that may be numeric or ordinal strings (e.g. "3rd")
+      const parseRank = (rank) => {
+        if (rank === null || rank === undefined || rank === '') return null;
+        if (typeof rank === 'number' && Number.isFinite(rank)) return rank;
+        const parsed = parseInt(String(rank), 10);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+
       // Extract the requested stat from cached data
+      if (statKey === 'avgPointsAgainst') {
+        const missingComputedStat = leagueRankingsCache.some(({ statsMap }) => !getStatFromMap(statsMap, 'avgPointsAgainst'));
+        if (missingComputedStat) {
+          const season = await getCurrentSeason();
+          const year = season.season;
+
+          const parseScore = (competitor) => {
+            if (!competitor?.score && competitor?.score !== 0) return null;
+            if (typeof competitor.score === 'object') {
+              const raw = competitor.score.displayValue ?? competitor.score.value;
+              const n = parseInt(raw, 10);
+              return Number.isNaN(n) ? null : n;
+            }
+            const n = parseInt(competitor.score, 10);
+            return Number.isNaN(n) ? null : n;
+          };
+
+          const enriched = await Promise.all(
+            leagueRankingsCache.map(async (entry) => {
+              const teamId = String(entry.team?.id || '');
+              if (!teamId) return entry;
+              try {
+                const scheduleData = await fetchWithCache(
+                  `${apiBase}/teams/${teamId}/schedule?season=${year}`,
+                  30 * 60 * 1000
+                );
+                const events = scheduleData?.events || [];
+                let pointsAgainst = 0;
+                let gamesPlayed = 0;
+
+                events.forEach((event) => {
+                  const comp = event?.competitions?.[0];
+                  if (!comp?.status?.type?.completed) return;
+                  const teamComp = comp.competitors?.find((c) => String(c.team?.id || c.id) === teamId);
+                  const oppComp = comp.competitors?.find((c) => String(c.team?.id || c.id) !== teamId);
+                  const oppScore = parseScore(oppComp);
+                  const teamScore = parseScore(teamComp);
+                  if (oppScore === null || teamScore === null) return;
+                  pointsAgainst += oppScore;
+                  gamesPlayed += 1;
+                });
+
+                if (gamesPlayed > 0) {
+                  const avg = pointsAgainst / gamesPlayed;
+                  entry.statsMap.avgPointsAgainst = {
+                    value: avg,
+                    displayValue: avg.toFixed(1),
+                    rank: null,
+                    rankDisplayValue: null
+                  };
+                }
+              } catch {
+                // Keep entry as-is if schedule fetch fails.
+              }
+              return entry;
+            })
+          );
+
+          leagueRankingsCache = enriched;
+          leagueRankingsCacheTime = Date.now();
+        }
+      }
+
+      if (statKey === 'errors') {
+        const missingComputedStat = leagueRankingsCache.some(({ statsMap }) => !getStatFromMap(statsMap, 'errors'));
+        if (missingComputedStat) {
+          const season = await getCurrentSeason();
+          const year = season.season;
+
+          const parseErrors = (competitor) => {
+            const raw = competitor?.errors;
+            const n = parseInt(raw, 10);
+            return Number.isNaN(n) ? null : n;
+          };
+
+          const enriched = await Promise.all(
+            leagueRankingsCache.map(async (entry) => {
+              const teamId = String(entry.team?.id || '');
+              if (!teamId) return entry;
+              try {
+                const scheduleData = await fetchWithCache(
+                  `${apiBase}/teams/${teamId}/schedule?season=${year}`,
+                  30 * 60 * 1000
+                );
+                const events = scheduleData?.events || [];
+                let totalErrors = 0;
+                let gamesPlayed = 0;
+
+                events.forEach((event) => {
+                  const comp = event?.competitions?.[0];
+                  if (!comp?.status?.type?.completed) return;
+                  const teamComp = comp.competitors?.find((c) => String(c.team?.id || c.id) === teamId);
+                  const teamErrors = parseErrors(teamComp);
+                  if (teamErrors === null) return;
+                  totalErrors += teamErrors;
+                  gamesPlayed += 1;
+                });
+
+                if (gamesPlayed > 0) {
+                  const avg = totalErrors / gamesPlayed;
+                  entry.statsMap.errors = {
+                    value: avg,
+                    displayValue: avg.toFixed(1),
+                    rank: null,
+                    rankDisplayValue: null
+                  };
+                }
+              } catch {
+                // Keep entry as-is if schedule fetch fails.
+              }
+              return entry;
+            })
+          );
+
+          leagueRankingsCache = enriched;
+          leagueRankingsCacheTime = Date.now();
+        }
+      }
+
       const rankings = leagueRankingsCache
         .map(({ team, statsMap }) => {
-          const stat = statsMap[statKey];
+          const stat = getStatFromMap(statsMap, statKey);
           if (!stat) return null;
+          const numericValue = Number.isFinite(stat.value) ? stat.value : parseFloat(stat.displayValue);
           return {
             team: {
               id: team.id,
@@ -425,12 +576,61 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
             },
             value: stat.value,
             displayValue: stat.displayValue,
-            rank: stat.rank,
-            rankDisplayValue: stat.rankDisplayValue
+            rank: parseRank(stat.rank ?? stat.rankDisplayValue),
+            rankDisplayValue: stat.rankDisplayValue,
+            numericValue: Number.isFinite(numericValue) ? numericValue : null
           };
         })
         .filter(Boolean)
-        .sort((a, b) => (a.rank || 999) - (b.rank || 999));
+        .sort((a, b) => {
+          const aRank = parseRank(a.rank);
+          const bRank = parseRank(b.rank);
+
+          // If both teams have ESPN-provided rank, trust it.
+          if (aRank !== null && bRank !== null) return aRank - bRank;
+          // Otherwise, sort by value.
+          if (a.numericValue !== null && b.numericValue !== null) {
+            return lowerIsBetter
+              ? a.numericValue - b.numericValue
+              : b.numericValue - a.numericValue;
+          }
+          if (a.numericValue !== null) return -1;
+          if (b.numericValue !== null) return 1;
+          return a.team.name.localeCompare(b.team.name);
+        });
+
+      // If ESPN rank is missing, compute rank from sorted values.
+      let lastValue = null;
+      let computedRank = 0;
+      rankings.forEach((item, idx) => {
+        if (item.rank === null || item.rank === undefined || item.rank === '') {
+          if (item.numericValue !== null && lastValue !== null && item.numericValue === lastValue) {
+            item.rank = computedRank;
+          } else {
+            computedRank = idx + 1;
+            item.rank = computedRank;
+          }
+          lastValue = item.numericValue;
+        } else {
+          const normalized = parseRank(item.rank);
+          item.rank = normalized !== null ? normalized : (idx + 1);
+          lastValue = item.numericValue;
+          computedRank = item.rank;
+        }
+
+        if (!item.rankDisplayValue && item.rank) {
+          const n = item.rank;
+          const suffix = n % 10 === 1 && n % 100 !== 11
+            ? 'st'
+            : n % 10 === 2 && n % 100 !== 12
+              ? 'nd'
+              : n % 10 === 3 && n % 100 !== 13
+                ? 'rd'
+                : 'th';
+          item.rankDisplayValue = `${n}${suffix}`;
+        }
+        delete item.numericValue;
+      });
 
       return rankings;
     } catch (error) {

@@ -15,6 +15,45 @@ const SPORT_TABS = [
   { id: 'ncaab', name: 'NCAAB', implemented: true, scheduleType: 'daily' },
 ];
 
+const SEASON_STATS_CONFIG = {
+  nfl: [
+    { key: 'avgPointsFor', label: 'PPG', source: 'game' },
+    { key: 'avgPointsAgainst', label: 'Opp PPG', source: 'game' },
+  ],
+  nba: [
+    { key: 'avgPoints', label: 'PPG' },
+    { key: 'avgPointsAgainst', label: 'Opp PPG', source: 'details' },
+    { key: 'fieldGoalPct', label: 'FG%' },
+    { key: 'threePointFieldGoalPct', label: '3PT%' },
+    { key: 'avgRebounds', label: 'RPG' },
+    { key: 'avgAssists', label: 'APG' },
+  ],
+  ncaab: [
+    { key: 'avgPoints', label: 'PPG' },
+    { key: 'avgPointsAgainst', label: 'Opp PPG', source: 'details' },
+    { key: 'fieldGoalPct', label: 'FG%' },
+    { key: 'threePointFieldGoalPct', label: '3PT%' },
+    { key: 'avgRebounds', label: 'RPG' },
+    { key: 'avgAssists', label: 'APG' },
+  ],
+  mlb: [
+    { key: 'runs', label: 'Runs' },
+    { key: 'avg', label: 'AVG' },
+    { key: 'ERA', label: 'ERA' },
+    { key: 'hits', label: 'Hits' },
+    { key: 'saves', label: 'SV' },
+    { key: 'errors', label: 'Errors' },
+  ],
+  nhl: [
+    { key: 'goals', label: 'Goals' },
+    { key: 'ytdGoals', label: 'Season GF' },
+    { key: 'assists', label: 'Assists' },
+    { key: 'saves', label: 'Saves' },
+    { key: 'savePct', label: 'SV%' },
+    { key: 'points', label: 'Points' },
+  ],
+};
+
 // Color-code rankings: green (top tier), amber (mid), red (bottom)
 const getRankColor = (rankStr) => {
   if (!rankStr) return 'text-white/50';
@@ -51,6 +90,8 @@ export default function Schedule() {
   });
   const [dailySchedule, setDailySchedule] = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [leagueRanksByStat, setLeagueRanksByStat] = useState({});
+  const [leagueRanksLoaded, setLeagueRanksLoaded] = useState(false);
   
   const weekTabsRef = useRef(null);
   const weekButtonRefs = useRef({});
@@ -208,6 +249,56 @@ export default function Schedule() {
     loadDailySchedule();
     return () => { cancelled = true; };
   }, [selectedSport, selectedDate]);
+
+  // Preload league-wide rankings for season-average stat labels shown on cards.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLeagueRanks = async () => {
+      setLeagueRanksLoaded(false);
+      const config = SEASON_STATS_CONFIG[selectedSport] || SEASON_STATS_CONFIG.nfl;
+      let statKeys = [...new Set(config.map((s) => s.key).filter(Boolean))];
+      // NCAAB has a much larger team pool; only prefetch Opp PPG rank (missing from scoreboard metadata).
+      if (selectedSport === 'ncaab') {
+        statKeys = statKeys.filter((k) => k === 'avgPointsAgainst');
+      }
+
+      if (statKeys.length === 0) {
+        setLeagueRanksByStat({});
+        setLeagueRanksLoaded(true);
+        return;
+      }
+
+      const entries = await Promise.all(
+        statKeys.map(async (statKey) => {
+          try {
+            const data = await scheduleAPI.getStatRankings(selectedSport, statKey);
+            if (!data?.success || !Array.isArray(data.rankings)) return [statKey, null];
+            const teamRankMap = data.rankings.reduce((acc, item) => {
+              if (item?.team?.id && item?.rank) acc[String(item.team.id)] = item.rankDisplayValue || String(item.rank);
+              return acc;
+            }, {});
+            return [statKey, teamRankMap];
+          } catch {
+            return [statKey, null];
+          }
+        })
+      );
+
+      if (cancelled) return;
+      const next = {};
+      entries.forEach(([key, value]) => {
+        if (key && value) next[key] = value;
+      });
+      setLeagueRanksByStat(next);
+      setLeagueRanksLoaded(true);
+    };
+
+    loadLeagueRanks();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSport]);
 
   // Handle sport tab change
   const handleSportChange = (sportId) => {
@@ -552,47 +643,6 @@ export default function Schedule() {
 
         {/* Team Season Stats — Sport-specific */}
         {(() => {
-          // Sport-specific stat configs: which scoreboard stats to show
-          // Keys map to ESPN competitor.statistics[].name
-          const SEASON_STATS_CONFIG = {
-            nfl: [
-              { key: 'avgPointsFor', label: 'PPG', source: 'game' },
-              { key: 'avgPointsAgainst', label: 'Opp PPG', source: 'game' },
-            ],
-            nba: [
-              { key: 'avgPoints', label: 'PPG' },
-              { key: 'avgPointsAgainst', label: 'Opp PPG', source: 'details' },
-              { key: 'fieldGoalPct', label: 'FG%' },
-              { key: 'threePointFieldGoalPct', label: '3PT%' },
-              { key: 'avgRebounds', label: 'RPG' },
-              { key: 'avgAssists', label: 'APG' },
-            ],
-            ncaab: [
-              { key: 'avgPoints', label: 'PPG' },
-              { key: 'avgPointsAgainst', label: 'Opp PPG', source: 'details' },
-              { key: 'fieldGoalPct', label: 'FG%' },
-              { key: 'threePointFieldGoalPct', label: '3PT%' },
-              { key: 'avgRebounds', label: 'RPG' },
-              { key: 'avgAssists', label: 'APG' },
-            ],
-            mlb: [
-              { key: 'runs', label: 'Runs' },
-              { key: 'avg', label: 'AVG' },
-              { key: 'ERA', label: 'ERA' },
-              { key: 'hits', label: 'Hits' },
-              { key: 'saves', label: 'SV' },
-              { key: 'errors', label: 'Errors' },
-            ],
-            nhl: [
-              { key: 'goals', label: 'Goals' },
-              { key: 'ytdGoals', label: 'Season GF' },
-              { key: 'assists', label: 'Assists' },
-              { key: 'saves', label: 'Saves' },
-              { key: 'savePct', label: 'SV%' },
-              { key: 'points', label: 'Points' },
-            ],
-          };
-
           const config = SEASON_STATS_CONFIG[selectedSport] || SEASON_STATS_CONFIG.nfl;
 
           // Build stat rows for a team from scoreboard + details data
@@ -603,13 +653,15 @@ export default function Schedule() {
             const lastTen = details?.seasonAverages?.[side]?.lastTen;
 
             const stats = config.map(({ key, label, source }) => {
+              const leagueRank = leagueRanksByStat[key]?.[String(team?.id)] || null;
+              const fallbackRank = leagueRanksLoaded ? scoreboard[key]?.rank || null : null;
               // NFL embeds avgPointsFor/avgPointsAgainst directly on team object
-              if (source === 'game') return { label, value: team?.[key] || '-', rank: scoreboard[key]?.rank || null, statKey: key };
+              if (source === 'game') return { label, value: team?.[key] || '-', rank: leagueRank || fallbackRank, statKey: key };
               // Details-only stats (like opp PPG from boxscore)
-              if (source === 'details') return { label, value: detailStats[key]?.displayValue || '-', rank: scoreboard[key]?.rank || null, statKey: key };
+              if (source === 'details') return { label, value: detailStats[key]?.displayValue || '-', rank: leagueRank || fallbackRank, statKey: key };
               // Default: try scoreboard stats first, then detail stats
               const val = scoreboard[key]?.displayValue || detailStats[key]?.displayValue;
-              const rank = scoreboard[key]?.rank;
+              const rank = leagueRank || fallbackRank;
               return { label, value: val || '-', rank, statKey: key };
             });
 
@@ -623,7 +675,7 @@ export default function Schedule() {
           const hasData = [...awayData.stats, ...homeData.stats].some(s => s.value !== '-');
           if (!hasData && !awayData.streak && !homeData.streak) return null;
 
-          const canClickStat = selectedSport !== 'ncaab';
+          const canClickStat = true;
 
           const TeamSeasonColumn = ({ team, data }) => (
             <div className="bg-white/5 rounded-lg p-3">

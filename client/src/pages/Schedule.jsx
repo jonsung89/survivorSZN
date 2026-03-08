@@ -64,6 +64,71 @@ const getRankColor = (rankStr) => {
   return 'text-red-400';
 };
 
+const TeamRankBadge = ({ team }) => {
+  const current = Number(team?.ranking?.current);
+  // ESPN uses high sentinel ranks (commonly 99) for effectively unranked teams.
+  if (!Number.isFinite(current) || current <= 0 || current >= 99) return null;
+  const movement = team?.ranking?.movement;
+
+  let movementText = '';
+  let movementClass = 'text-white/50';
+  if (typeof movement === 'number') {
+    if (movement > 0) {
+      movementText = `▲${movement}`;
+      movementClass = 'text-emerald-400';
+    } else if (movement < 0) {
+      movementText = `▼${Math.abs(movement)}`;
+      movementClass = 'text-red-400';
+    } else {
+      movementText = '—';
+      movementClass = 'text-white/40';
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 text-sm font-medium text-white/45">
+      <span>#{current}</span>
+      {movementText && <span className={movementClass}>{movementText}</span>}
+    </span>
+  );
+};
+
+const parseStandingSummary = (summary) => {
+  if (!summary) return null;
+  const m = String(summary).match(/(\d+)(?:st|nd|rd|th)\s+in\s+(.+)/i);
+  if (!m) return null;
+  const rank = parseInt(m[1], 10);
+  if (!Number.isFinite(rank)) return null;
+  return { rank, context: m[2] };
+};
+
+const parseConferenceLabelFromSummary = (summary) => {
+  if (!summary) return null;
+  const upper = String(summary).toUpperCase();
+  if (upper.includes('AFC')) return 'AFC';
+  if (upper.includes('NFC')) return 'NFC';
+  if (upper.includes('EASTERN')) return 'East';
+  if (upper.includes('WESTERN')) return 'West';
+  if (upper.includes('AL ')) return 'AL';
+  if (upper.includes('NL ')) return 'NL';
+  return null;
+};
+
+const parseDivisionLabelFromSummary = (summary) => {
+  const parsed = parseStandingSummary(summary);
+  if (!parsed?.context) return null;
+  // Examples:
+  // "Atlantic Division" -> "Atlantic"
+  // "NFC South" -> "NFC South"
+  // "AL East" -> "AL East"
+  return parsed.context.replace(/\s+Division$/i, '').trim();
+};
+
+const StandingBadge = ({ label, rank }) => {
+  if (!label || !rank) return null;
+  return <span className="text-sm font-medium text-white/45">{label} #{rank}</span>;
+};
+
 export default function Schedule() {
   const [selectedSport, setSelectedSport] = useState('nfl');
   const [season, setSeason] = useState(2024);
@@ -96,6 +161,33 @@ export default function Schedule() {
   const weekTabsRef = useRef(null);
   const weekButtonRefs = useRef({});
   const seasonDropdownRef = useRef(null);
+
+  const getTeamStandingBadges = (team) => {
+    if (!team) return [];
+    const badges = [];
+    const conf = team.standingsRanks?.conference;
+    const div = team.standingsRanks?.division;
+    const parsedSummary = parseStandingSummary(team.standingSummary);
+    const divisionLabel = parseDivisionLabelFromSummary(team.standingSummary);
+    const summaryDivRank = parsedSummary && /division/i.test(parsedSummary.context) ? parsedSummary.rank : null;
+
+    if (selectedSport === 'nba') {
+      if (conf?.rank) badges.push({ label: conf.label || 'Conf', rank: conf.rank });
+      if (div?.rank || summaryDivRank) badges.push({ label: divisionLabel || 'Div', rank: div?.rank || summaryDivRank });
+    } else if (selectedSport === 'mlb') {
+      if (conf?.rank) badges.push({ label: conf.label || 'Lg', rank: conf.rank });
+      if (div?.rank || summaryDivRank) badges.push({ label: divisionLabel || 'Div', rank: div?.rank || summaryDivRank });
+    } else if (selectedSport === 'nhl') {
+      if (conf?.rank) badges.push({ label: conf.label || 'Conf', rank: conf.rank });
+      if (summaryDivRank) badges.push({ label: divisionLabel || 'Div', rank: summaryDivRank });
+    } else if (selectedSport === 'nfl') {
+      const confLabel = parseConferenceLabelFromSummary(team.standingSummary) || conf?.label || 'Conf';
+      if (conf?.rank) badges.push({ label: confLabel, rank: conf.rank });
+      if (div?.rank) badges.push({ label: divisionLabel || 'Div', rank: div.rank });
+    }
+
+    return badges;
+  };
 
   // DatePicker component for daily sports
   const DatePicker = ({ date, onChange }) => {
@@ -890,6 +982,34 @@ export default function Schedule() {
     const hasScoringPlays = details?.scoringPlays && details.scoringPlays.length > 0;
     const hasTeamStats = details?.teamStats?.home || details?.teamStats?.away;
 
+    const formatTeamStatValue = (value) => {
+      if (!value || typeof value !== 'string') return value;
+      const m = value.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (!m) return value;
+      const made = parseInt(m[1], 10);
+      const attempts = parseInt(m[2], 10);
+      if (!Number.isFinite(made) || !Number.isFinite(attempts)) return value;
+
+      const ratio = `${made}/${attempts}`;
+      if (attempts <= 0) return ratio;
+
+      const pct = Math.round((made / attempts) * 100);
+      return `${pct}% (${ratio})`;
+    };
+
+    const renderTeamStatValue = (value, align = 'right') => {
+      if (!value || typeof value !== 'string') return <>{value || '-'}</>;
+      const m = value.match(/^(\d+)%\s+\((\d+\/\d+)\)$/);
+      if (!m) return <>{value}</>;
+
+      return (
+        <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
+          <span className="text-white">{m[1]}%</span>
+          <span className="text-white/55">({m[2]})</span>
+        </span>
+      );
+    };
+
     // Group leaders by team
     const leadersByTeam = {};
     if (hasLeaders) {
@@ -1065,15 +1185,19 @@ export default function Schedule() {
             </h4>
             <div className="space-y-1.5">
               {Object.entries(getStatLabels()).map(([statKey, label]) => {
-                const awayStat = details.teamStats.away?.[statKey];
-                const homeStat = details.teamStats.home?.[statKey];
+                const awayStat = formatTeamStatValue(details.teamStats.away?.[statKey]);
+                const homeStat = formatTeamStatValue(details.teamStats.home?.[statKey]);
                 if (!awayStat && !homeStat) return null;
 
                 return (
                   <div key={statKey} className="flex items-center text-sm">
-                    <span className="w-12 text-right font-medium text-white">{awayStat || '-'}</span>
+                    <span className="w-20 text-right font-medium whitespace-nowrap">
+                      {renderTeamStatValue(awayStat, 'right')}
+                    </span>
                     <div className="flex-1 text-center text-white/50 px-2">{label}</div>
-                    <span className="w-12 text-left font-medium text-white">{homeStat || '-'}</span>
+                    <span className="w-20 text-left font-medium whitespace-nowrap">
+                      {renderTeamStatValue(homeStat, 'left')}
+                    </span>
                   </div>
                 );
               })}
@@ -1140,6 +1264,7 @@ export default function Schedule() {
                     {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
                   </span>
                 </ClickableTeam>
+                {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
                 {isPast || isLive ? (
                   <span className={`ml-auto font-bold text-base ${
                     isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-400' : 'text-white'
@@ -1147,7 +1272,12 @@ export default function Schedule() {
                     {getScore(game.awayTeam) ?? 0}
                   </span>
                 ) : (
-                  <span className="ml-auto text-white/50 text-sm">{game.awayTeam?.record}</span>
+                  <div className="ml-auto flex items-center gap-2 text-sm">
+                    {game.awayTeam?.record && <span className="text-sm font-medium text-white/45">{game.awayTeam.record}</span>}
+                    {getTeamStandingBadges(game.awayTeam).map((b, i) => (
+                      <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
+                    ))}
+                  </div>
                 )}
               </div>
 
@@ -1174,6 +1304,7 @@ export default function Schedule() {
                     {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
                   </span>
                 </ClickableTeam>
+                {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
                 {isPast || isLive ? (
                   <span className={`ml-auto font-bold text-base ${
                     isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-400' : 'text-white'
@@ -1181,7 +1312,12 @@ export default function Schedule() {
                     {getScore(game.homeTeam) ?? 0}
                   </span>
                 ) : (
-                  <span className="ml-auto text-white/50 text-sm">{game.homeTeam?.record}</span>
+                  <div className="ml-auto flex items-center gap-2 text-sm">
+                    {game.homeTeam?.record && <span className="text-sm font-medium text-white/45">{game.homeTeam.record}</span>}
+                    {getTeamStandingBadges(game.homeTeam).map((b, i) => (
+                      <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
@@ -1254,8 +1390,19 @@ export default function Schedule() {
                 <div className="text-white font-medium text-base truncate hover:underline">
                   {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
                 </div>
-                {game.awayTeam?.record && (
-                  <div className="text-xs text-white/40">{game.awayTeam.record}</div>
+                {(game.awayTeam?.record ||
+                  game.awayTeam?.standingSummary ||
+                  getTeamStandingBadges(game.awayTeam).length > 0 ||
+                  (selectedSport === 'ncaab' && game.awayTeam?.ranking?.current)) && (
+                  <div className="mt-0.5 flex items-center gap-2 text-sm">
+                    {game.awayTeam?.record && (
+                      <span className="text-sm font-medium text-white/45">{game.awayTeam.record}</span>
+                    )}
+                    {getTeamStandingBadges(game.awayTeam).map((b, i) => (
+                      <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
+                    ))}
+                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
+                  </div>
                 )}
               </ClickableTeam>
             </div>
@@ -1287,8 +1434,19 @@ export default function Schedule() {
                 <div className="text-white font-medium text-base truncate hover:underline">
                   {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
                 </div>
-                {game.homeTeam?.record && (
-                  <div className="text-xs text-white/40">{game.homeTeam.record}</div>
+                {(game.homeTeam?.record ||
+                  game.homeTeam?.standingSummary ||
+                  getTeamStandingBadges(game.homeTeam).length > 0 ||
+                  (selectedSport === 'ncaab' && game.homeTeam?.ranking?.current)) && (
+                  <div className="mt-0.5 flex items-center justify-end gap-2 text-sm">
+                    {game.homeTeam?.record && (
+                      <span className="text-sm font-medium text-white/45">{game.homeTeam.record}</span>
+                    )}
+                    {getTeamStandingBadges(game.homeTeam).map((b, i) => (
+                      <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
+                    ))}
+                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
+                  </div>
                 )}
               </ClickableTeam>
               <ClickableTeam team={game.homeTeam}>

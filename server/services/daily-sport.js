@@ -5,8 +5,105 @@ const { fetchWithCache } = require('./espn');
 
 const TEAMS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const GAME_DETAILS_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const TEAM_CONTEXT_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
 function createDailySportService({ apiBase, sportName, parseGameDetails, teamStatsConfig }) {
+  // Track previous team ranks to compute movement between schedule refreshes.
+  let teamRankSnapshotCache = new Map();
+  let standingsRanksCache = null;
+  let standingsRanksCacheTime = 0;
+
+  const CORE_STANDINGS_CONFIG = {
+    NBA: {
+      sport: 'basketball',
+      league: 'nba',
+      conferenceGroups: [
+        { id: 5, label: 'East' },
+        { id: 6, label: 'West' },
+      ],
+      divisionGroups: [1, 2, 4, 9, 10, 11],
+    },
+    MLB: {
+      sport: 'baseball',
+      league: 'mlb',
+      conferenceGroups: [
+        { id: 7, label: 'AL' },
+        { id: 8, label: 'NL' },
+      ],
+      divisionGroups: [1, 2, 3, 4, 5, 6],
+    },
+    NHL: {
+      sport: 'hockey',
+      league: 'nhl',
+      conferenceGroups: [
+        { id: 7, label: 'East' },
+        { id: 8, label: 'West' },
+      ],
+      divisionGroups: [],
+    },
+  };
+
+  const parseCoreTeamId = (teamRef) => {
+    if (!teamRef) return null;
+    const match = String(teamRef).match(/\/teams\/(\d+)/);
+    return match?.[1] ? String(match[1]) : null;
+  };
+
+  const fetchStandingsGroup = async (cfg, season, groupId) => {
+    const url = `https://sports.core.api.espn.com/v2/sports/${cfg.sport}/leagues/${cfg.league}/seasons/${season}/types/2/groups/${groupId}/standings/0?lang=en&region=us`;
+    const data = await fetchWithCache(url, TEAM_CONTEXT_CACHE_TTL);
+    return Array.isArray(data?.standings) ? data.standings : [];
+  };
+
+  const getStandingsRankMaps = async (season) => {
+    const cfg = CORE_STANDINGS_CONFIG[sportName];
+    if (!cfg) return new Map();
+
+    if (standingsRanksCache && Date.now() - standingsRanksCacheTime < TEAM_CONTEXT_CACHE_TTL) {
+      return standingsRanksCache;
+    }
+
+    const rankMap = new Map();
+
+    try {
+      for (const group of cfg.conferenceGroups || []) {
+        const entries = await fetchStandingsGroup(cfg, season, group.id);
+        entries.forEach((entry, idx) => {
+          const teamId = parseCoreTeamId(entry?.team?.$ref);
+          if (!teamId) return;
+          const current = rankMap.get(teamId) || {};
+          const rank = entries.length - idx; // ESPN core standings are typically listed worst -> best
+          rankMap.set(teamId, {
+            ...current,
+            conference: { rank, label: group.label },
+          });
+        });
+      }
+
+      for (const groupId of cfg.divisionGroups || []) {
+        const entries = await fetchStandingsGroup(cfg, season, groupId);
+        entries.forEach((entry, idx) => {
+          const teamId = parseCoreTeamId(entry?.team?.$ref);
+          if (!teamId) return;
+          const current = rankMap.get(teamId) || {};
+          const rank = entries.length - idx; // ESPN core standings are typically listed worst -> best
+          // Keep first hit for division rank; team should only appear in one division group.
+          if (!current.division) {
+            rankMap.set(teamId, {
+              ...current,
+              division: { rank },
+            });
+          }
+        });
+      }
+    } catch (error) {
+      console.warn(`[${sportName}] standings rank map unavailable:`, error.message);
+    }
+
+    standingsRanksCache = rankMap;
+    standingsRanksCacheTime = Date.now();
+    return rankMap;
+  };
 
   /**
    * Get current season info from ESPN scoreboard (no date param = today)
@@ -52,8 +149,42 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
       }
 
       console.log(`[${sportName}] Found ${data.events.length} games for ${dateStr}`);
+      const currentSeason = await getCurrentSeason();
+      const standingsRanksMap = await getStandingsRankMaps(currentSeason.season);
 
-      return data.events.map(event => {
+      // Fetch lightweight per-team context once (standing summary, etc.)
+      const uniqueTeamIds = [
+        ...new Set(
+          data.events.flatMap((event) =>
+            (event.competitions?.[0]?.competitors || [])
+              .map((c) => c?.team?.id)
+              .filter(Boolean)
+          )
+        ),
+      ];
+      const teamContextEntries = await Promise.all(
+        uniqueTeamIds.map(async (teamId) => {
+          try {
+            const teamData = await fetchWithCache(
+              `${apiBase}/teams/${teamId}`,
+              TEAM_CONTEXT_CACHE_TTL
+            );
+            return [
+              String(teamId),
+              {
+                standingSummary: teamData?.team?.standingSummary || null,
+              },
+            ];
+          } catch {
+            return [String(teamId), { standingSummary: null }];
+          }
+        })
+      );
+      const teamContextMap = new Map(teamContextEntries);
+
+      const prevRankSnapshot = new Map(teamRankSnapshotCache);
+      const nextRankSnapshot = new Map(teamRankSnapshotCache);
+      const games = data.events.map(event => {
         const competition = event.competitions?.[0];
         const homeCompetitor = competition?.competitors?.find(c => c.homeAway === 'home');
         const awayCompetitor = competition?.competitors?.find(c => c.homeAway === 'away');
@@ -80,6 +211,7 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
 
         const buildTeamData = (competitor) => {
           if (!competitor?.team) return null;
+          const teamId = String(competitor.team.id);
 
           // Extract season statistics from scoreboard competitor data
           // For upcoming games, these are season averages; for in-progress, game stats
@@ -91,8 +223,20 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
             };
           });
 
+          const currentRankRaw = competitor.curatedRank?.current;
+          const parsedCurrentRank = parseInt(currentRankRaw, 10);
+          const currentRank = Number.isNaN(parsedCurrentRank) ? null : parsedCurrentRank;
+          const previousRank = currentRank !== null ? (prevRankSnapshot.get(teamId) ?? null) : null;
+          const movement = (currentRank !== null && previousRank !== null)
+            ? previousRank - currentRank
+            : null;
+
+          if (currentRank !== null) nextRankSnapshot.set(teamId, currentRank);
+          const teamContext = teamContextMap.get(teamId) || {};
+          const standingsRanks = standingsRanksMap.get(teamId) || null;
+
           return {
-            id: String(competitor.team.id),
+            id: teamId,
             name: competitor.team.displayName || competitor.team.name,
             abbreviation: competitor.team.abbreviation,
             logo: competitor.team.logo,
@@ -100,6 +244,13 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
             alternateColor: competitor.team.alternateColor ? `#${competitor.team.alternateColor}` : null,
             score: parseScore(competitor),
             record: getRecord(competitor),
+            standingSummary: teamContext.standingSummary || null,
+            standingsRanks,
+            ranking: {
+              current: currentRank,
+              previous: previousRank,
+              movement
+            },
             seasonStats
           };
         };
@@ -132,6 +283,8 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
           odds: parseOdds()
         };
       });
+      teamRankSnapshotCache = nextRankSnapshot;
+      return games;
     } catch (error) {
       console.error(`[${sportName}] getScheduleByDate error:`, error.message);
       return [];

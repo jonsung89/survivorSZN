@@ -28,12 +28,17 @@ const clearCache = () => {
   cache.clear();
   leagueRankingsCache = null;
   leagueRankingsCacheTime = 0;
+  standingsRanksCache = null;
+  standingsRanksCacheTime = 0;
 };
 
 // League-wide rankings cache (longer TTL since rankings don't change often)
 let leagueRankingsCache = null;
 let leagueRankingsCacheTime = 0;
 const RANKINGS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+let standingsRanksCache = null;
+let standingsRanksCacheTime = 0;
+const STANDINGS_RANKS_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
 const fetchWithCache = async (url, ttl = CACHE_TTL) => {
   const cached = cache.get(url);
@@ -58,6 +63,73 @@ const fetchWithCache = async (url, ttl = CACHE_TTL) => {
     }
     throw error;
   }
+};
+
+const parseCoreTeamId = (teamRef) => {
+  if (!teamRef) return null;
+  const match = String(teamRef).match(/\/teams\/(\d+)/);
+  return match?.[1] ? String(match[1]) : null;
+};
+
+const getStandingsRanksMap = async (season) => {
+  if (standingsRanksCache && Date.now() - standingsRanksCacheTime < STANDINGS_RANKS_CACHE_TTL) {
+    return standingsRanksCache;
+  }
+
+  const rankMap = new Map();
+  const conferenceGroups = [
+    { id: 7 },
+    { id: 8 },
+  ];
+  const divisionGroups = [1, 3, 4, 6, 10, 11, 12, 13];
+
+  const fetchGroup = async (groupId) => {
+    const url = `https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${season}/types/2/groups/${groupId}/standings/0?lang=en&region=us`;
+    const data = await fetchWithCache(url, STANDINGS_RANKS_CACHE_TTL);
+    return Array.isArray(data?.standings) ? data.standings : [];
+  };
+
+  try {
+    for (const group of conferenceGroups) {
+      const entries = await fetchGroup(group.id);
+      entries.forEach((entry, idx) => {
+        const teamId = parseCoreTeamId(entry?.team?.$ref);
+        if (!teamId) return;
+        const current = rankMap.get(teamId) || {};
+        const stats = entry?.records?.[0]?.stats || [];
+        const playoffSeed = stats.find((s) => s.name === 'playoffSeed')?.value;
+        const parsedSeed = parseInt(playoffSeed, 10);
+        const rank = Number.isFinite(parsedSeed) ? parsedSeed : (idx + 1);
+        const confLabel = group.id === 7 ? 'NFC' : 'AFC';
+        rankMap.set(teamId, {
+          ...current,
+          conference: { groupId: group.id, label: confLabel, rank },
+        });
+      });
+    }
+
+    for (const groupId of divisionGroups) {
+      const entries = await fetchGroup(groupId);
+      entries.forEach((entry, idx) => {
+        const teamId = parseCoreTeamId(entry?.team?.$ref);
+        if (!teamId) return;
+        const current = rankMap.get(teamId) || {};
+        if (!current.division) {
+          const rank = idx + 1;
+          rankMap.set(teamId, {
+            ...current,
+            division: { rank },
+          });
+        }
+      });
+    }
+  } catch (error) {
+    console.warn('[NFL] standings rank map unavailable:', error.message);
+  }
+
+  standingsRanksCache = rankMap;
+  standingsRanksCacheTime = Date.now();
+  return rankMap;
 };
 
 // Fetch and calculate league-wide rankings for all 32 teams
@@ -594,6 +666,7 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
     
     const seasonResultsArray = await Promise.all(seasonResultsPromises);
     const seasonResultsMap = new Map(seasonResultsArray);
+    const standingsRanksMap = await getStandingsRanksMap(season);
     
     // Debug: Log summary of what we fetched
     console.log('[getWeekSchedule] === Season Results Summary ===');
@@ -707,6 +780,7 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
         const streak = getStreak(teamId);
         const seasonStats = getSeasonStats(teamId);
         const allResults = seasonResultsMap.get(teamId) || [];
+        const standingsRanks = standingsRanksMap.get(teamId) || null;
         
         // Debug: Log what we're building
         console.log(`Building team data for ${competitor.team.abbreviation} (${teamId}): PPG=${seasonStats?.avgPointsFor}, OppPPG=${seasonStats?.avgPointsAgainst}, Streak=${JSON.stringify(streak)}, Last5=${allResults.length} games`);
@@ -726,6 +800,7 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
           avgPointsFor: seasonStats?.avgPointsFor || null,
           avgPointsAgainst: seasonStats?.avgPointsAgainst || null,
           gamesPlayed: seasonStats?.gamesPlayed || null,
+          standingsRanks,
           last5: allResults.slice(-5)
         };
       };

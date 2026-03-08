@@ -305,17 +305,48 @@ function parseTeamStats(boxscore) {
   };
 
   const extractStats = (teamData) => {
-    if (!teamData?.statistics) return [];
-    const statsMap = {};
-    teamData.statistics.forEach(stat => {
-      statsMap[stat.name] = stat.displayValue;
+    if (!Array.isArray(teamData?.statistics)) return [];
+
+    const groupMap = {};
+    teamData.statistics.forEach((group) => {
+      if (!group?.name || !Array.isArray(group.stats)) return;
+      const statMap = {};
+      group.stats.forEach((s) => {
+        if (!s?.name) return;
+        statMap[s.name] = s.displayValue;
+      });
+      groupMap[group.name] = statMap;
     });
 
+    const batting = groupMap.batting || {};
+    const pitching = groupMap.pitching || {};
+    const fielding = groupMap.fielding || {};
+
+    // ESPN MLB team stats are grouped; build the flattened keys expected by frontend.
+    const flattenedStats = {
+      hits: batting.hits,
+      runs: batting.runs,
+      errors: fielding.errors,
+      leftOnBase: batting.runnersLeftOnBase,
+      atBats: batting.atBats,
+      RBIs: batting.RBIs,
+      homeRuns: batting.homeRuns,
+      stolenBases: batting.stolenBases,
+      strikeouts: batting.strikeouts,
+      walks: batting.walks,
+      avg: batting.avg,
+      earnedRuns: pitching.earnedRuns,
+      hitsAllowed: pitching.hits,
+      strikeoutsThrown: pitching.strikeouts,
+      walksAllowed: pitching.walks,
+      ERA: pitching.ERA,
+    };
+
     return STAT_NAMES
-      .filter(name => statsMap[name] !== undefined)
-      .map(name => ({
+      .filter((name) => flattenedStats[name] !== undefined && flattenedStats[name] !== null)
+      .map((name) => ({
         label: STAT_LABELS[name] || name,
-        value: statsMap[name]
+        value: flattenedStats[name]
       }));
   };
 

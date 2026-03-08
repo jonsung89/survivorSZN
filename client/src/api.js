@@ -243,6 +243,39 @@ export const nflAPI = {
   }
 };
 
+// Schedule API (multi-sport)
+export const scheduleAPI = {
+  getSeason: async (sport) => {
+    const res = await fetch(`${API_URL}/schedule/${sport}/season`);
+    return res.json();
+  },
+
+  getScheduleByDate: async (sport, date) => {
+    const res = await fetch(`${API_URL}/schedule/${sport}/date/${date}`);
+    return res.json();
+  },
+
+  getGameDetails: async (sport, gameId) => {
+    const res = await fetch(`${API_URL}/schedule/${sport}/game/${gameId}`);
+    return res.json();
+  },
+
+  getTeams: async (sport) => {
+    const res = await fetch(`${API_URL}/schedule/${sport}/teams`);
+    return res.json();
+  },
+
+  getTeamInfo: async (sport, teamId) => {
+    const res = await fetch(`${API_URL}/schedule/${sport}/team/${teamId}/info`);
+    return res.json();
+  },
+
+  getStatRankings: async (sport, statKey) => {
+    const res = await fetch(`${API_URL}/schedule/${sport}/rankings/${statKey}`);
+    return res.json();
+  },
+};
+
 // User API
 export const userAPI = {
   getOrCreateUser: async (userData) => {
@@ -346,6 +379,7 @@ export default {
   league: leagueAPI,
   picks: picksAPI,
   nfl: nflAPI,
+  schedule: scheduleAPI,
   user: userAPI,
   notification: notificationAPI,
   sports: sportsAPI

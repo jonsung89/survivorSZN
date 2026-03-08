@@ -9,6 +9,9 @@ export default {
       colors: {
         'nfl-blue': '#013369',
         'nfl-red': '#D50A0A',
+        'nba-blue': '#1D428A',
+        'mlb-blue': '#002D72',
+        'ncaab-orange': '#FF6600',
         'field-green': '#1B4D3E',
         'field-light': '#228B22',
         'turf': '#2D5A27',

@@ -1,17 +1,29 @@
 import { useState, useEffect, useRef } from 'react';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, TrendingUp, Users, Target, AlertTriangle } from 'lucide-react';
-import { nflAPI } from '../api';
+import { nflAPI, scheduleAPI } from '../api';
+import { getSportModule } from '../sports';
 import Loading from '../components/Loading';
 import TeamInfoDialog from '../components/TeamInfoDialog';
+import StatRankingDialog from '../components/StatRankingDialog';
 import { PLAYOFF_ROUNDS, BROADCAST_NETWORKS } from '../sports/nfl/constants';
 
-// All sports we want to show tabs for (even if not yet implemented)
 const SPORT_TABS = [
-  { id: 'nfl', name: 'NFL', implemented: true },
-  { id: 'nba', name: 'NBA', implemented: false },
-  { id: 'mlb', name: 'MLB', implemented: false },
-  { id: 'nhl', name: 'NHL', implemented: false },
+  { id: 'nfl', name: 'NFL', implemented: true, scheduleType: 'weekly' },
+  { id: 'nba', name: 'NBA', implemented: true, scheduleType: 'daily' },
+  { id: 'mlb', name: 'MLB', implemented: true, scheduleType: 'daily' },
+  { id: 'nhl', name: 'NHL', implemented: true, scheduleType: 'daily' },
+  { id: 'ncaab', name: 'NCAAB', implemented: true, scheduleType: 'daily' },
 ];
+
+// Color-code rankings: green (top tier), amber (mid), red (bottom)
+const getRankColor = (rankStr) => {
+  if (!rankStr) return 'text-white/50';
+  const rank = parseInt(rankStr);
+  if (isNaN(rank)) return 'text-white/50';
+  if (rank <= 10) return 'text-emerald-400';
+  if (rank <= 22) return 'text-amber-400';
+  return 'text-red-400';
+};
 
 export default function Schedule() {
   const [selectedSport, setSelectedSport] = useState('nfl');
@@ -32,10 +44,55 @@ export default function Schedule() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [teamInfoDialog, setTeamInfoDialog] = useState({ open: false, team: null });
+  const [statRankingDialog, setStatRankingDialog] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0]; // YYYY-MM-DD
+  });
+  const [dailySchedule, setDailySchedule] = useState([]);
+  const [dailyLoading, setDailyLoading] = useState(false);
   
   const weekTabsRef = useRef(null);
   const weekButtonRefs = useRef({});
   const seasonDropdownRef = useRef(null);
+
+  // DatePicker component for daily sports
+  const DatePicker = ({ date, onChange }) => {
+    const dateObj = new Date(date + 'T12:00:00'); // noon to avoid timezone issues
+    const formatted = dateObj.toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    });
+
+    const changeDate = (delta) => {
+      const d = new Date(date + 'T12:00:00');
+      d.setDate(d.getDate() + delta);
+      onChange(d.toISOString().split('T')[0]);
+    };
+
+    const isToday = date === new Date().toISOString().split('T')[0];
+
+    return (
+      <div className="flex items-center gap-2 mb-4 sm:mb-6">
+        <button onClick={() => changeDate(-1)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0">
+          <ChevronLeft className="w-5 h-5 text-white" />
+        </button>
+        <div className="flex-1 text-center">
+          <span className="text-white font-medium text-sm sm:text-base">{formatted}</span>
+        </div>
+        <button onClick={() => changeDate(1)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0">
+          <ChevronRight className="w-5 h-5 text-white" />
+        </button>
+        {!isToday && (
+          <button
+            onClick={() => onChange(new Date().toISOString().split('T')[0])}
+            className="px-3 py-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors text-white text-sm font-medium flex-shrink-0"
+          >
+            Today
+          </button>
+        )}
+      </div>
+    );
+  };
 
   // Generate season options (current year back to 2020)
   const seasonOptions = Array.from({ length: currentYear - 2019 }, (_, i) => currentYear - i);
@@ -128,6 +185,43 @@ export default function Schedule() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Load daily schedule for non-NFL sports
+  useEffect(() => {
+    const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
+    if (!sportTab || sportTab.scheduleType !== 'daily') return;
+
+    let cancelled = false;
+    const loadDailySchedule = async () => {
+      setDailyLoading(true);
+      try {
+        const result = await scheduleAPI.getScheduleByDate(selectedSport, selectedDate);
+        if (!cancelled) {
+          setDailySchedule(result.games || []);
+        }
+      } catch (error) {
+        console.error('Failed to load daily schedule:', error);
+        if (!cancelled) setDailySchedule([]);
+      }
+      if (!cancelled) setDailyLoading(false);
+    };
+
+    loadDailySchedule();
+    return () => { cancelled = true; };
+  }, [selectedSport, selectedDate]);
+
+  // Handle sport tab change
+  const handleSportChange = (sportId) => {
+    setSelectedSport(sportId);
+    setExpandedGame(null);
+    setGameDetails({});
+    setGameInjuries({});
+    // Reset date to today for daily sports
+    const sportTab = SPORT_TABS.find(s => s.id === sportId);
+    if (sportTab?.scheduleType === 'daily') {
+      setSelectedDate(new Date().toISOString().split('T')[0]);
+    }
+  };
+
   const loadSchedule = async (week, targetSeason, seasonType) => {
     setScheduleLoading(true);
     try {
@@ -186,31 +280,32 @@ export default function Schedule() {
       setExpandedGame(null);
       return;
     }
-    
+
     setExpandedGame(gameId);
-    
+
     // Fetch details if we don't have them
     if (!gameDetails[gameId]) {
       setDetailsLoading(true);
       try {
-        const details = await nflAPI.getGameDetails(gameId);
-        console.log('Game details received:', details);
+        const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
+        const details = sportTab?.scheduleType === 'daily'
+          ? await scheduleAPI.getGameDetails(selectedSport, gameId)
+          : await nflAPI.getGameDetails(gameId);
         setGameDetails(prev => ({ ...prev, [gameId]: details }));
       } catch (error) {
         console.error('Failed to load game details:', error);
-        // Set empty object so we don't keep retrying
         setGameDetails(prev => ({ ...prev, [gameId]: {} }));
       }
       setDetailsLoading(false);
     }
-    
-    // Fetch injuries if we don't have them and have team info
-    if (!gameInjuries[gameId] && game) {
+
+    // Injuries only for NFL
+    if (selectedSport === 'nfl' && !gameInjuries[gameId] && game) {
       try {
         const teamIds = [];
         if (game.homeTeam?.id) teamIds.push(game.homeTeam.id);
         if (game.awayTeam?.id) teamIds.push(game.awayTeam.id);
-        
+
         if (teamIds.length > 0) {
           const injuries = await nflAPI.getInjuriesForTeams(teamIds);
           setGameInjuries(prev => ({ ...prev, [gameId]: injuries }));
@@ -273,8 +368,13 @@ export default function Schedule() {
 
     const broadcastUpper = broadcast.toUpperCase();
 
-    for (const [key, value] of Object.entries(BROADCAST_NETWORKS)) {
-      if (broadcastUpper.includes(key)) {
+    // Get sport-specific broadcast networks
+    const sportModule = getSportModule(selectedSport);
+    const sportNetworks = sportModule?.broadcastNetworks || {};
+    const allNetworks = { ...BROADCAST_NETWORKS, ...sportNetworks };
+
+    for (const [key, value] of Object.entries(allNetworks)) {
+      if (broadcastUpper.includes(key.toUpperCase())) {
         return { name: broadcast, ...value };
       }
     }
@@ -388,10 +488,10 @@ export default function Schedule() {
               {(odds.homeMoneyLine || odds.awayMoneyLine) && (
                 <div className="bg-white/5 rounded-lg p-2 text-center">
                   <div className="text-xs text-white/50">Moneyline</div>
-                  <div className="text-xs font-semibold text-white">
+                  <div className="text-sm font-semibold text-white">
                     {game.awayTeam?.abbreviation} {odds.awayMoneyLine > 0 ? '+' : ''}{odds.awayMoneyLine}
                   </div>
-                  <div className="text-xs font-semibold text-white">
+                  <div className="text-sm font-semibold text-white">
                     {game.homeTeam?.abbreviation} {odds.homeMoneyLine > 0 ? '+' : ''}{odds.homeMoneyLine}
                   </div>
                 </div>
@@ -401,102 +501,188 @@ export default function Schedule() {
         )}
         
         {/* Win Probability */}
-        {details?.winProbability && (
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5" />
-              Win Probability
-            </h4>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-white/70 w-10">{game.awayTeam?.abbreviation}</span>
-              <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-nfl-blue rounded-full"
-                  style={{ width: `${Number(details.winProbability.awayWinPct) || 50}%` }}
-                />
-              </div>
-              <span className="text-xs font-medium text-white w-12 text-right">
-                {Math.round(Number(details.winProbability.awayWinPct) || 50)}%
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-white/70 w-10">{game.homeTeam?.abbreviation}</span>
-              <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-green-500 rounded-full"
-                  style={{ width: `${Number(details.winProbability.homeWinPct) || 50}%` }}
-                />
-              </div>
-              <span className="text-xs font-medium text-white w-12 text-right">
-                {Math.round(Number(details.winProbability.homeWinPct) || 50)}%
-              </span>
-            </div>
-          </div>
-        )}
+        {details?.winProbability && (() => {
+          const awayPct = Math.round(Number(details.winProbability.awayWinPct) || 50);
+          const homePct = Math.round(Number(details.winProbability.homeWinPct) || 50);
 
-        {/* Team Season Stats */}
-        <div className="space-y-2">
-          <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide flex items-center gap-1.5">
-            <TrendingUp className="w-3.5 h-3.5" />
-            Season Averages
-          </h4>
-          <div className="grid grid-cols-2 gap-3">
-            {/* Away Team Stats */}
-            <div className="bg-white/5 rounded-lg p-2.5">
-              <div className="flex items-center gap-2 mb-2">
-                {game.awayTeam?.logo && (
-                  <img src={game.awayTeam.logo} alt="" className="w-5 h-5" />
-                )}
-                <span className="text-xs font-medium text-white">{game.awayTeam?.abbreviation}</span>
+          // Pick a color visible on dark backgrounds — use alternateColor if primary is too dark
+          const visibleColor = (team) => {
+            const primary = team?.color || '#6B7280';
+            const hex = primary.replace('#', '');
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            // Relative luminance threshold — below this, the color vanishes on dark bg
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            if (luminance < 0.25 && team?.alternateColor) return team.alternateColor;
+            return primary;
+          };
+
+          const awayColor = visibleColor(game.awayTeam);
+          const homeColor = visibleColor(game.homeTeam);
+          return (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" />
+                Win Probability
+              </h4>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-xs font-medium text-white">{game.awayTeam?.abbreviation}</span>
+                  <span className="text-xs font-bold text-white">{awayPct}%</span>
+                </div>
+                <div className="flex-1 h-3 rounded-full overflow-hidden flex">
+                  <div
+                    className="h-full transition-all duration-300"
+                    style={{ width: `${awayPct}%`, backgroundColor: awayColor }}
+                  />
+                  <div
+                    className="h-full transition-all duration-300"
+                    style={{ width: `${homePct}%`, backgroundColor: homeColor }}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-xs font-bold text-white">{homePct}%</span>
+                  <span className="text-xs font-medium text-white">{game.homeTeam?.abbreviation}</span>
+                </div>
               </div>
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-white/50">PPG</span>
-                  <span className="text-white font-medium">{game.awayTeam?.avgPointsFor || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/50">Opp PPG</span>
-                  <span className="text-white font-medium">{game.awayTeam?.avgPointsAgainst || '-'}</span>
-                </div>
-                {game.awayTeam?.streak && (
-                  <div className="flex justify-between">
+            </div>
+          );
+        })()}
+
+        {/* Team Season Stats — Sport-specific */}
+        {(() => {
+          // Sport-specific stat configs: which scoreboard stats to show
+          // Keys map to ESPN competitor.statistics[].name
+          const SEASON_STATS_CONFIG = {
+            nfl: [
+              { key: 'avgPointsFor', label: 'PPG', source: 'game' },
+              { key: 'avgPointsAgainst', label: 'Opp PPG', source: 'game' },
+            ],
+            nba: [
+              { key: 'avgPoints', label: 'PPG' },
+              { key: 'avgPointsAgainst', label: 'Opp PPG', source: 'details' },
+              { key: 'fieldGoalPct', label: 'FG%' },
+              { key: 'threePointFieldGoalPct', label: '3PT%' },
+              { key: 'avgRebounds', label: 'RPG' },
+              { key: 'avgAssists', label: 'APG' },
+            ],
+            ncaab: [
+              { key: 'avgPoints', label: 'PPG' },
+              { key: 'avgPointsAgainst', label: 'Opp PPG', source: 'details' },
+              { key: 'fieldGoalPct', label: 'FG%' },
+              { key: 'threePointFieldGoalPct', label: '3PT%' },
+              { key: 'avgRebounds', label: 'RPG' },
+              { key: 'avgAssists', label: 'APG' },
+            ],
+            mlb: [
+              { key: 'runs', label: 'Runs' },
+              { key: 'avg', label: 'AVG' },
+              { key: 'ERA', label: 'ERA' },
+              { key: 'hits', label: 'Hits' },
+              { key: 'saves', label: 'SV' },
+              { key: 'errors', label: 'Errors' },
+            ],
+            nhl: [
+              { key: 'goals', label: 'Goals' },
+              { key: 'ytdGoals', label: 'Season GF' },
+              { key: 'assists', label: 'Assists' },
+              { key: 'saves', label: 'Saves' },
+              { key: 'savePct', label: 'SV%' },
+              { key: 'points', label: 'Points' },
+            ],
+          };
+
+          const config = SEASON_STATS_CONFIG[selectedSport] || SEASON_STATS_CONFIG.nfl;
+
+          // Build stat rows for a team from scoreboard + details data
+          const getTeamStats = (team, side) => {
+            const scoreboard = team?.seasonStats || {};
+            const detailStats = details?.seasonAverages?.[side]?.stats || {};
+            const streak = details?.seasonAverages?.[side]?.streak || (selectedSport === 'nfl' ? team?.streak : null);
+            const lastTen = details?.seasonAverages?.[side]?.lastTen;
+
+            const stats = config.map(({ key, label, source }) => {
+              // NFL embeds avgPointsFor/avgPointsAgainst directly on team object
+              if (source === 'game') return { label, value: team?.[key] || '-', rank: scoreboard[key]?.rank || null, statKey: key };
+              // Details-only stats (like opp PPG from boxscore)
+              if (source === 'details') return { label, value: detailStats[key]?.displayValue || '-', rank: scoreboard[key]?.rank || null, statKey: key };
+              // Default: try scoreboard stats first, then detail stats
+              const val = scoreboard[key]?.displayValue || detailStats[key]?.displayValue;
+              const rank = scoreboard[key]?.rank;
+              return { label, value: val || '-', rank, statKey: key };
+            });
+
+            return { stats, streak, lastTen };
+          };
+
+          const awayData = getTeamStats(game.awayTeam, 'away');
+          const homeData = getTeamStats(game.homeTeam, 'home');
+
+          // Check if any stats have actual values (not all dashes)
+          const hasData = [...awayData.stats, ...homeData.stats].some(s => s.value !== '-');
+          if (!hasData && !awayData.streak && !homeData.streak) return null;
+
+          const canClickStat = selectedSport !== 'ncaab';
+
+          const TeamSeasonColumn = ({ team, data }) => (
+            <div className="bg-white/5 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2.5">
+                {team?.logo && <img src={team.logo} alt="" className="w-6 h-6 object-contain" />}
+                <span className="text-sm font-semibold text-white">{team?.abbreviation}</span>
+              </div>
+              <div className="space-y-1.5 text-sm">
+                {data.stats.map((stat, i) => (
+                  <div
+                    key={i}
+                    className={`flex justify-between items-center rounded px-1 -mx-1 ${canClickStat ? 'cursor-pointer hover:bg-white/10 transition-colors' : ''}`}
+                    onClick={canClickStat ? (e) => {
+                      e.stopPropagation();
+                      setStatRankingDialog({
+                        statKey: stat.statKey,
+                        statLabel: stat.label,
+                        currentTeamIds: [game.homeTeam?.id, game.awayTeam?.id].filter(Boolean)
+                      });
+                    } : undefined}
+                  >
+                    <span className="text-white/50">{stat.label}</span>
+                    <span className="text-white font-medium">
+                      {stat.value}
+                      {stat.rank && <span className={`ml-1 text-xs ${getRankColor(stat.rank)}`}>({stat.rank})</span>}
+                    </span>
+                  </div>
+                ))}
+                {data.lastTen && (
+                  <div className="flex justify-between items-center px-1 -mx-1">
+                    <span className="text-white/50">Last 10</span>
+                    <span className="text-white font-medium">{data.lastTen}</span>
+                  </div>
+                )}
+                {data.streak && (
+                  <div className="flex justify-between items-center px-1 -mx-1">
                     <span className="text-white/50">Streak</span>
-                    <span className={`font-medium ${game.awayTeam.streak.type === 'W' ? 'text-green-400' : 'text-red-400'}`}>
-                      {game.awayTeam.streak.type}{game.awayTeam.streak.count}
+                    <span className={`font-medium ${data.streak.type === 'W' ? 'text-green-400' : 'text-red-400'}`}>
+                      {data.streak.type}{data.streak.count}
                     </span>
                   </div>
                 )}
               </div>
             </div>
-            {/* Home Team Stats */}
-            <div className="bg-white/5 rounded-lg p-2.5">
-              <div className="flex items-center gap-2 mb-2">
-                {game.homeTeam?.logo && (
-                  <img src={game.homeTeam.logo} alt="" className="w-5 h-5" />
-                )}
-                <span className="text-xs font-medium text-white">{game.homeTeam?.abbreviation}</span>
-              </div>
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-white/50">PPG</span>
-                  <span className="text-white font-medium">{game.homeTeam?.avgPointsFor || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/50">Opp PPG</span>
-                  <span className="text-white font-medium">{game.homeTeam?.avgPointsAgainst || '-'}</span>
-                </div>
-                {game.homeTeam?.streak && (
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Streak</span>
-                    <span className={`font-medium ${game.homeTeam.streak.type === 'W' ? 'text-green-400' : 'text-red-400'}`}>
-                      {game.homeTeam.streak.type}{game.homeTeam.streak.count}
-                    </span>
-                  </div>
-                )}
+          );
+
+          return (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" />
+                Season Averages
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <TeamSeasonColumn team={game.awayTeam} data={awayData} />
+                <TeamSeasonColumn team={game.homeTeam} data={homeData} />
               </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
         
         {/* Injuries */}
         {(() => {
@@ -594,6 +780,48 @@ export default function Schedule() {
     );
   };
 
+  // Get sport-specific stat labels for completed game details
+  const getStatLabels = () => {
+    if (selectedSport === 'nba' || selectedSport === 'ncaab') {
+      return {
+        fieldGoalPct: 'FG%',
+        threePointPct: '3PT%',
+        freeThrowPct: 'FT%',
+        rebounds: 'Rebounds',
+        assists: 'Assists',
+        turnovers: 'Turnovers',
+      };
+    }
+    if (selectedSport === 'mlb') {
+      return {
+        hits: 'Hits',
+        runs: 'Runs',
+        errors: 'Errors',
+        leftOnBase: 'LOB',
+        battingAvg: 'Batting Avg',
+        strikeouts: 'Strikeouts',
+      };
+    }
+    if (selectedSport === 'nhl') {
+      return {
+        shotsOnGoal: 'Shots on Goal',
+        powerPlays: 'Power Plays',
+        penaltyMinutes: 'Penalty Min.',
+        faceoffPct: 'Faceoff %',
+        hits: 'Hits',
+        blockedShots: 'Blocked Shots',
+      };
+    }
+    // NFL default
+    return {
+      totalYards: 'Total Yards',
+      passingYards: 'Passing',
+      rushingYards: 'Rushing',
+      turnovers: 'Turnovers',
+      possession: 'Time of Poss.',
+    };
+  };
+
   // Render expanded content for completed games
   const renderCompletedGameDetails = (game) => {
     const details = gameDetails[game.id];
@@ -601,7 +829,7 @@ export default function Schedule() {
     if (detailsLoading && expandedGame === game.id && !details) {
       return (
         <div className="mt-3 pt-3 border-t border-white/10 flex justify-center py-4">
-          <div className="w-5 h-5 border-2 border-nfl-blue border-t-transparent rounded-full animate-spin" />
+          <div className={`w-5 h-5 border-2 ${selectedSport === 'nfl' ? 'border-nfl-blue' : 'border-white/30'} border-t-transparent rounded-full animate-spin`} />
         </div>
       );
     }
@@ -754,18 +982,23 @@ export default function Schedule() {
         {details?.scoringPlays && details.scoringPlays.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide">
-              Scoring Summary
+              {selectedSport === 'nhl' ? 'Goals' : 'Scoring Summary'}
             </h4>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {details.scoringPlays.map((play, idx) => (
                 <div key={idx} className="bg-white/5 rounded-lg p-2 text-xs">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-white/50">Q{play.quarter} {play.time}</span>
+                    <span className="text-white/50">
+                      {play.periodLabel || `Q${play.quarter}`} {play.time}
+                    </span>
                     <span className="font-medium text-white">
                       {game.awayTeam?.abbreviation} {play.awayScore} - {play.homeScore} {game.homeTeam?.abbreviation}
                     </span>
                   </div>
-                  <div className="text-white/70">{play.team} - {play.description}</div>
+                  <div className="text-white/70 flex items-center gap-1.5">
+                    {play.teamLogo && <img src={play.teamLogo} alt="" className="w-4 h-4" />}
+                    {play.team} - {play.description}
+                  </div>
                 </div>
               ))}
             </div>
@@ -779,23 +1012,15 @@ export default function Schedule() {
               Team Stats
             </h4>
             <div className="space-y-1.5">
-              {['totalYards', 'passingYards', 'rushingYards', 'turnovers', 'possession'].map(stat => {
-                const awayStat = details.teamStats.away?.[stat];
-                const homeStat = details.teamStats.home?.[stat];
+              {Object.entries(getStatLabels()).map(([statKey, label]) => {
+                const awayStat = details.teamStats.away?.[statKey];
+                const homeStat = details.teamStats.home?.[statKey];
                 if (!awayStat && !homeStat) return null;
-                
-                const statLabels = {
-                  totalYards: 'Total Yards',
-                  passingYards: 'Passing',
-                  rushingYards: 'Rushing',
-                  turnovers: 'Turnovers',
-                  possession: 'Time of Poss.'
-                };
-                
+
                 return (
-                  <div key={stat} className="flex items-center text-xs">
+                  <div key={statKey} className="flex items-center text-sm">
                     <span className="w-12 text-right font-medium text-white">{awayStat || '-'}</span>
-                    <div className="flex-1 text-center text-white/50 px-2">{statLabels[stat]}</div>
+                    <div className="flex-1 text-center text-white/50 px-2">{label}</div>
                     <span className="w-12 text-left font-medium text-white">{homeStat || '-'}</span>
                   </div>
                 );
@@ -842,22 +1067,24 @@ export default function Schedule() {
             <div className="flex-1 space-y-2">
               {/* Away Team */}
               <div className={`flex items-center gap-2.5 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
-                <ClickableTeam team={game.awayTeam} className="flex items-center gap-2.5">
+                <ClickableTeam team={game.awayTeam}>
                   {game.awayTeam?.logo ? (
-                    <img 
-                      src={game.awayTeam.logo} 
+                    <img
+                      src={game.awayTeam.logo}
                       alt={game.awayTeam.abbreviation}
                       className="w-7 h-7 object-contain flex-shrink-0"
                     />
                   ) : (
-                    <div 
+                    <div
                       className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
                       style={{ backgroundColor: game.awayTeam?.color || '#666' }}
                     >
                       {game.awayTeam?.abbreviation || '?'}
                     </div>
                   )}
-                  <span className="text-white font-medium text-sm">
+                </ClickableTeam>
+                <ClickableTeam team={game.awayTeam}>
+                  <span className="text-white font-medium text-sm hover:underline">
                     {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
                   </span>
                 </ClickableTeam>
@@ -871,25 +1098,27 @@ export default function Schedule() {
                   <span className="ml-auto text-white/50 text-sm">{game.awayTeam?.record}</span>
                 )}
               </div>
-              
+
               {/* Home Team */}
               <div className={`flex items-center gap-2.5 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
-                <ClickableTeam team={game.homeTeam} className="flex items-center gap-2.5">
+                <ClickableTeam team={game.homeTeam}>
                   {game.homeTeam?.logo ? (
-                    <img 
-                      src={game.homeTeam.logo} 
+                    <img
+                      src={game.homeTeam.logo}
                       alt={game.homeTeam.abbreviation}
                       className="w-7 h-7 object-contain flex-shrink-0"
                     />
                   ) : (
-                    <div 
+                    <div
                       className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
                       style={{ backgroundColor: game.homeTeam?.color || '#666' }}
                     >
                       {game.homeTeam?.abbreviation || '?'}
                     </div>
                   )}
-                  <span className="text-white font-medium text-sm">
+                </ClickableTeam>
+                <ClickableTeam team={game.homeTeam}>
+                  <span className="text-white font-medium text-sm hover:underline">
                     {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
                   </span>
                 </ClickableTeam>
@@ -952,30 +1181,32 @@ export default function Schedule() {
           {/* Teams */}
           <div className="flex items-center gap-4">
             {/* Away Team */}
-            <ClickableTeam team={game.awayTeam} className={`flex-1 flex items-center gap-3 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
-              {game.awayTeam?.logo ? (
-                <img 
-                  src={game.awayTeam.logo} 
-                  alt={game.awayTeam.abbreviation}
-                  className="w-10 h-10 object-contain"
-                />
-              ) : (
-                <div 
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs"
-                  style={{ backgroundColor: game.awayTeam?.color || '#666' }}
-                >
-                  {game.awayTeam?.abbreviation || '?'}
-                </div>
-              )}
-              <div className="min-w-0 text-left">
-                <div className="text-white font-medium text-base truncate">
+            <div className={`flex-1 flex items-center gap-3 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
+              <ClickableTeam team={game.awayTeam}>
+                {game.awayTeam?.logo ? (
+                  <img
+                    src={game.awayTeam.logo}
+                    alt={game.awayTeam.abbreviation}
+                    className="w-10 h-10 object-contain"
+                  />
+                ) : (
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs"
+                    style={{ backgroundColor: game.awayTeam?.color || '#666' }}
+                  >
+                    {game.awayTeam?.abbreviation || '?'}
+                  </div>
+                )}
+              </ClickableTeam>
+              <ClickableTeam team={game.awayTeam} className="min-w-0 text-left">
+                <div className="text-white font-medium text-base truncate hover:underline">
                   {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
                 </div>
                 {game.awayTeam?.record && (
                   <div className="text-xs text-white/40">{game.awayTeam.record}</div>
                 )}
-              </div>
-            </ClickableTeam>
+              </ClickableTeam>
+            </div>
 
             {/* Score / VS */}
             <div className="flex-shrink-0 text-center min-w-[80px]">
@@ -999,30 +1230,32 @@ export default function Schedule() {
             </div>
 
             {/* Home Team */}
-            <ClickableTeam team={game.homeTeam} className={`flex-1 flex items-center justify-end gap-3 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
-              <div className="min-w-0 text-right">
-                <div className="text-white font-medium text-base truncate">
+            <div className={`flex-1 flex items-center justify-end gap-3 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
+              <ClickableTeam team={game.homeTeam} className="min-w-0 text-right">
+                <div className="text-white font-medium text-base truncate hover:underline">
                   {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
                 </div>
                 {game.homeTeam?.record && (
                   <div className="text-xs text-white/40">{game.homeTeam.record}</div>
                 )}
-              </div>
-              {game.homeTeam?.logo ? (
-                <img 
-                  src={game.homeTeam.logo} 
-                  alt={game.homeTeam.abbreviation}
-                  className="w-10 h-10 object-contain"
-                />
-              ) : (
-                <div 
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs"
-                  style={{ backgroundColor: game.homeTeam?.color || '#666' }}
-                >
-                  {game.homeTeam?.abbreviation || '?'}
-                </div>
-              )}
-            </ClickableTeam>
+              </ClickableTeam>
+              <ClickableTeam team={game.homeTeam}>
+                {game.homeTeam?.logo ? (
+                  <img
+                    src={game.homeTeam.logo}
+                    alt={game.homeTeam.abbreviation}
+                    className="w-10 h-10 object-contain"
+                  />
+                ) : (
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs"
+                    style={{ backgroundColor: game.homeTeam?.color || '#666' }}
+                  >
+                    {game.homeTeam?.abbreviation || '?'}
+                  </div>
+                )}
+              </ClickableTeam>
+            </div>
           </div>
           
           {/* Expanded Content - Desktop */}
@@ -1047,7 +1280,7 @@ export default function Schedule() {
         {SPORT_TABS.map(sport => (
           <button
             key={sport.id}
-            onClick={() => setSelectedSport(sport.id)}
+            onClick={() => handleSportChange(sport.id)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               selectedSport === sport.id
                 ? 'bg-white/15 text-white'
@@ -1059,251 +1292,309 @@ export default function Schedule() {
         ))}
       </div>
 
-      {/* Non-implemented sport placeholder */}
-      {!selectedSportTab?.implemented ? (
-        <div className="glass-card rounded-xl sm:rounded-2xl p-8 sm:p-12 text-center animate-in">
-          <Calendar className="w-12 h-12 sm:w-16 sm:h-16 text-white/20 mx-auto mb-4" />
-          <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">{selectedSportTab?.name} Schedule</h2>
-          <p className="text-white/50 text-sm sm:text-base">Coming soon! Stay tuned.</p>
-        </div>
-      ) : (
-      <>
-      {/* Header with Season Dropdown */}
-      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 animate-in">
-        <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
-            NFL Schedule
-          </h1>
-          <p className="text-white/60 text-sm sm:text-base mt-1">
-            {selectedSeasonType === 3 
-              ? `${season} Playoffs` 
-              : `${season} Regular Season`
-            }
-          </p>
-        </div>
-        
-        {/* Current Week Button & Season Dropdown */}
-        <div className="flex items-center gap-2">
-          {/* Current Week Button - show when not viewing current */}
-          {(selectedSeasonType !== currentSeasonType || 
-            (selectedSeasonType === 2 && selectedWeek !== currentWeek) || 
-            season !== currentYear) && (
-            <button
-              onClick={() => {
-                setSeason(currentYear);
-                setSelectedSeasonType(currentSeasonType);
-                if (currentSeasonType === 2) {
-                  setSelectedWeek(currentWeek);
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 bg-nfl-blue hover:bg-blue-600 rounded-lg transition-colors text-white text-sm font-medium"
-            >
-              <Calendar className="w-4 h-4" />
-              <span className="hidden sm:inline">Current</span>
-            </button>
-          )}
-          
-          {/* Season Dropdown */}
-          <div className="relative" ref={seasonDropdownRef}>
-            <button
-              onClick={() => setShowSeasonDropdown(!showSeasonDropdown)}
-              className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors text-white text-sm font-medium"
-            >
-              {season}
-              <ChevronDown className={`w-4 h-4 transition-transform ${showSeasonDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {showSeasonDropdown && (
-              <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-36 bg-[#1a1f2e] border border-white/20 rounded-lg shadow-2xl z-50 overflow-hidden">
-                {seasonOptions.map(year => (
-                  <button
-                    key={year}
-                    onClick={() => handleSeasonChange(year)}
-                    className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
-                      year === season 
-                        ? 'bg-nfl-blue text-white' 
-                        : 'text-white hover:bg-white/10'
-                    }`}
-                  >
-                    {year} Season
-                  </button>
-                ))}
-              </div>
-            )}
+      {selectedSportTab?.scheduleType === 'daily' ? (
+        /* Daily sport rendering (NBA, MLB, NHL, NCAAB) */
+        <>
+          {/* Header */}
+          <div className="mb-4 sm:mb-6 animate-in">
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+              {selectedSportTab?.name} Schedule
+            </h1>
           </div>
-        </div>
-      </div>
 
-      {/* Season Type Toggle */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => {
-            setSelectedSeasonType(2);
-            // If on current season, go to current week; otherwise go to week 1
-            if (season === currentYear && currentSeasonType === 2) {
-              setSelectedWeek(currentWeek);
-            } else {
-              setSelectedWeek(1);
-            }
-          }}
-          className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            selectedSeasonType === 2
-              ? 'bg-nfl-blue text-white'
-              : 'bg-white/5 text-white/60 hover:bg-white/10'
-          }`}
-        >
-          Regular Season
-        </button>
-        <button
-          onClick={() => {
-            setSelectedSeasonType(3);
-          }}
-          className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            selectedSeasonType === 3
-              ? 'bg-nfl-blue text-white'
-              : 'bg-white/5 text-white/60 hover:bg-white/10'
-          }`}
-        >
-          Playoffs
-        </button>
-      </div>
+          {/* Date Picker */}
+          <DatePicker date={selectedDate} onChange={setSelectedDate} />
 
-      {/* Week Selector - Only show for regular season */}
-      {selectedSeasonType === 2 && (
-        <div className="mb-4 sm:mb-6">
-          <div className="flex items-center gap-2">
+          {/* Loading / Games */}
+          {dailyLoading ? (
+            <div className="glass-card rounded-xl p-12 text-center">
+              <div className="w-8 h-8 border-2 border-white/30 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-white/50">Loading schedule...</p>
+            </div>
+          ) : dailySchedule.length === 0 ? (
+            <div className="glass-card rounded-xl p-8 sm:p-12 text-center">
+              <Calendar className="w-12 h-12 sm:w-16 sm:h-16 text-white/20 mx-auto mb-4" />
+              <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No Games Found</h3>
+              <p className="text-white/60 text-sm sm:text-base">
+                No {selectedSportTab?.name} games scheduled for this date
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {(() => {
+                const grouped = dailySchedule.reduce((acc, game) => {
+                  const day = formatDay(game.date);
+                  if (!acc[day]) acc[day] = [];
+                  acc[day].push(game);
+                  return acc;
+                }, {});
+
+                return Object.entries(grouped).map(([day, games]) => (
+                  <div key={day}>
+                    <h2 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      {day}
+                    </h2>
+                    <div className="space-y-2">
+                      {games.map((game, index) => renderGameCard(game, index))}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+        </>
+      ) : (
+        /* NFL weekly rendering - all existing code preserved */
+        <>
+          {/* Header with Season Dropdown */}
+          <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 animate-in">
+            <div>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+                NFL Schedule
+              </h1>
+              <p className="text-white/60 text-sm sm:text-base mt-1">
+                {selectedSeasonType === 3
+                  ? `${season} Playoffs`
+                  : `${season} Regular Season`
+                }
+              </p>
+            </div>
+
+            {/* Current Week Button & Season Dropdown */}
+            <div className="flex items-center gap-2">
+              {/* Current Week Button - show when not viewing current */}
+              {(selectedSeasonType !== currentSeasonType ||
+                (selectedSeasonType === 2 && selectedWeek !== currentWeek) ||
+                season !== currentYear) && (
+                <button
+                  onClick={() => {
+                    setSeason(currentYear);
+                    setSelectedSeasonType(currentSeasonType);
+                    if (currentSeasonType === 2) {
+                      setSelectedWeek(currentWeek);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-nfl-blue hover:bg-blue-600 rounded-lg transition-colors text-white text-sm font-medium"
+                >
+                  <Calendar className="w-4 h-4" />
+                  <span className="hidden sm:inline">Current</span>
+                </button>
+              )}
+
+              {/* Season Dropdown */}
+              <div className="relative" ref={seasonDropdownRef}>
+                <button
+                  onClick={() => setShowSeasonDropdown(!showSeasonDropdown)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors text-white text-sm font-medium"
+                >
+                  {season}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showSeasonDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showSeasonDropdown && (
+                  <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-36 bg-[#1a1f2e] border border-white/20 rounded-lg shadow-2xl z-50 overflow-hidden">
+                    {seasonOptions.map(year => (
+                      <button
+                        key={year}
+                        onClick={() => handleSeasonChange(year)}
+                        className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
+                          year === season
+                            ? 'bg-nfl-blue text-white'
+                            : 'text-white hover:bg-white/10'
+                        }`}
+                      >
+                        {year} Season
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Season Type Toggle */}
+          <div className="flex gap-2 mb-4">
             <button
               onClick={() => {
-                if (selectedWeek > 1) {
-                  setSelectedWeek(selectedWeek - 1);
+                setSelectedSeasonType(2);
+                // If on current season, go to current week; otherwise go to week 1
+                if (season === currentYear && currentSeasonType === 2) {
+                  setSelectedWeek(currentWeek);
+                } else {
+                  setSelectedWeek(1);
                 }
               }}
-              disabled={selectedWeek <= 1}
-              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
+              className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                selectedSeasonType === 2
+                  ? 'bg-nfl-blue text-white'
+                  : 'bg-white/5 text-white/60 hover:bg-white/10'
+              }`}
             >
-              <ChevronLeft className="w-5 h-5 text-white" />
+              Regular Season
             </button>
-            
-            <div className="flex-1 overflow-x-auto scrollbar-hide pt-2" ref={weekTabsRef}>
-              <div className="flex gap-1.5 sm:gap-2 pb-1">
-                {regularWeeks.map(week => {
-                  const isSelected = selectedWeek === week;
-                  const isCurrent = season === currentYear && currentSeasonType === 2 && week === currentWeek;
-                  
+            <button
+              onClick={() => {
+                setSelectedSeasonType(3);
+              }}
+              className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                selectedSeasonType === 3
+                  ? 'bg-nfl-blue text-white'
+                  : 'bg-white/5 text-white/60 hover:bg-white/10'
+              }`}
+            >
+              Playoffs
+            </button>
+          </div>
+
+          {/* Week Selector - Only show for regular season */}
+          {selectedSeasonType === 2 && (
+            <div className="mb-4 sm:mb-6">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (selectedWeek > 1) {
+                      setSelectedWeek(selectedWeek - 1);
+                    }
+                  }}
+                  disabled={selectedWeek <= 1}
+                  className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
+                >
+                  <ChevronLeft className="w-5 h-5 text-white" />
+                </button>
+
+                <div className="flex-1 overflow-x-auto scrollbar-hide pt-2" ref={weekTabsRef}>
+                  <div className="flex gap-1.5 sm:gap-2 pb-1">
+                    {regularWeeks.map(week => {
+                      const isSelected = selectedWeek === week;
+                      const isCurrent = season === currentYear && currentSeasonType === 2 && week === currentWeek;
+
+                      return (
+                        <button
+                          key={`regular-${week}`}
+                          ref={el => weekButtonRefs.current[`2-${week}`] = el}
+                          onClick={() => setSelectedWeek(week)}
+                          className={`
+                            relative px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all flex-shrink-0
+                            ${isSelected
+                              ? 'bg-nfl-blue text-white'
+                              : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                            }
+                          `}
+                        >
+                          <span className="hidden sm:inline">Week </span>{week}
+                          {isCurrent && (
+                            <span className={`absolute -top-1.5 -right-1 w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-yellow-400' : 'bg-green-500'}`} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (selectedWeek < 18) {
+                      setSelectedWeek(selectedWeek + 1);
+                    }
+                  }}
+                  disabled={selectedWeek >= 18}
+                  className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
+                >
+                  <ChevronRight className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Loading state for schedule */}
+          {scheduleLoading ? (
+            <div className="glass-card rounded-xl p-12 text-center">
+              <div className="w-8 h-8 border-2 border-nfl-blue border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-white/50">Loading schedule...</p>
+            </div>
+          ) : selectedSeasonType === 3 ? (
+            /* Playoffs - All rounds on one page */
+            Object.keys(playoffSchedule).length === 0 ? (
+              <div className="glass-card rounded-xl p-8 sm:p-12 text-center">
+                <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-white/20 mx-auto mb-4" />
+                <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No Playoff Games Found</h3>
+                <p className="text-white/60 text-sm sm:text-base">
+                  {season} playoff schedule is not available yet
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {playoffRoundNumbers.map(round => {
+                  const games = playoffSchedule[round];
+                  if (!games || games.length === 0) return null;
+
                   return (
-                    <button
-                      key={`regular-${week}`}
-                      ref={el => weekButtonRefs.current[`2-${week}`] = el}
-                      onClick={() => setSelectedWeek(week)}
-                      className={`
-                        relative px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all flex-shrink-0
-                        ${isSelected 
-                          ? 'bg-nfl-blue text-white' 
-                          : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                        }
-                      `}
-                    >
-                      <span className="hidden sm:inline">Week </span>{week}
-                      {isCurrent && (
-                        <span className={`absolute -top-1.5 -right-1 w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-yellow-400' : 'bg-green-500'}`} />
-                      )}
-                    </button>
+                    <div key={round}>
+                      {/* Round Header */}
+                      <div className="flex items-center gap-3 mb-4">
+                        <Trophy className={`w-5 h-5 ${round === 5 ? 'text-yellow-400' : 'text-white/60'}`} />
+                        <h2 className={`text-lg sm:text-xl font-bold ${round === 5 ? 'text-yellow-400' : 'text-white'}`}>
+                          {PLAYOFF_ROUNDS[round]}
+                        </h2>
+                        <div className="flex-1 h-px bg-white/10" />
+                      </div>
+
+                      {/* Games for this round */}
+                      <div className="space-y-2">
+                        {games.map((game, index) => renderGameCard(game, `${round}-${index}`))}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
+            )
+          ) : schedule.length === 0 ? (
+            <div className="glass-card rounded-xl p-8 sm:p-12 text-center">
+              <Calendar className="w-12 h-12 sm:w-16 sm:h-16 text-white/20 mx-auto mb-4" />
+              <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No Games Found</h3>
+              <p className="text-white/60 text-sm sm:text-base">
+                Week {selectedWeek} schedule is not available
+              </p>
             </div>
-            
-            <button
-              onClick={() => {
-                if (selectedWeek < 18) {
-                  setSelectedWeek(selectedWeek + 1);
-                }
-              }}
-              disabled={selectedWeek >= 18}
-              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
-            >
-              <ChevronRight className="w-5 h-5 text-white" />
-            </button>
-          </div>
-        </div>
-      )}
+          ) : (
+            /* Regular Season - Games by Day */
+            <div className="space-y-6">
+              {Object.entries(groupedGames).map(([day, games]) => (
+                <div key={day}>
+                  <h2 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    {day}
+                  </h2>
 
-      {/* Loading state for schedule */}
-      {scheduleLoading ? (
-        <div className="glass-card rounded-xl p-12 text-center">
-          <div className="w-8 h-8 border-2 border-nfl-blue border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-white/50">Loading schedule...</p>
-        </div>
-      ) : selectedSeasonType === 3 ? (
-        /* Playoffs - All rounds on one page */
-        Object.keys(playoffSchedule).length === 0 ? (
-          <div className="glass-card rounded-xl p-8 sm:p-12 text-center">
-            <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-white/20 mx-auto mb-4" />
-            <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No Playoff Games Found</h3>
-            <p className="text-white/60 text-sm sm:text-base">
-              {season} playoff schedule is not available yet
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-8">
-            {playoffRoundNumbers.map(round => {
-              const games = playoffSchedule[round];
-              if (!games || games.length === 0) return null;
-              
-              return (
-                <div key={round}>
-                  {/* Round Header */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <Trophy className={`w-5 h-5 ${round === 5 ? 'text-yellow-400' : 'text-white/60'}`} />
-                    <h2 className={`text-lg sm:text-xl font-bold ${round === 5 ? 'text-yellow-400' : 'text-white'}`}>
-                      {PLAYOFF_ROUNDS[round]}
-                    </h2>
-                    <div className="flex-1 h-px bg-white/10" />
-                  </div>
-                  
-                  {/* Games for this round */}
                   <div className="space-y-2">
-                    {games.map((game, index) => renderGameCard(game, `${round}-${index}`))}
+                    {games.map((game, index) => renderGameCard(game, index))}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )
-      ) : schedule.length === 0 ? (
-        <div className="glass-card rounded-xl p-8 sm:p-12 text-center">
-          <Calendar className="w-12 h-12 sm:w-16 sm:h-16 text-white/20 mx-auto mb-4" />
-          <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No Games Found</h3>
-          <p className="text-white/60 text-sm sm:text-base">
-            Week {selectedWeek} schedule is not available
-          </p>
-        </div>
-      ) : (
-        /* Regular Season - Games by Day */
-        <div className="space-y-6">
-          {Object.entries(groupedGames).map(([day, games]) => (
-            <div key={day}>
-              <h2 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                {day}
-              </h2>
-              
-              <div className="space-y-2">
-                {games.map((game, index) => renderGameCard(game, index))}
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {/* Team Info Dialog */}
       {teamInfoDialog.open && (
         <TeamInfoDialog
           team={teamInfoDialog.team}
+          sport={selectedSport}
           onClose={() => setTeamInfoDialog({ open: false, team: null })}
         />
       )}
-      </>
+
+      {/* Stat Ranking Dialog */}
+      {statRankingDialog && (
+        <StatRankingDialog
+          sport={selectedSport}
+          statKey={statRankingDialog.statKey}
+          statLabel={statRankingDialog.statLabel}
+          currentTeamIds={statRankingDialog.currentTeamIds}
+          onClose={() => setStatRankingDialog(null)}
+        />
       )}
     </div>
   );

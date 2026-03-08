@@ -1,4 +1,5 @@
 // NFL Data Service - ESPN API Integration with Enhanced Stats
+const { parseBoxscoreSeasonStats } = require('./espn');
 const API_BASE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 
 // Helper to convert our app week numbers to ESPN API format
@@ -184,6 +185,149 @@ const getLeagueRankings = async () => {
     return rankings;
   } catch (error) {
     console.error('Error calculating league rankings:', error);
+    return null;
+  }
+};
+
+/**
+ * Get league-wide stat rankings for a given stat key.
+ * Fetches all 32 teams' statistics, caches the batch for 1 hour,
+ * then returns the requested stat sorted by ESPN's rank.
+ * For computed keys (avgPointsFor, avgPointsAgainst), calculates from schedule data.
+ */
+let nflLeagueStatsCache = null;
+let nflLeagueStatsCacheTime = 0;
+const NFL_LEAGUE_STATS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+const getLeagueStatRankings = async (statKey) => {
+  try {
+    // Fetch ALL teams' stats (cached as a batch for 1 hour)
+    if (!nflLeagueStatsCache || Date.now() - nflLeagueStatsCacheTime > NFL_LEAGUE_STATS_CACHE_TTL) {
+      const season = await getCurrentSeasonYear();
+      const teamsData = await fetchWithCache(`${API_BASE}/teams`, 60 * 60 * 1000);
+      const teams = teamsData?.sports?.[0]?.leagues?.[0]?.teams || [];
+
+      console.log(`[NFL] Fetching league stat rankings for ${teams.length} teams...`);
+
+      const results = await Promise.all(
+        teams.map(async (t) => {
+          const teamId = t.team?.id;
+          if (!teamId) return null;
+
+          try {
+            const [statsData, scheduleData] = await Promise.all([
+              fetchWithCache(`${API_BASE}/teams/${teamId}/statistics?season=${season}`, 30 * 60 * 1000).catch(() => null),
+              fetchWithCache(`${API_BASE}/teams/${teamId}/schedule?season=${season}`, 30 * 60 * 1000).catch(() => null)
+            ]);
+
+            // Parse ESPN stats into a map
+            const categories = statsData?.results?.stats?.categories || [];
+            const statsMap = {};
+            categories.forEach(cat => {
+              (cat.stats || []).forEach(stat => {
+                statsMap[stat.name] = {
+                  value: stat.value,
+                  displayValue: stat.displayValue,
+                  rank: stat.rank,
+                  rankDisplayValue: stat.rankDisplayValue
+                };
+              });
+            });
+
+            // Compute PPG and Opp PPG from schedule (not in ESPN stats directly)
+            let totalPointsFor = 0, totalPointsAgainst = 0, completedGames = 0;
+            const events = scheduleData?.events || [];
+            const teamIdStr = String(teamId);
+
+            events.forEach(event => {
+              const comp = event.competitions?.[0];
+              if (!comp?.status?.type?.completed) return;
+              const teamComp = comp.competitors?.find(c => String(c.team?.id) === teamIdStr || String(c.id) === teamIdStr);
+              const opponent = comp.competitors?.find(c => String(c.team?.id) !== teamIdStr && String(c.id) !== teamIdStr);
+              const teamScore = typeof teamComp?.score === 'object' ? parseInt(teamComp.score.displayValue) : parseInt(teamComp?.score);
+              const oppScore = typeof opponent?.score === 'object' ? parseInt(opponent.score.displayValue) : parseInt(opponent?.score);
+              if (!isNaN(teamScore) && !isNaN(oppScore)) {
+                totalPointsFor += teamScore;
+                totalPointsAgainst += oppScore;
+                completedGames++;
+              }
+            });
+
+            const gamesPlayed = completedGames || 1;
+            // Add computed stats to the map
+            statsMap['avgPointsFor'] = {
+              value: totalPointsFor / gamesPlayed,
+              displayValue: (totalPointsFor / gamesPlayed).toFixed(1),
+              rank: null,
+              rankDisplayValue: null
+            };
+            statsMap['avgPointsAgainst'] = {
+              value: totalPointsAgainst / gamesPlayed,
+              displayValue: (totalPointsAgainst / gamesPlayed).toFixed(1),
+              rank: null,
+              rankDisplayValue: null
+            };
+
+            return {
+              team: {
+                id: String(teamId),
+                name: t.team.displayName || t.team.name,
+                abbreviation: t.team.abbreviation,
+                logo: t.team.logos?.[0]?.href,
+                color: t.team.color ? `#${t.team.color}` : '#333'
+              },
+              statsMap
+            };
+          } catch (e) {
+            return null;
+          }
+        })
+      );
+
+      nflLeagueStatsCache = results.filter(Boolean);
+      nflLeagueStatsCacheTime = Date.now();
+      console.log(`[NFL] League stat rankings cached for ${nflLeagueStatsCache.length} teams`);
+    }
+
+    // Determine sort direction: lower is better for some stats
+    const lowerIsBetter = ['avgPointsAgainst', 'turnovers', 'interceptions', 'sacks'].includes(statKey);
+
+    // Extract the requested stat from cached data
+    const rankings = nflLeagueStatsCache
+      .map(({ team, statsMap }) => {
+        const stat = statsMap[statKey];
+        if (!stat) return null;
+        return {
+          team,
+          value: stat.value,
+          displayValue: stat.displayValue,
+          rank: stat.rank,
+          rankDisplayValue: stat.rankDisplayValue
+        };
+      })
+      .filter(Boolean);
+
+    // Sort by ESPN rank if available, otherwise by value
+    rankings.sort((a, b) => {
+      if (a.rank && b.rank) return a.rank - b.rank;
+      return lowerIsBetter
+        ? (a.value || 0) - (b.value || 0)
+        : (b.value || 0) - (a.value || 0);
+    });
+
+    // Add computed rank for display
+    rankings.forEach((item, i) => {
+      item.rank = item.rank || (i + 1);
+      if (!item.rankDisplayValue) {
+        const n = i + 1;
+        const suffix = n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th';
+        item.rankDisplayValue = `${n}${suffix}`;
+      }
+    });
+
+    return rankings;
+  } catch (error) {
+    console.error('[NFL] getLeagueStatRankings error:', error.message);
     return null;
   }
 };
@@ -573,6 +717,7 @@ const getWeekSchedule = async (season, week, seasonType = 2) => {
           abbreviation: competitor.team.abbreviation,
           logo: competitor.team.logo,
           color: competitor.team.color ? `#${competitor.team.color}` : '#333',
+          alternateColor: competitor.team.alternateColor ? `#${competitor.team.alternateColor}` : null,
           record: records.overall,
           homeRecord: records.home,
           awayRecord: records.away,
@@ -688,7 +833,8 @@ const getTeams = async () => {
       name: t.team.displayName || t.team.name,
       abbreviation: t.team.abbreviation,
       logo: t.team.logos?.[0]?.href,
-      color: t.team.color ? `#${t.team.color}` : '#333'
+      color: t.team.color ? `#${t.team.color}` : '#333',
+      alternateColor: t.team.alternateColor ? `#${t.team.alternateColor}` : null
     }));
   } catch (error) {
     console.error('Get teams error:', error);
@@ -872,7 +1018,8 @@ const getGameDetails = async (gameId) => {
       leaders: parseLeadersFromBoxscore(),
       betting: parseBettingInfo(),
       winProbability: parseWinProbability(),
-      scoringPlays: parseScoringPlays(data.drives?.previous)
+      scoringPlays: parseScoringPlays(data.drives?.previous),
+      seasonAverages: parseBoxscoreSeasonStats(boxscore)
     };
 
     // console.log(`Game ${gameId} details loaded, leaders count: ${result.leaders.length}`);
@@ -1061,6 +1208,7 @@ const getTeamInfo = async (teamId) => {
       abbreviation: team.abbreviation,
       logo: team.logos?.[0]?.href,
       color: team.color ? `#${team.color}` : '#333',
+      alternateColor: team.alternateColor ? `#${team.alternateColor}` : null,
       venue: team.franchise?.venue?.fullName,
       location: team.location,
       division: team.groups?.name,
@@ -1704,5 +1852,6 @@ module.exports = {
   getInjuriesForTeams,
   getTeamInfo,
   getTeamGameStatus,
+  getLeagueStatRankings,
   clearCache
 };

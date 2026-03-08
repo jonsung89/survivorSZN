@@ -85,6 +85,10 @@ class NFLProvider extends BaseSportProvider {
     return nflService.getTeamInfo(teamId);
   }
 
+  async getLeagueStatRankings(statKey) {
+    return nflService.getLeagueStatRankings(statKey);
+  }
+
   async getTeamGameStatus(teamId, period, season) {
     return nflService.getTeamGameStatus(teamId, period, season);
   }

@@ -1,7 +1,15 @@
 import nfl from './nfl';
+import nba from './nba';
+import mlb from './mlb';
+import nhl from './nhl';
+import ncaab from './ncaab';
 
 const sportModules = {
   nfl,
+  nba,
+  mlb,
+  nhl,
+  ncaab,
 };
 
 export function getSportModule(sportId) {

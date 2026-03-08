@@ -91,6 +91,9 @@ class BaseSportProvider {
   /** Get league-wide rankings */
   async getLeagueRankings() { return null; }
 
+  /** Get league-wide stat rankings for a specific stat */
+  async getLeagueStatRankings(statKey) { return null; }
+
   /** Check if a season has concluded */
   async isSeasonOver(season) {
     return false;

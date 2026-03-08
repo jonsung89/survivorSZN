@@ -7,6 +7,15 @@ export default {
   theme: {
     extend: {
       colors: {
+        /* Theme-aware semantic colors — driven by CSS custom properties.
+           Use opacity modifiers freely: bg-surface/50, bg-canvas/80, etc.
+           NOTE: "canvas" not "base" — avoids collision with Tailwind's text-base (font-size) */
+        'canvas': 'rgb(var(--color-base) / <alpha-value>)',
+        'surface': 'rgb(var(--color-surface) / <alpha-value>)',
+        'elevated': 'rgb(var(--color-elevated) / <alpha-value>)',
+        'inset': 'rgb(var(--color-inset) / <alpha-value>)',
+
+        /* Brand / sport colors */
         'nfl-blue': '#013369',
         'nfl-red': '#D50A0A',
         'nba-blue': '#1D428A',

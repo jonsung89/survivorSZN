@@ -2,7 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme System ─────────────────────────────────────────────────
+   All semantic colors are defined as RGB channels so Tailwind's
+   opacity modifier (e.g. bg-surface/50) works out of the box.
+   To add light mode later, duplicate these vars under .light {}
+   ────────────────────────────────────────────────────────────── */
 :root {
+  /* Background hierarchy (darkest → lightest) */
+  --color-base: 10 10 14;           /* #0a0a0e — html / deepest bg */
+  --color-body-from: 10 10 14;      /* body gradient start */
+  --color-body-via: 20 20 28;       /* body gradient midpoint */
+  --color-body-to: 14 14 18;        /* body gradient end */
+  --color-surface: 20 20 26;        /* #14141a — cards, nav, glass surfaces */
+  --color-elevated: 28 28 36;       /* #1c1c24 — modals, dropdowns, popovers */
+  --color-inset: 14 14 18;          /* #0e0e12 — sticky table cols, inset areas */
+
+  /* Text */
+  --color-text-primary: 240 240 243;   /* #f0f0f3 — headings, body */
+
+  /* Brand */
   --nfl-blue: #013369;
   --nfl-red: #D50A0A;
   --field-green: #1B4D3E;
@@ -17,14 +35,19 @@
 
 /* Ensure dark background extends everywhere (including iOS keyboard accessory area) */
 html {
-  background-color: #0a1628;
+  background-color: rgb(var(--color-base));
 }
 
 body {
   font-family: 'Source Sans 3', system-ui, -apple-system, sans-serif;
-  background: linear-gradient(135deg, #0a1628 0%, #1a2744 50%, #0f1c30 100%);
+  background: linear-gradient(
+    135deg,
+    rgb(var(--color-body-from)) 0%,
+    rgb(var(--color-body-via)) 50%,
+    rgb(var(--color-body-to)) 100%
+  );
   min-height: 100vh;
-  color: #f0f4f8;
+  color: rgb(var(--color-text-primary));
 }
 
 /* iOS safe area support */
@@ -490,7 +513,7 @@ body {
 
 .modal-content {
   @apply w-full max-w-md rounded-2xl p-6;
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  background: rgb(var(--color-elevated));
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }

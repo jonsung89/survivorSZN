@@ -339,7 +339,7 @@ export default function MakePick() {
           
           {/* Tooltip */}
           <div 
-            className="relative bg-gray-800 border border-white/10 rounded-2xl p-5 max-w-xs w-full shadow-2xl animate-in"
+            className="relative bg-elevated border border-white/10 rounded-2xl p-5 max-w-xs w-full shadow-2xl animate-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="space-y-3">
@@ -462,7 +462,7 @@ export default function MakePick() {
 
       {/* Fixed Bottom Bar */}
       {selectedTeam && !(selectedTeam === currentPick?.teamId && currentPickLocked) && (
-        <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-gray-900/95 border-t border-white/10">
+        <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-canvas/95 border-t border-white/10">
           <div className="max-w-2xl mx-auto">
             <button
               onClick={handleSubmit}
@@ -543,7 +543,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div 
-        className="bg-gray-900 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col"
+        className="bg-canvas rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

@@ -1306,7 +1306,7 @@ export default function LeagueDetail() {
                 };
                 
                 return (
-                  <div key={idx} className="rounded-xl overflow-hidden bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 border border-white/10">
+                  <div key={idx} className="rounded-xl overflow-hidden bg-gradient-to-r from-elevated via-canvas to-elevated border border-white/10">
                     {/* ESPN-style horizontal layout */}
                     <div className="flex items-center">
                       {/* Left team (your pick) */}

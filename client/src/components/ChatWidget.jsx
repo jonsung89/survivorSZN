@@ -923,9 +923,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     const losses = picks.filter(p => p.result === 'loss').length;
 
     return (
-      <div className="absolute inset-0 bg-slate-900 z-10 flex flex-col">
+      <div className="absolute inset-0 bg-canvas z-10 flex flex-col">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 bg-slate-800 border-b border-white/10">
+        <div className="flex items-center gap-3 px-4 py-3 bg-elevated border-b border-white/10">
           <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg">
             <ChevronLeft className="w-5 h-5 text-white/60" />
           </button>
@@ -1253,13 +1253,13 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
       <div className="hidden lg:block">
         {/* Collapsed state - slim bar */}
         <div 
-          className={`fixed top-16 right-0 bottom-0 w-14 bg-slate-900 border-l border-white/10 flex flex-col items-center py-4 transition-all duration-300 z-40 ${
+          className={`fixed top-16 right-0 bottom-0 w-14 bg-canvas border-l border-white/10 flex flex-col items-center py-4 transition-all duration-300 z-40 ${
             isDesktopCollapsed ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
           <button
             onClick={() => setIsDesktopCollapsed(false)}
-            className="relative p-3 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors group"
+            className="relative p-3 rounded-xl bg-elevated hover:bg-white/10 transition-colors group"
             title="Open Chat"
           >
             <MessageCircle className="w-6 h-6 text-white/70 group-hover:text-white transition-colors" />
@@ -1290,7 +1290,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
         {/* Expanded state - full chat */}
         <div 
-          className={`fixed top-16 right-0 bottom-0 w-96 xl:w-[420px] bg-slate-900 border-l border-white/10 flex flex-col transition-all duration-300 z-40 ${
+          className={`fixed top-16 right-0 bottom-0 w-96 xl:w-[420px] bg-canvas border-l border-white/10 flex flex-col transition-all duration-300 z-40 ${
             isDesktopCollapsed ? 'translate-x-full' : 'translate-x-0'
           }`}
         >
@@ -1300,7 +1300,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           )}
 
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-white/10">
+          <div className="flex items-center justify-between px-4 py-3 bg-elevated border-b border-white/10">
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-white">League Chat</h3>
               {currentTyping.length > 0 ? (
@@ -1344,7 +1344,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           </div>
 
           {/* Input */}
-          <div className="border-t border-white/10 bg-slate-800/50 relative">
+          <div className="border-t border-white/10 bg-elevated/50 relative">
             {/* Reply preview */}
             {replyingTo && (
               <div className="px-3 pt-2 flex items-center gap-2">
@@ -1362,7 +1362,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             
             {/* Mentions dropdown */}
             {showMentions && filteredMembers.length > 0 && (
-              <div className="absolute bottom-full left-3 right-3 mb-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl z-10">
+              <div className="absolute bottom-full left-3 right-3 mb-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl z-10">
                 {filteredMembers.map((member, idx) => (
                   <button
                     key={member.userId || member.user_id}
@@ -1380,7 +1380,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             
             {/* Emoji picker */}
             {showEmojiPicker && (
-              <div className="absolute bottom-full left-3 mb-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
+              <div className="absolute bottom-full left-3 mb-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
                 {/* Category tabs */}
                 <div className="flex border-b border-white/10 overflow-x-auto hide-scrollbar">
                   {Object.keys(EMOJI_CATEGORIES).map(cat => (
@@ -1414,7 +1414,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             
             {/* GIF picker */}
             {showGifPicker && (
-              <div className="absolute bottom-full left-3 mb-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
+              <div className="absolute bottom-full left-3 mb-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
                 {/* Search */}
                 <div className="p-2 border-b border-white/10">
                   <div className="relative">
@@ -1561,7 +1561,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           )}
           
           {/* Safe area background */}
-          <div className={`bg-slate-900 border-t transition-colors duration-300 ${
+          <div className={`bg-canvas border-t transition-colors duration-300 ${
             hasNewMessage ? 'border-nfl-blue/50' : 'border-white/10'
           }`}>
             <button
@@ -1677,7 +1677,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             {/* Chat Panel - Bottom Sheet */}
             <div 
               ref={sheetRef}
-              className={`fixed inset-x-0 bottom-0 z-50 bg-slate-900 flex flex-col rounded-t-3xl shadow-2xl overflow-hidden ${
+              className={`fixed inset-x-0 bottom-0 z-50 bg-canvas flex flex-col rounded-t-3xl shadow-2xl overflow-hidden ${
                 isDragging ? '' : 'transition-all duration-300 ease-out'
               }`}
               style={{ 
@@ -1767,7 +1767,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               </div>
 
               {/* Input area - always shown, simplified in half mode */}
-              <div className="border-t border-white/10 bg-slate-800/50">
+              <div className="border-t border-white/10 bg-elevated/50">
                 {/* Reply preview - only in full mode */}
                 {sheetSize === 'full' && replyingTo && (
                   <div className="px-3 pt-2 flex items-center gap-2">
@@ -1785,7 +1785,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 
                 {/* Mentions dropdown - only in full mode */}
                 {sheetSize === 'full' && showMentions && filteredMembers.length > 0 && (
-                  <div className="mx-3 mt-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                  <div className="mx-3 mt-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl">
                     {filteredMembers.map((member, idx) => (
                       <button
                         key={member.userId || member.user_id}
@@ -1803,7 +1803,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 
                 {/* Emoji picker - only in full mode */}
                 {sheetSize === 'full' && showEmojiPicker && (
-                  <div className="mx-3 mt-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                  <div className="mx-3 mt-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl">
                     {/* Category tabs */}
                     <div className="flex border-b border-white/10 overflow-x-auto hide-scrollbar">
                       {Object.keys(EMOJI_CATEGORIES).map(cat => (
@@ -1837,7 +1837,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 
                 {/* GIF picker - only in full mode */}
                 {sheetSize === 'full' && showGifPicker && (
-                  <div className="mx-3 mt-2 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                  <div className="mx-3 mt-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl">
                     {/* Search */}
                     <div className="p-2 border-b border-white/10">
                       <div className="relative">
@@ -2016,7 +2016,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   onClick={() => { setShowMessageMenu(false); setSelectedMessage(null); }}
                 >
                   <div 
-                    className="w-full max-w-sm bg-slate-800 rounded-t-2xl overflow-hidden animate-slide-up"
+                    className="w-full max-w-sm bg-elevated rounded-t-2xl overflow-hidden animate-slide-up"
                     onClick={e => e.stopPropagation()}
                   >
                     {/* Quick reactions */}
@@ -2099,7 +2099,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   onClick={() => setReactionDetail(null)}
                 >
                   <div 
-                    className="bg-slate-800 rounded-2xl overflow-hidden shadow-xl animate-slide-up mx-4 max-w-xs w-full"
+                    className="bg-elevated rounded-2xl overflow-hidden shadow-xl animate-slide-up mx-4 max-w-xs w-full"
                     onClick={e => e.stopPropagation()}
                   >
                     <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
@@ -2136,7 +2136,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           onClick={() => { setShowMessageMenu(false); setSelectedMessage(null); }}
         >
           <div 
-            className="absolute bg-slate-800 rounded-xl shadow-2xl border border-white/10 overflow-hidden w-56 animate-scale-in"
+            className="absolute bg-elevated rounded-xl shadow-2xl border border-white/10 overflow-hidden w-56 animate-scale-in"
             style={{ 
               top: Math.min(menuPosition.y, window.innerHeight - 200),
               left: Math.min(Math.max(menuPosition.x, 16), window.innerWidth - 240),
@@ -2213,7 +2213,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           onClick={() => setReactionDetail(null)}
         >
           <div 
-            className="bg-slate-800 rounded-xl overflow-hidden shadow-xl border border-white/10 max-w-xs w-full mx-4"
+            className="bg-elevated rounded-xl overflow-hidden shadow-xl border border-white/10 max-w-xs w-full mx-4"
             onClick={e => e.stopPropagation()}
           >
             <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">

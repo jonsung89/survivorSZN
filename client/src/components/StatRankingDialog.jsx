@@ -66,7 +66,7 @@ export default function StatRankingDialog({ sport, statKey, statLabel, currentTe
       onClick={onClose}
     >
       <div
-        className="bg-gray-900 rounded-2xl max-w-md w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-white/10"
+        className="bg-canvas rounded-2xl max-w-md w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-white/10"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -99,7 +99,7 @@ export default function StatRankingDialog({ sport, statKey, statLabel, currentTe
           ) : rankings && rankings.length > 0 ? (
             <div>
               {/* Column headers */}
-              <div className="flex items-center gap-3 px-4 py-2 border-b border-white/5 sticky top-0 bg-gray-900">
+              <div className="flex items-center gap-3 px-4 py-2 border-b border-white/5 sticky top-0 bg-canvas">
                 <span className="w-8 text-right text-xs font-medium text-white/30">Rank</span>
                 <span className="flex-1 text-xs font-medium text-white/30">Team</span>
                 <span className="text-xs font-medium text-white/30">{statLabel}</span>

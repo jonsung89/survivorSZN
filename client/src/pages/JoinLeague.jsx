@@ -119,7 +119,7 @@ export default function JoinLeague() {
       {!user && (
         <Link
           to="/login"
-          className="block rounded-xl bg-gradient-to-r from-amber-500/10 to-yellow-600/10 border border-amber-500/20 p-3 sm:p-4 hover:from-amber-500/15 hover:to-yellow-600/15 transition-all group mb-4"
+          className="block glass-card rounded-xl p-3 sm:p-4 hover:bg-white/[0.06] transition-all group mb-4"
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center flex-shrink-0">
@@ -129,7 +129,7 @@ export default function JoinLeague() {
               <p className="text-white font-semibold text-sm sm:text-base">Sign in to join a league</p>
               <p className="text-white/50 text-xs sm:text-sm">Create an account or sign in to start making picks</p>
             </div>
-            <ArrowRight className="w-5 h-5 text-amber-400/60 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+            <ArrowRight className="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
           </div>
         </Link>
       )}
@@ -226,19 +226,20 @@ export default function JoinLeague() {
                     </div>
                   </div>
 
-                  <button
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      league.isJoined
-                        ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                        : selectedLeague?.id === league.id
-                        ? 'bg-white/10 text-white'
-                        : !user
-                        ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
-                        : 'bg-white/5 text-white/70 hover:bg-white/10'
-                    }`}
-                  >
-                    {league.isJoined ? 'View' : !user ? 'Sign In' : selectedLeague?.id === league.id ? 'Cancel' : 'Join'}
-                  </button>
+                  {/* Only show action button for authenticated users or joined leagues */}
+                  {(user || league.isJoined) && (
+                    <button
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        league.isJoined
+                          ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                          : selectedLeague?.id === league.id
+                          ? 'bg-white/10 text-white'
+                          : 'bg-white/5 text-white/70 hover:bg-white/10'
+                      }`}
+                    >
+                      {league.isJoined ? 'View' : selectedLeague?.id === league.id ? 'Cancel' : 'Join'}
+                    </button>
+                  )}
                 </div>
 
                 {user && !league.isJoined && selectedLeague?.id === league.id && (

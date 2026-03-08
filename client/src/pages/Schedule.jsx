@@ -1517,7 +1517,7 @@ export default function Schedule() {
         <div className="mb-4 animate-in">
           <Link
             to="/login"
-            className="block rounded-xl bg-gradient-to-r from-amber-500/10 to-yellow-600/10 border border-amber-500/20 p-3 sm:p-4 hover:from-amber-500/15 hover:to-yellow-600/15 transition-all group"
+            className="block glass-card rounded-xl p-3 sm:p-4 hover:bg-white/[0.06] transition-all group"
           >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center flex-shrink-0">
@@ -1527,7 +1527,7 @@ export default function Schedule() {
                 <p className="text-white font-semibold text-sm sm:text-base">Join a Survivor Pool</p>
                 <p className="text-white/50 text-xs sm:text-sm">Sign in to create or join a league and start making picks</p>
               </div>
-              <ArrowRight className="w-5 h-5 text-amber-400/60 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+              <ArrowRight className="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
             </div>
           </Link>
         </div>
@@ -1634,7 +1634,7 @@ export default function Schedule() {
                 </button>
 
                 {showSeasonDropdown && (
-                  <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-36 bg-[#1a1f2e] border border-white/20 rounded-lg shadow-2xl z-50 overflow-hidden">
+                  <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-36 bg-elevated border border-white/20 rounded-lg shadow-2xl z-50 overflow-hidden">
                     {seasonOptions.map(year => (
                       <button
                         key={year}

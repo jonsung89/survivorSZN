@@ -143,7 +143,7 @@ export default function Navbar() {
 
                 {/* Dropdown Menu */}
                 {dropdownOpen && (
-                  <div className="absolute top-14 right-4 w-48 bg-gray-800 border border-white/10 rounded-xl shadow-xl overflow-hidden animate-in z-50">
+                  <div className="absolute top-14 right-4 w-48 bg-elevated border border-white/10 rounded-xl shadow-xl overflow-hidden animate-in z-50">
                     <div className="p-2">
                       <button
                         onClick={openEditModal}
@@ -268,7 +268,7 @@ export default function Navbar() {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setEditModalOpen(false)}
           />
-          <div className="relative bg-gray-800 border border-white/10 rounded-2xl w-full max-w-md p-6 animate-in">
+          <div className="relative bg-elevated border border-white/10 rounded-2xl w-full max-w-md p-6 animate-in">
             <h2 className="text-xl font-display font-bold text-white mb-4">Edit Profile</h2>
             
             <div className="mb-6">

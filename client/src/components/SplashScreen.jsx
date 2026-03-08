@@ -23,7 +23,7 @@ export default function SplashScreen({ onComplete }) {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1a] transition-opacity duration-[600ms] ${
+      className={`fixed inset-0 z-[100] flex items-center justify-center bg-canvas transition-opacity duration-[600ms] ${
         phase === 'fadeout' ? 'opacity-0' : 'opacity-100'
       }`}
     >

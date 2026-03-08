@@ -76,7 +76,7 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
         <table className="w-full text-[11px] min-w-[480px]">
           <thead>
             <tr className="text-white/40 border-b border-white/10">
-              <th className="text-left py-1.5 pr-2 font-medium sticky left-0 bg-[#0d1a2d] z-10 min-w-[110px]">Player</th>
+              <th className="text-left py-1.5 pr-2 font-medium sticky left-0 bg-inset z-10 min-w-[110px]">Player</th>
               {columns.map((col, i) => (
                 <th
                   key={i}
@@ -105,7 +105,7 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
                   </td>
                 ) : (
                   <>
-                    <td className="py-1.5 pr-2 sticky left-0 bg-[#0d1a2d] z-10">
+                    <td className="py-1.5 pr-2 sticky left-0 bg-inset z-10">
                       <div className="flex items-center gap-1.5">
                         <span className="text-white/30 w-5 text-right text-[10px] font-mono">{row.position}</span>
                         <span className="text-white/90 font-medium truncate max-w-[100px]" title={row.name}>
@@ -135,7 +135,7 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
             {/* Team totals row */}
             {totals && (
               <tr className="border-t border-white/15 bg-white/[0.04]">
-                <td className="py-1.5 pr-2 sticky left-0 bg-[#0d1a2d] z-10">
+                <td className="py-1.5 pr-2 sticky left-0 bg-inset z-10">
                   <span className="text-white/50 font-semibold text-[10px] uppercase tracking-wide pl-6">Totals</span>
                 </td>
                 {totals.map((val, j) => (

@@ -71,13 +71,16 @@ export default function Navbar() {
     setSaving(false);
   };
 
-  const navLinks = [
-    { path: '/dashboard', label: 'Dashboard', icon: Home },
-    { path: '/leagues', label: 'My Leagues', icon: Trophy },
-    { path: '/schedule', label: 'Schedule', icon: Calendar },
-  ];
-
-  if (!user) return null;
+  const navLinks = user
+    ? [
+        { path: '/dashboard', label: 'Dashboard', icon: Home },
+        { path: '/leagues', label: 'My Leagues', icon: Trophy },
+        { path: '/schedule', label: 'Schedule', icon: Calendar },
+      ]
+    : [
+        { path: '/schedule', label: 'Schedule', icon: Calendar },
+        { path: '/leagues/join', label: 'Leagues', icon: Trophy },
+      ];
 
   return (
     <>
@@ -85,7 +88,7 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link to="/dashboard" className="flex items-center gap-3">
+            <Link to={user ? "/dashboard" : "/schedule"} className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-lg">
                 <Trophy className="w-5 h-5 text-white" />
               </div>
@@ -118,51 +121,63 @@ export default function Navbar() {
             </div>
 
             {/* User Menu - Desktop */}
-            <div className="hidden md:flex items-center gap-2" ref={dropdownRef}>
-              {/* Notifications */}
-              <NotificationPanel />
-              
-              <button
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-              >
-                <Avatar 
-                  userId={user?.id}
-                  name={user?.displayName || 'Player'}
-                  size="sm"
-                />
-                <span className="text-sm text-white/80">
-                  {user?.displayName || 'Player'}
-                </span>
-                <ChevronDown className={`w-4 h-4 text-white/50 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-              
-              {/* Dropdown Menu */}
-              {dropdownOpen && (
-                <div className="absolute top-14 right-4 w-48 bg-gray-800 border border-white/10 rounded-xl shadow-xl overflow-hidden animate-in z-50">
-                  <div className="p-2">
-                    <button
-                      onClick={openEditModal}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/80 hover:bg-white/10 transition-colors text-left"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                      Edit Profile
-                    </button>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-left"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Logout
-                    </button>
+            {user ? (
+              <div className="hidden md:flex items-center gap-2" ref={dropdownRef}>
+                {/* Notifications */}
+                <NotificationPanel />
+
+                <button
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                >
+                  <Avatar
+                    userId={user?.id}
+                    name={user?.displayName || 'Player'}
+                    size="sm"
+                  />
+                  <span className="text-sm text-white/80">
+                    {user?.displayName || 'Player'}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-white/50 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {dropdownOpen && (
+                  <div className="absolute top-14 right-4 w-48 bg-gray-800 border border-white/10 rounded-xl shadow-xl overflow-hidden animate-in z-50">
+                    <div className="p-2">
+                      <button
+                        onClick={openEditModal}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/80 hover:bg-white/10 transition-colors text-left"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        Edit Profile
+                      </button>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            ) : (
+              <div className="hidden md:flex items-center gap-2">
+                <Link
+                  to="/login"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-white font-medium text-sm transition-all shadow-lg shadow-amber-500/20"
+                >
+                  <User className="w-4 h-4" />
+                  Sign In
+                </Link>
+              </div>
+            )}
 
             {/* Mobile: Notifications + Menu Button */}
             <div className="md:hidden flex items-center gap-1">
-              <NotificationPanel />
+              {user && <NotificationPanel />}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="p-2 rounded-lg hover:bg-white/10 transition-colors"
@@ -198,35 +213,48 @@ export default function Navbar() {
               ))}
               
               <div className="border-t border-white/10 pt-4 mt-4">
-                <div className="flex items-center gap-3 px-4 py-2">
-                  <Avatar 
-                    userId={user?.id}
-                    name={user?.displayName || 'Player'}
-                    size="md"
-                  />
-                  <div>
-                    <p className="text-white font-medium">
-                      {user?.displayName || 'Player'}
-                    </p>
-                    <p className="text-white/50 text-sm">{user?.phone || user?.email}</p>
-                  </div>
-                </div>
-                
-                <button
-                  onClick={openEditModal}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/5 transition-colors mt-2"
-                >
-                  <Edit3 className="w-5 h-5" />
-                  Edit Profile
-                </button>
-                
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
-                >
-                  <LogOut className="w-5 h-5" />
-                  Logout
-                </button>
+                {user ? (
+                  <>
+                    <div className="flex items-center gap-3 px-4 py-2">
+                      <Avatar
+                        userId={user?.id}
+                        name={user?.displayName || 'Player'}
+                        size="md"
+                      />
+                      <div>
+                        <p className="text-white font-medium">
+                          {user?.displayName || 'Player'}
+                        </p>
+                        <p className="text-white/50 text-sm">{user?.phone || user?.email}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={openEditModal}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/5 transition-colors mt-2"
+                    >
+                      <Edit3 className="w-5 h-5" />
+                      Edit Profile
+                    </button>
+
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <LogOut className="w-5 h-5" />
+                      Logout
+                    </button>
+                  </>
+                ) : (
+                  <Link
+                    to="/login"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-center gap-2 mx-4 px-4 py-3 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-white font-medium transition-all"
+                  >
+                    <User className="w-5 h-5" />
+                    Sign In to Play
+                  </Link>
+                )}
               </div>
             </div>
           </div>

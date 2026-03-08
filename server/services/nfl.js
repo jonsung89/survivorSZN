@@ -1084,6 +1084,93 @@ const getGameDetails = async (gameId) => {
       return allLeaders;
     };
 
+    // Parse full player stats for box score display
+    const parsePlayerStatsFromBoxscore = () => {
+      if (!boxscore?.players) return null;
+
+      // NFL stat groups and their column definitions
+      const STAT_GROUP_CONFIG = {
+        passing: {
+          columns: ['C/ATT', 'YDS', 'AVG', 'TD', 'INT', 'SACKS', 'QBR', 'RTG'],
+        },
+        rushing: {
+          columns: ['CAR', 'YDS', 'AVG', 'TD', 'LONG'],
+        },
+        receiving: {
+          columns: ['REC', 'YDS', 'AVG', 'TD', 'LONG', 'TGTS'],
+        },
+        fumbles: {
+          columns: ['FUM', 'LOST', 'REC'],
+        },
+        defensive: {
+          columns: ['TOT', 'SOLO', 'SACKS', 'TFL', 'PD', 'QB HTS', 'TD'],
+        },
+        interceptions: {
+          columns: ['INT', 'YDS', 'TD'],
+        },
+        kickReturns: {
+          columns: ['NO', 'YDS', 'AVG', 'LONG', 'TD'],
+        },
+        puntReturns: {
+          columns: ['NO', 'YDS', 'AVG', 'LONG', 'TD'],
+        },
+        kicking: {
+          columns: ['FG', 'PCT', 'LONG', 'XP', 'PTS'],
+        },
+        punting: {
+          columns: ['NO', 'YDS', 'AVG', 'TB', 'In 20', 'LONG'],
+        },
+      };
+
+      // Groups to show in the box score (in order)
+      const DISPLAY_GROUPS = ['passing', 'rushing', 'receiving', 'defensive', 'kicking', 'punting'];
+
+      const parseTeamPlayers = (teamPlayers) => {
+        const team = {
+          abbreviation: teamPlayers.team?.abbreviation || '',
+          logo: teamPlayers.team?.logo || '',
+        };
+        const groups = {};
+
+        teamPlayers.statistics?.forEach(statGroup => {
+          const groupName = statGroup.name;
+          const config = STAT_GROUP_CONFIG[groupName];
+          if (!config || !DISPLAY_GROUPS.includes(groupName)) return;
+
+          const players = [];
+          statGroup.athletes?.forEach(athleteEntry => {
+            const stats = athleteEntry.stats || [];
+            // Skip empty stat lines
+            if (stats.every(s => s === '0' || s === '--' || !s)) return;
+
+            players.push({
+              name: athleteEntry.athlete?.displayName || 'Unknown',
+              shortName: athleteEntry.athlete?.shortName || athleteEntry.athlete?.displayName || 'Unknown',
+              position: athleteEntry.athlete?.position?.abbreviation || '',
+              headshot: athleteEntry.athlete?.headshot?.href || null,
+              stats: stats.slice(0, config.columns.length),
+            });
+          });
+
+          if (players.length > 0) {
+            groups[groupName] = {
+              label: groupName.charAt(0).toUpperCase() + groupName.slice(1),
+              columns: config.columns,
+              players,
+            };
+          }
+        });
+
+        return { team, groups };
+      };
+
+      return {
+        type: 'football',
+        displayGroups: DISPLAY_GROUPS,
+        teams: boxscore.players.map(parseTeamPlayers),
+      };
+    };
+
     const result = {
       gameId,
       teamStats: {
@@ -1094,7 +1181,8 @@ const getGameDetails = async (gameId) => {
       betting: parseBettingInfo(),
       winProbability: parseWinProbability(),
       scoringPlays: parseScoringPlays(data.drives?.previous),
-      seasonAverages: parseBoxscoreSeasonStats(boxscore)
+      seasonAverages: parseBoxscoreSeasonStats(boxscore),
+      playerStats: parsePlayerStatsFromBoxscore()
     };
 
     // console.log(`Game ${gameId} details loaded, leaders count: ${result.leaders.length}`);

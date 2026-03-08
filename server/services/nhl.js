@@ -55,7 +55,93 @@ function parseNHLGameDetails(data) {
   // --- Season averages from boxscore (streak, opp stats for upcoming games) ---
   const seasonAverages = parseBoxscoreSeasonStats(boxscore);
 
-  return { leaders, scoringPlays, linescores, teamStats, winProbability, seasonAverages };
+  // --- Player Stats (full box score) ---
+  const playerStats = parsePlayerStats(boxscore);
+
+  return { leaders, scoringPlays, linescores, teamStats, winProbability, seasonAverages, playerStats };
+}
+
+/**
+ * Parse full player box score from boxscore data.
+ * NHL ESPN stat groups: forwards, defenses, skaters (empty), goalies
+ *
+ * Forward/Defense stat labels (actual order from ESPN):
+ *   BS, HT, TK, +/-, TOI, PPTOI, SHTOI, ESTOI, SHFT, G, YTDG, A, S, SM, SOG, FW, FL, FO%, GV, PN, PIM
+ *
+ * Goalie stat labels (actual order from ESPN):
+ *   GA, SA, SOS, SOSA, SV, SV%, ESSV, PPSV, SHSV, TOI, YTDG, PIM
+ */
+function parsePlayerStats(boxscore) {
+  if (!boxscore?.players || boxscore.players.length < 2) return null;
+
+  const SKATER_COLUMNS = [
+    { label: 'G',    idx: 9 },
+    { label: 'A',    idx: 11 },
+    { label: '+/-',  idx: 3 },
+    { label: 'SOG',  idx: 14 },
+    { label: 'HIT',  idx: 1 },
+    { label: 'BLK',  idx: 0 },
+    { label: 'PIM',  idx: 20 },
+    { label: 'TOI',  idx: 4 },
+    { label: 'FO%',  idx: 17 },
+  ];
+
+  const GOALIE_COLUMNS = [
+    { label: 'SA',   idx: 1 },
+    { label: 'GA',   idx: 0 },
+    { label: 'SV',   idx: 4 },
+    { label: 'SV%',  idx: 5 },
+    { label: 'TOI',  idx: 9 },
+    { label: 'PIM',  idx: 11 },
+  ];
+
+  const parseTeamPlayers = (teamPlayers) => {
+    const team = {
+      abbreviation: teamPlayers.team?.abbreviation || '',
+      logo: teamPlayers.team?.logo || '',
+    };
+    const skaters = [];
+    const goalies = [];
+
+    teamPlayers.statistics?.forEach(statGroup => {
+      if (statGroup.name === 'forwards' || statGroup.name === 'defenses') {
+        statGroup.athletes?.forEach(athleteEntry => {
+          const stats = athleteEntry.stats || [];
+          // Skip players with no TOI
+          if (!stats[4] || stats[4] === '0:00') return;
+
+          skaters.push({
+            name: athleteEntry.athlete?.displayName || 'Unknown',
+            shortName: athleteEntry.athlete?.shortName || athleteEntry.athlete?.displayName || 'Unknown',
+            position: athleteEntry.athlete?.position?.abbreviation || '',
+            headshot: athleteEntry.athlete?.headshot?.href || null,
+            isForward: statGroup.name === 'forwards',
+            stats: SKATER_COLUMNS.map(col => stats[col.idx] || '-'),
+          });
+        });
+      } else if (statGroup.name === 'goalies') {
+        statGroup.athletes?.forEach(athleteEntry => {
+          const stats = athleteEntry.stats || [];
+          goalies.push({
+            name: athleteEntry.athlete?.displayName || 'Unknown',
+            shortName: athleteEntry.athlete?.shortName || athleteEntry.athlete?.displayName || 'Unknown',
+            position: 'G',
+            headshot: athleteEntry.athlete?.headshot?.href || null,
+            stats: GOALIE_COLUMNS.map(col => stats[col.idx] || '-'),
+          });
+        });
+      }
+    });
+
+    return { team, skaters, goalies };
+  };
+
+  return {
+    type: 'hockey',
+    skaterColumns: SKATER_COLUMNS.map(c => c.label),
+    goalieColumns: GOALIE_COLUMNS.map(c => c.label),
+    teams: boxscore.players.map(parseTeamPlayers),
+  };
 }
 
 // Map ESPN stat labels to frontend stat keys

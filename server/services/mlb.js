@@ -55,7 +55,92 @@ function parseMLBGameDetails(data) {
   // --- Season averages from boxscore (streak, opp stats for upcoming games) ---
   const seasonAverages = parseBoxscoreSeasonStats(boxscore);
 
-  return { leaders, scoringPlays, linescores, teamStats, winProbability, seasonAverages };
+  // --- Player Stats (full box score) ---
+  const playerStats = parsePlayerStats(boxscore);
+
+  return { leaders, scoringPlays, linescores, teamStats, winProbability, seasonAverages, playerStats };
+}
+
+/**
+ * Parse full player box score from boxscore data.
+ * MLB has separate batting and pitching stat groups.
+ *
+ * Batting labels from ESPN (actual order):
+ *   H-AB, AB, R, H, RBI, HR, BB, K, #P, AVG, OBP, SLG
+ *
+ * Pitching labels from ESPN (actual order):
+ *   IP, H, R, ER, BB, K, HR, PC-ST, ERA, PC
+ */
+function parsePlayerStats(boxscore) {
+  if (!boxscore?.players || boxscore.players.length < 2) return null;
+
+  const BATTING_COLUMNS = [
+    { label: 'AB',  idx: 1 },
+    { label: 'R',   idx: 2 },
+    { label: 'H',   idx: 3 },
+    { label: 'RBI', idx: 4 },
+    { label: 'HR',  idx: 5 },
+    { label: 'BB',  idx: 6 },
+    { label: 'K',   idx: 7 },
+    { label: 'AVG', idx: 9 },
+    { label: 'OBP', idx: 10 },
+    { label: 'SLG', idx: 11 },
+  ];
+
+  const PITCHING_COLUMNS = [
+    { label: 'IP',   idx: 0 },
+    { label: 'H',    idx: 1 },
+    { label: 'R',    idx: 2 },
+    { label: 'ER',   idx: 3 },
+    { label: 'BB',   idx: 4 },
+    { label: 'K',    idx: 5 },
+    { label: 'HR',   idx: 6 },
+    { label: 'PC-ST', idx: 7 },
+    { label: 'ERA',  idx: 8 },
+  ];
+
+  const parseTeamPlayers = (teamPlayers) => {
+    const team = {
+      abbreviation: teamPlayers.team?.abbreviation || '',
+      logo: teamPlayers.team?.logo || '',
+    };
+    const batters = [];
+    const pitchers = [];
+
+    teamPlayers.statistics?.forEach(statGroup => {
+      const groupType = identifyStatGroup(statGroup);
+
+      statGroup.athletes?.forEach(athleteEntry => {
+        const stats = athleteEntry.stats || [];
+        const player = {
+          name: athleteEntry.athlete?.displayName || 'Unknown',
+          shortName: athleteEntry.athlete?.shortName || athleteEntry.athlete?.displayName || 'Unknown',
+          position: athleteEntry.athlete?.position?.abbreviation || '',
+          headshot: athleteEntry.athlete?.headshot?.href || null,
+          starter: athleteEntry.starter || false,
+        };
+
+        if (groupType === 'batting') {
+          // Use H-AB (index 0) as summary display
+          player.summary = stats[0] || '-';
+          player.stats = BATTING_COLUMNS.map(col => stats[col.idx] || '-');
+          batters.push(player);
+        } else if (groupType === 'pitching') {
+          player.stats = PITCHING_COLUMNS.map(col => stats[col.idx] || '-');
+          pitchers.push(player);
+        }
+      });
+    });
+
+    return { team, batters, pitchers };
+  };
+
+  return {
+    type: 'baseball',
+    battingColumns: BATTING_COLUMNS.map(c => c.label),
+    pitchingColumns: PITCHING_COLUMNS.map(c => c.label),
+    teams: boxscore.players.map(parseTeamPlayers),
+  };
 }
 
 // Map ESPN stat labels to frontend stat keys

@@ -46,7 +46,72 @@ function parseNCAABGameDetails(data) {
   // --- Season averages from boxscore (streak, opp PPG, L10 for upcoming games) ---
   const seasonAverages = parseBoxscoreSeasonStats(boxscore);
 
-  return { leaders, scoringPlays, linescores, teamStats, winProbability, seasonAverages };
+  // --- Player Stats (full box score) ---
+  const playerStats = parsePlayerStats(boxscore);
+
+  return { leaders, scoringPlays, linescores, teamStats, winProbability, seasonAverages, playerStats };
+}
+
+/**
+ * Parse full player box score from boxscore data.
+ * College basketball uses the same stat labels as NBA:
+ *   MIN, PTS, FG, 3PT, FT, REB, AST, TO, STL, BLK, OREB, DREB, PF, +/-
+ */
+function parsePlayerStats(boxscore) {
+  if (!boxscore?.players || boxscore.players.length < 2) return null;
+
+  const COLUMNS = [
+    { label: 'MIN', idx: 0 },
+    { label: 'PTS', idx: 1 },
+    { label: 'REB', idx: 5 },
+    { label: 'AST', idx: 6 },
+    { label: 'FG',  idx: 2 },
+    { label: '3PT', idx: 3 },
+    { label: 'FT',  idx: 4 },
+    { label: 'STL', idx: 8 },
+    { label: 'BLK', idx: 9 },
+    { label: 'TO',  idx: 7 },
+    { label: '+/-', idx: 13 },
+  ];
+
+  const parseTeamPlayers = (teamPlayers) => {
+    const team = {
+      abbreviation: teamPlayers.team?.abbreviation || '',
+      logo: teamPlayers.team?.logo || '',
+    };
+    const starters = [];
+    const bench = [];
+
+    teamPlayers.statistics?.forEach(statGroup => {
+      statGroup.athletes?.forEach(athleteEntry => {
+        const stats = athleteEntry.stats || [];
+        if (!stats[0] || stats[0] === '0' || stats[0] === '0:00') return;
+
+        const player = {
+          name: athleteEntry.athlete?.displayName || 'Unknown',
+          shortName: athleteEntry.athlete?.shortName || athleteEntry.athlete?.displayName || 'Unknown',
+          position: athleteEntry.athlete?.position?.abbreviation || '',
+          headshot: athleteEntry.athlete?.headshot?.href || null,
+          starter: athleteEntry.starter || false,
+          stats: COLUMNS.map(col => stats[col.idx] || '-'),
+        };
+
+        if (player.starter) {
+          starters.push(player);
+        } else {
+          bench.push(player);
+        }
+      });
+    });
+
+    return { team, starters, bench };
+  };
+
+  return {
+    type: 'basketball',
+    columns: COLUMNS.map(c => c.label),
+    teams: boxscore.players.map(parseTeamPlayers),
+  };
 }
 
 // Map ESPN stat labels to frontend stat keys (same as NBA)

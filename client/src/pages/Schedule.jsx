@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, TrendingUp, Users, Target, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, TrendingUp, Users, Target, AlertTriangle, ArrowRight } from 'lucide-react';
 import { nflAPI, scheduleAPI } from '../api';
 import { getSportModule } from '../sports';
+import { useAuth } from '../context/AuthContext';
 import Loading from '../components/Loading';
 import TeamInfoDialog from '../components/TeamInfoDialog';
 import StatRankingDialog from '../components/StatRankingDialog';
+import BoxScore from '../components/BoxScore';
 import { PLAYOFF_ROUNDS, BROADCAST_NETWORKS } from '../sports/nfl/constants';
 
 const SPORT_TABS = [
@@ -130,6 +133,7 @@ const StandingBadge = ({ label, rank }) => {
 };
 
 export default function Schedule() {
+  const { user } = useAuth();
   const [selectedSport, setSelectedSport] = useState('nfl');
   const [season, setSeason] = useState(2024);
   const [currentWeek, setCurrentWeek] = useState(1);
@@ -981,6 +985,7 @@ export default function Schedule() {
     const hasLeaders = details?.leaders && details.leaders.length > 0;
     const hasScoringPlays = details?.scoringPlays && details.scoringPlays.length > 0;
     const hasTeamStats = details?.teamStats?.home || details?.teamStats?.away;
+    const hasPlayerStats = details?.playerStats?.teams?.length > 0;
 
     const formatTeamStatValue = (value) => {
       if (!value || typeof value !== 'string') return value;
@@ -1150,6 +1155,11 @@ export default function Schedule() {
           </div>
         ) : null}
 
+        {/* Box Score */}
+        {hasPlayerStats && (
+          <BoxScore playerStats={details.playerStats} game={game} />
+        )}
+
         {/* Scoring Summary */}
         {details?.scoringPlays && details.scoringPlays.length > 0 && (
           <div className="space-y-2">
@@ -1206,7 +1216,7 @@ export default function Schedule() {
         )}
 
         {/* If no details at all */}
-        {!hasLeaders && !hasScoringPlays && !hasTeamStats && (
+        {!hasLeaders && !hasScoringPlays && !hasTeamStats && !hasPlayerStats && (
           <div className="text-center text-white/40 text-sm py-2">
             No additional details available for this game
           </div>
@@ -1501,6 +1511,27 @@ export default function Schedule() {
           </button>
         ))}
       </div>
+
+      {/* Sign up CTA for unauthenticated users */}
+      {!user && (
+        <div className="mb-4 animate-in">
+          <Link
+            to="/login"
+            className="block rounded-xl bg-gradient-to-r from-amber-500/10 to-yellow-600/10 border border-amber-500/20 p-3 sm:p-4 hover:from-amber-500/15 hover:to-yellow-600/15 transition-all group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center flex-shrink-0">
+                <Trophy className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold text-sm sm:text-base">Join a Survivor Pool</p>
+                <p className="text-white/50 text-xs sm:text-sm">Sign in to create or join a league and start making picks</p>
+              </div>
+              <ArrowRight className="w-5 h-5 text-amber-400/60 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+            </div>
+          </Link>
+        </div>
+      )}
 
       {selectedSportTab?.scheduleType === 'daily' ? (
         /* Daily sport rendering (NBA, MLB, NHL, NCAAB) */

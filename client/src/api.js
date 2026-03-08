@@ -75,6 +75,14 @@ export const leagueAPI = {
     return res.json();
   },
 
+  browse: async () => {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${API_URL}/leagues/browse`, { headers });
+    return res.json();
+  },
+
   search: async (query) => {
     const res = await authFetch(`/leagues/search?query=${encodeURIComponent(query)}`);
     return res.json();

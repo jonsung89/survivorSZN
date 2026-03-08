@@ -81,6 +81,13 @@ function AppLayout({ children, hideFooterMobile = false }) {
   );
 }
 
+// Redirect root based on auth state
+function RootRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) return <Loading fullScreen />;
+  return <Navigate to={user ? "/dashboard" : "/schedule"} replace />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -122,11 +129,9 @@ function AppRoutes() {
       } />
       
       <Route path="/leagues/join" element={
-        <ProtectedRoute>
-          <AppLayout>
-            <JoinLeague />
-          </AppLayout>
-        </ProtectedRoute>
+        <AppLayout>
+          <JoinLeague />
+        </AppLayout>
       } />
       
       {/* League detail routes - use singular /league/ */}
@@ -148,15 +153,13 @@ function AppRoutes() {
       } />
       
       <Route path="/schedule" element={
-        <ProtectedRoute>
-          <AppLayout>
-            <Schedule />
-          </AppLayout>
-        </ProtectedRoute>
+        <AppLayout>
+          <Schedule />
+        </AppLayout>
       } />
       
-      {/* Redirect root to dashboard or login */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      {/* Redirect root to dashboard (logged in) or schedule (public) */}
+      <Route path="/" element={<RootRedirect />} />
       
       {/* 404 fallback */}
       <Route path="*" element={

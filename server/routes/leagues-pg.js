@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { db } = require('../db/supabase');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const { getProvider } = require('../sports');
 
 // Helper to get user from Firebase UID
@@ -135,6 +135,59 @@ router.get('/invite/:inviteCode', async (req, res) => {
 });
 
 // Search for leagues by name
+// Browse leagues — public (no auth required), optionally enriched with join status
+router.get('/browse', optionalAuth, async (req, res) => {
+  try {
+    let userId = null;
+    if (req.firebaseUser) {
+      const user = await db.getOne('SELECT id FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
+      userId = user?.id;
+    }
+
+    const leagues = await db.getAll(`
+      SELECT
+        l.id,
+        l.name,
+        l.max_strikes,
+        l.start_week,
+        l.season,
+        l.sport_id,
+        l.status,
+        l.password_hash IS NOT NULL as has_password,
+        COUNT(lm.id) as member_count,
+        u.display_name as commissioner_name
+        ${userId ? ", CASE WHEN my_membership.user_id IS NOT NULL THEN true ELSE false END as is_joined" : ""}
+      FROM leagues l
+      LEFT JOIN league_members lm ON l.id = lm.league_id
+      LEFT JOIN users u ON l.commissioner_id = u.id
+      ${userId ? "LEFT JOIN league_members my_membership ON l.id = my_membership.league_id AND my_membership.user_id = $1" : ""}
+      WHERE l.status = 'active'
+      GROUP BY l.id, u.display_name${userId ? ", my_membership.user_id" : ""}
+      ORDER BY COUNT(lm.id) DESC
+      LIMIT 50
+    `, userId ? [userId] : []);
+
+    res.json({
+      success: true,
+      leagues: leagues.map(l => ({
+        id: l.id,
+        name: l.name,
+        maxStrikes: l.max_strikes,
+        startWeek: l.start_week,
+        season: l.season,
+        sport: l.sport_id || 'nfl',
+        memberCount: parseInt(l.member_count),
+        commissionerName: l.commissioner_name || 'Unknown',
+        hasPassword: l.has_password,
+        isJoined: userId ? l.is_joined : false
+      }))
+    });
+  } catch (error) {
+    console.error('Browse leagues error:', error);
+    res.status(500).json({ error: 'Failed to browse leagues' });
+  }
+});
+
 // List all available leagues (ones user hasn't joined)
 router.get('/available', authMiddleware, async (req, res) => {
   try {

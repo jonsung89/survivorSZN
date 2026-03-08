@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Trophy, Lock, Users, Loader2, Check } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Search, Trophy, Lock, Users, Loader2, Check, ArrowRight } from 'lucide-react';
 import { leagueAPI } from '../api';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 
 export default function JoinLeague() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { showToast } = useToast();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [allLeagues, setAllLeagues] = useState([]);
@@ -18,7 +20,7 @@ export default function JoinLeague() {
 
   useEffect(() => {
     loadLeagues();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     // Filter leagues based on search query
@@ -27,7 +29,7 @@ export default function JoinLeague() {
     } else {
       const query = searchQuery.toLowerCase();
       setFilteredLeagues(
-        allLeagues.filter(l => 
+        allLeagues.filter(l =>
           l.name.toLowerCase().includes(query) ||
           l.commissionerName?.toLowerCase().includes(query)
         )
@@ -37,7 +39,8 @@ export default function JoinLeague() {
 
   const loadLeagues = async () => {
     try {
-      const result = await leagueAPI.getAvailable();
+      // Use browse endpoint (works with or without auth)
+      const result = await leagueAPI.browse();
       if (result.success) {
         setAllLeagues(result.leagues || []);
         setFilteredLeagues(result.leagues || []);
@@ -49,6 +52,12 @@ export default function JoinLeague() {
   };
 
   const handleJoin = async (league) => {
+    if (!user) {
+      // Redirect to login, then back here
+      navigate('/login');
+      return;
+    }
+
     if (!password.trim()) {
       showToast('Please enter the league password', 'error');
       return;
@@ -75,7 +84,13 @@ export default function JoinLeague() {
       navigate(`/league/${league.id}`);
       return;
     }
-    
+
+    // If not logged in, redirect to login
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
     if (selectedLeague?.id === league.id) {
       setSelectedLeague(null);
       setPassword('');
@@ -89,9 +104,35 @@ export default function JoinLeague() {
     <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">Join a League</h1>
-        <p className="text-white/60 mt-1 text-sm sm:text-base">Find a league and join with the password from your commissioner</p>
+        <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+          {user ? 'Join a League' : 'Browse Leagues'}
+        </h1>
+        <p className="text-white/60 mt-1 text-sm sm:text-base">
+          {user
+            ? 'Find a league and join with the password from your commissioner'
+            : 'See active survivor pool leagues — sign in to join one'
+          }
+        </p>
       </div>
+
+      {/* Sign in CTA for unauthenticated users */}
+      {!user && (
+        <Link
+          to="/login"
+          className="block rounded-xl bg-gradient-to-r from-amber-500/10 to-yellow-600/10 border border-amber-500/20 p-3 sm:p-4 hover:from-amber-500/15 hover:to-yellow-600/15 transition-all group mb-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center flex-shrink-0">
+              <Trophy className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-semibold text-sm sm:text-base">Sign in to join a league</p>
+              <p className="text-white/50 text-xs sm:text-sm">Create an account or sign in to start making picks</p>
+            </div>
+            <ArrowRight className="w-5 h-5 text-amber-400/60 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+          </div>
+        </Link>
+      )}
 
       {/* Search/Filter */}
       <div className="relative mb-4">
@@ -119,8 +160,8 @@ export default function JoinLeague() {
               {allLeagues.length === 0 ? 'No leagues available' : 'No leagues found'}
             </h3>
             <p className="text-white/50 text-sm">
-              {allLeagues.length === 0 
-                ? 'There are no leagues to join right now. Try creating one!'
+              {allLeagues.length === 0
+                ? user ? 'There are no leagues to join right now. Try creating one!' : 'There are no leagues right now. Sign in to create one!'
                 : 'Try a different search term.'
               }
             </p>
@@ -130,7 +171,7 @@ export default function JoinLeague() {
             <p className="text-white/50 text-sm mb-4">
               {filteredLeagues.length} league{filteredLeagues.length !== 1 ? 's' : ''} available
             </p>
-            
+
             {filteredLeagues.map((league) => (
               <div
                 key={league.id}
@@ -142,13 +183,13 @@ export default function JoinLeague() {
                     : 'bg-white/5 border-white/10 hover:border-white/20'
                 }`}
               >
-                <div 
+                <div
                   className="flex items-center justify-between cursor-pointer"
                   onClick={() => handleSelectLeague(league)}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      league.isJoined 
+                      league.isJoined
                         ? 'bg-gradient-to-br from-green-600 to-green-700'
                         : 'bg-gradient-to-br from-nfl-blue to-blue-700'
                     }`}>
@@ -184,21 +225,23 @@ export default function JoinLeague() {
                       </div>
                     </div>
                   </div>
-                  
+
                   <button
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                       league.isJoined
                         ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
                         : selectedLeague?.id === league.id
                         ? 'bg-white/10 text-white'
+                        : !user
+                        ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
                         : 'bg-white/5 text-white/70 hover:bg-white/10'
                     }`}
                   >
-                    {league.isJoined ? 'View' : selectedLeague?.id === league.id ? 'Cancel' : 'Join'}
+                    {league.isJoined ? 'View' : !user ? 'Sign In' : selectedLeague?.id === league.id ? 'Cancel' : 'Join'}
                   </button>
                 </div>
 
-                {!league.isJoined && selectedLeague?.id === league.id && (
+                {user && !league.isJoined && selectedLeague?.id === league.id && (
                   <div className="flex gap-3 mt-4 pt-4 border-t border-white/10">
                     <div className="relative flex-1">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />

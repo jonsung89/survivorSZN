@@ -36,4 +36,30 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-module.exports = { authMiddleware };
+// Optional auth — sets req.firebaseUser if token present, but doesn't reject if missing
+const optionalAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next(); // No token — continue as unauthenticated
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+      audience: FIREBASE_PROJECT_ID
+    });
+    req.firebaseUser = {
+      uid: payload.sub,
+      email: payload.email,
+      phone: payload.phone_number,
+      name: payload.name
+    };
+  } catch {
+    // Invalid token — treat as unauthenticated
+  }
+  next();
+};
+
+module.exports = { authMiddleware, optionalAuth };

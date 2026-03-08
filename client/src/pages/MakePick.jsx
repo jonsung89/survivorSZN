@@ -8,6 +8,7 @@ import {
 import { leagueAPI, picksAPI, nflAPI } from '../api';
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
+import { getSportModule } from '../sports';
 
 export default function MakePick() {
   const { leagueId } = useParams();
@@ -29,6 +30,11 @@ export default function MakePick() {
   const [injuries, setInjuries] = useState({});
   const [teamInfoDialog, setTeamInfoDialog] = useState({ open: false, team: null, data: null, loading: false });
   const [showCoachMark, setShowCoachMark] = useState(false);
+
+  // Load sport module based on league's sport
+  const sport = getSportModule(league?.sport_id || 'nfl');
+  const { getWeekLabel, espnToAppWeek } = sport;
+  const MAX_WEEK = sport.maxPeriod;
 
   // Check if user has seen the team info tip
   useEffect(() => {
@@ -56,15 +62,6 @@ export default function MakePick() {
     }
   };
 
-  // Helper to get week label (handles playoff weeks)
-  const getWeekLabel = (week) => {
-    if (week <= 18) return `Week ${week}`;
-    if (week === 19) return 'Wild Card';
-    if (week === 20) return 'Divisional';
-    if (week === 21) return 'Conference';
-    if (week === 23) return 'Super Bowl';
-    return `Week ${week}`;
-  };
 
   useEffect(() => {
     loadInitialData();
@@ -96,21 +93,8 @@ export default function MakePick() {
         const seasonResult = await nflAPI.getSeason();
         console.log('[MakePick] Season API response:', seasonResult);
         
-        // Convert playoff weeks: ESPN returns week 1-5 with seasonType=3
-        // ESPN: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl (skip), 5=Super Bowl
-        // Frontend uses week 19-21, 23 for playoffs (skip 22 Pro Bowl)
         if (seasonResult.week) {
-          week = seasonResult.week;
-          if (seasonResult.seasonType === 3) {
-            // Special handling: ESPN week 5 = Super Bowl = our week 23
-            if (seasonResult.week === 5) {
-              week = 23; // Super Bowl
-            } else if (seasonResult.week === 4) {
-              week = 23; // Pro Bowl week - treat as Super Bowl for our purposes
-            } else {
-              week = seasonResult.week + 18; // WC=19, DIV=20, CONF=21
-            }
-          }
+          week = espnToAppWeek(seasonResult.week, seasonResult.seasonType);
         }
         
         // Never go below the league's start week
@@ -130,7 +114,7 @@ export default function MakePick() {
       const urlWeek = searchParams.get('week');
       // Validate URL week is within valid range (league start to 23)
       let targetWeek = urlWeek ? parseInt(urlWeek) : week;
-      if (targetWeek > 23) targetWeek = 23;
+      if (targetWeek > MAX_WEEK) targetWeek = MAX_WEEK;
       if (targetWeek < leagueData.startWeek) targetWeek = leagueData.startWeek;
       setSelectedWeek(targetWeek);
 

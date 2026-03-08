@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getCurrentSeason } = require('../services/nfl');
+const { getProvider } = require('../sports');
 const { v4: uuidv4 } = require('uuid');
 
 // Sync user from Firebase (called after Firebase auth)
@@ -134,40 +134,38 @@ router.get('/pending-picks', authMiddleware, async (req, res) => {
     const user = await db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { season, week, seasonType } = await getCurrentSeason();
-    // Convert ESPN week to internal week
-    // ESPN playoffs: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
-    // Internal: 19=Wild Card, 20=Divisional, 21=Conference, 23=Super Bowl (skip 22 Pro Bowl)
-    let internalWeek;
-    if (seasonType === 3) {
-      if (week === 5) {
-        internalWeek = 23; // Super Bowl
-      } else if (week === 4) {
-        internalWeek = 23; // Pro Bowl week - treat as Super Bowl
-      } else {
-        internalWeek = week + 18;
-      }
-    } else {
-      internalWeek = week;
-    }
-
-    // Get all active league memberships
+    // Get all active league memberships (need sport_id to determine current week per sport)
     const memberships = await db.getAll(`
-      SELECT lm.*, l.name as league_name, l.start_week, l.season
+      SELECT lm.*, l.name as league_name, l.start_week, l.season, l.sport_id
       FROM league_members lm
       JOIN leagues l ON lm.league_id = l.id
       WHERE lm.user_id = $1 AND lm.status = 'active' AND l.status = 'active'
     `, [user.id]);
 
+    // Cache current week per sport to avoid redundant API calls
+    const currentWeekBySport = {};
+
     const pendingPicks = [];
 
     for (const membership of memberships) {
+      const sportId = membership.sport_id || 'nfl';
+
+      // Get current week for this sport (cached)
+      if (!currentWeekBySport[sportId]) {
+        const provider = getProvider(sportId);
+        const seasonData = await provider.getCurrentSeason();
+        currentWeekBySport[sportId] = provider.espnToAppWeek
+          ? provider.espnToAppWeek(seasonData.week, seasonData.seasonType)
+          : seasonData.week;
+      }
+      const internalWeek = currentWeekBySport[sportId];
+
       // Skip if week is before league start
       if (internalWeek < membership.start_week) continue;
 
       // Check if pick exists for current week
       const pick = await db.getOne(`
-        SELECT * FROM picks 
+        SELECT * FROM picks
         WHERE league_id = $1 AND user_id = $2 AND week = $3
       `, [membership.league_id, user.id, internalWeek]);
 
@@ -181,8 +179,15 @@ router.get('/pending-picks', authMiddleware, async (req, res) => {
       }
     }
 
+    // Use NFL as default for backward compat
+    const defaultProvider = getProvider('nfl');
+    const defaultSeason = await defaultProvider.getCurrentSeason();
+    const defaultWeek = defaultProvider.espnToAppWeek
+      ? defaultProvider.espnToAppWeek(defaultSeason.week, defaultSeason.seasonType)
+      : defaultSeason.week;
+
     res.json({
-      currentWeek: internalWeek,
+      currentWeek: currentWeekBySport['nfl'] || defaultWeek,
       pendingPicks
     });
   } catch (error) {

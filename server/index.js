@@ -9,6 +9,7 @@ const { Server } = require('socket.io');
 const leagueRoutes = require('./routes/leagues-pg');
 const pickRoutes = require('./routes/picks-pg');
 const nflRoutes = require('./routes/nfl');
+const sportsRoutes = require('./routes/sports');
 const userRoutes = require('./routes/users-pg');
 const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notifications-pg');
@@ -48,6 +49,7 @@ app.use(express.json());
 app.set('io', io);
 
 // API Routes
+app.use('/api/sports', sportsRoutes);
 app.use('/api/leagues', leagueRoutes);
 app.use('/api/picks', pickRoutes);
 app.use('/api/nfl', nflRoutes);

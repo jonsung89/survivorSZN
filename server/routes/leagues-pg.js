@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getCurrentSeason, getWeekSchedule, getEspnWeekParams } = require('../services/nfl');
+const { getProvider } = require('../sports');
 
 // Helper to get user from Firebase UID
 const getUser = async (req) => {
@@ -23,8 +23,8 @@ router.post('/', authMiddleware, async (req, res) => {
     const user = await getUser(req);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { name, password, maxStrikes = 1, startWeek = 1 } = req.body;
-    
+    const { name, password, maxStrikes = 1, startWeek = 1, sportId = 'nfl' } = req.body;
+
     if (!name || name.trim().length < 3) {
       return res.status(400).json({ error: 'League name must be at least 3 characters' });
     }
@@ -37,21 +37,30 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Max strikes must be between 1 and 5' });
     }
 
-    if (startWeek < 1 || startWeek > 18) {
-      return res.status(400).json({ error: 'Start week must be between 1 and 18' });
+    // Validate sport and start week using sport provider
+    let provider;
+    try {
+      provider = getProvider(sportId);
+    } catch (e) {
+      return res.status(400).json({ error: `Unsupported sport: ${sportId}` });
     }
 
-    const { season } = await getCurrentSeason();
+    const periodValidation = provider.validatePeriod(startWeek, { start_week: 1 });
+    if (!periodValidation.valid) {
+      return res.status(400).json({ error: periodValidation.error });
+    }
+
+    const { season } = await provider.getCurrentSeason();
     const passwordHash = await bcrypt.hash(password, 10);
     const leagueId = uuidv4();
     const memberId = uuidv4();
     const inviteCode = generateInviteCode();
 
-    // Create league with invite code
+    // Create league with invite code and sport
     await db.run(`
-      INSERT INTO leagues (id, name, password_hash, commissioner_id, max_strikes, start_week, season, invite_code)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, [leagueId, name.trim(), passwordHash, user.id, maxStrikes, startWeek, season, inviteCode]);
+      INSERT INTO leagues (id, name, password_hash, commissioner_id, max_strikes, start_week, season, invite_code, sport_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [leagueId, name.trim(), passwordHash, user.id, maxStrikes, startWeek, season, inviteCode, sportId]);
 
     // Add commissioner as first member
     await db.run(`
@@ -67,6 +76,7 @@ router.post('/', authMiddleware, async (req, res) => {
         maxStrikes,
         startWeek,
         season,
+        sportId,
         inviteCode,
         isCommissioner: true
       }
@@ -277,24 +287,12 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
     const user = await getUser(req);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Get current NFL week using helper that handles playoffs
+    // Get current week (defaults to NFL — multi-sport will refine per-league)
     let currentWeek = 1;
     try {
-      const { week, seasonType } = await getCurrentSeason();
-      // Convert ESPN week to internal week
-      // ESPN playoffs: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
-      // Internal: 19=Wild Card, 20=Divisional, 21=Conference, 23=Super Bowl (skip 22 Pro Bowl)
-      if (seasonType === 3) {
-        if (week === 5) {
-          currentWeek = 23; // Super Bowl
-        } else if (week === 4) {
-          currentWeek = 23; // Pro Bowl week - treat as Super Bowl
-        } else {
-          currentWeek = week + 18;
-        }
-      } else {
-        currentWeek = week;
-      }
+      const defaultProvider = getProvider('nfl');
+      const seasonResult = await defaultProvider.getCurrentSeason();
+      currentWeek = defaultProvider.espnToAppWeek(seasonResult.week || 1, seasonResult.seasonType);
     } catch (e) {
       console.error('Failed to get current week:', e);
     }
@@ -475,8 +473,11 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     }
 
     if (startWeek !== undefined && startWeek !== league.start_week) {
-      if (startWeek < 1 || startWeek > 18) {
-        return res.status(400).json({ error: 'Start week must be between 1 and 18' });
+      const settingsProvider = getProvider(league.sport_id || 'nfl');
+      const validPeriods = settingsProvider.getValidStartPeriods();
+      const validValues = validPeriods.map(p => p.value);
+      if (!validValues.includes(startWeek)) {
+        return res.status(400).json({ error: `Start week must be between ${validValues[0]} and ${validValues[validValues.length - 1]}` });
       }
       updates.push(`start_week = $${paramIndex++}`);
       params.push(startWeek);
@@ -484,21 +485,24 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     }
 
     if (doublePickWeeks !== undefined) {
-      // Validate weeks array (1-21, 23 - skip 22 Pro Bowl)
-      const validWeeks = Array.isArray(doublePickWeeks) 
-        ? doublePickWeeks.filter(w => w >= 1 && w <= 23 && w !== 22)
+      const dpProvider = getProvider(league.sport_id || 'nfl');
+      const maxPeriod = dpProvider.getMaxPeriod();
+      const skipPeriods = dpProvider.getSkipPeriods();
+      const validWeeks = Array.isArray(doublePickWeeks)
+        ? doublePickWeeks.filter(w => w >= 1 && w <= maxPeriod && !skipPeriods.includes(w))
         : [];
+      const totalValidWeeks = maxPeriod - skipPeriods.length;
       const currentWeeks = league.double_pick_weeks || [];
-      
+
       // Check if actually changed
       const changed = JSON.stringify(validWeeks.sort()) !== JSON.stringify(currentWeeks.sort());
       if (changed) {
         updates.push(`double_pick_weeks = $${paramIndex++}`);
         params.push(validWeeks);
-        
+
         if (validWeeks.length === 0) {
           changes.push('Double pick weeks: disabled');
-        } else if (validWeeks.length === 22) {
+        } else if (validWeeks.length === totalValidWeeks) {
           changes.push('Double pick weeks: all weeks');
         } else {
           changes.push(`Double pick weeks: ${validWeeks.sort((a,b) => a-b).join(', ')}`);
@@ -797,11 +801,7 @@ router.post('/:leagueId/members/:memberId/pick', authMiddleware, async (req, res
       return res.status(400).json({ error: 'Week and teamId are required' });
     }
 
-    // Validate week is within valid range (max 23 = Super Bowl)
     const weekNum = parseInt(week);
-    if (weekNum > 23) {
-      return res.status(400).json({ error: 'Invalid week. Season ends at Super Bowl (week 23)' });
-    }
 
     if (pickNumber !== 1 && pickNumber !== 2) {
       return res.status(400).json({ error: 'Pick number must be 1 or 2' });
@@ -817,9 +817,11 @@ router.post('/:leagueId/members/:memberId/pick', authMiddleware, async (req, res
       return res.status(403).json({ error: 'Only the commissioner can set picks for members' });
     }
 
-    // Validate week is within league range
-    if (weekNum < league.start_week) {
-      return res.status(400).json({ error: `Picks start from week ${league.start_week}` });
+    // Validate week using sport provider
+    const commPickProvider = getProvider(league.sport_id || 'nfl');
+    const weekValidation = commPickProvider.validatePeriod(weekNum, league);
+    if (!weekValidation.valid) {
+      return res.status(400).json({ error: weekValidation.error });
     }
 
     // Check if this is a double pick week
@@ -863,15 +865,16 @@ router.post('/:leagueId/members/:memberId/pick', authMiddleware, async (req, res
     }
 
     // Get the game for this team and week
-    const { season, week: currentWeek } = await getCurrentSeason();
+    const setPickProvider = getProvider(league.sport_id || 'nfl');
+    const { season } = await setPickProvider.getCurrentSeason();
     let gameId = null;
     let teamGame = null;
-    
-    // Convert frontend weeks (19-22 for playoffs) to ESPN format
-    const { espnWeek, seasonType } = getEspnWeekParams(parseInt(week));
-    
+
+    // Convert frontend weeks to provider format
+    const { espnWeek, seasonType } = setPickProvider.getProviderPeriodParams(parseInt(week));
+
     try {
-      const games = await getWeekSchedule(season, espnWeek, seasonType);
+      const games = await setPickProvider.getSchedule(season, espnWeek, seasonType);
       teamGame = games.find(g => 
         String(g.homeTeam?.id) === String(teamId) || String(g.awayTeam?.id) === String(teamId)
       );
@@ -983,16 +986,16 @@ router.get('/:leagueId/standings', authMiddleware, async (req, res) => {
     const league = await db.getOne('SELECT * FROM leagues WHERE id = $1', [leagueId]);
     const doublePickWeeks = league.double_pick_weeks || [];
 
-    // Get current week from NFL API
-    const { season, week: currentWeek } = await getCurrentSeason();
+    // Get current week using league's sport provider
+    const standingsProvider = getProvider(league.sport_id || 'nfl');
+    const { season, week: currentWeek } = await standingsProvider.getCurrentSeason();
     const targetWeek = week ? parseInt(week) : currentWeek;
 
     // Get schedule for the target week to determine game status
-    // Convert frontend weeks (19-22 for playoffs) to ESPN format
-    const { espnWeek, seasonType } = getEspnWeekParams(targetWeek);
+    const { espnWeek, seasonType } = standingsProvider.getProviderPeriodParams(targetWeek);
     let weekGames = [];
     try {
-      weekGames = await getWeekSchedule(season, espnWeek, seasonType);
+      weekGames = await standingsProvider.getSchedule(season, espnWeek, seasonType);
       console.log(`Fetched ${weekGames.length} games for week ${targetWeek} (ESPN: week ${espnWeek}, seasonType ${seasonType})`);
     } catch (e) {
       console.error('Failed to get week schedule:', e);

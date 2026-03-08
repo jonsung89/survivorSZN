@@ -3,23 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getCurrentSeason, getWeekSchedule, hasGameStarted, getGameWinner, getTeam } = require('../services/nfl');
-
-// Helper to convert our app week numbers to ESPN API format
-// Our app: weeks 1-18 = regular season, weeks 19-22 = playoffs
-// ESPN API: seasonType 2 + weeks 1-18 = regular season
-//           seasonType 3 + weeks 1-5 = playoffs (Wild Card=1, Divisional=2, Conference=3, Pro Bowl=4, Super Bowl=5)
-const getEspnWeekParams = (week) => {
-  if (week <= 18) {
-    return { espnWeek: week, seasonType: 2 };
-  }
-  // Playoff weeks: 19=Wild Card(1), 20=Divisional(2), 21=Conference(3), 23=Super Bowl(5)
-  // Note: Week 22 is Pro Bowl - skip it (no survivor picks)
-  if (week === 23) {
-    return { espnWeek: 5, seasonType: 3 }; // Super Bowl is week 5 in ESPN
-  }
-  return { espnWeek: week - 18, seasonType: 3 };
-};
+const { getProvider } = require('../sports');
 
 // Helper to get user from Firebase UID
 const getUser = async (req) => {
@@ -42,12 +26,6 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Pick number must be 1 or 2' });
     }
 
-    // Validate team exists
-    const team = getTeam(teamId);
-    if (!team) {
-      return res.status(400).json({ error: 'Invalid team' });
-    }
-
     // Check league membership
     const membership = await db.getOne(`
       SELECT * FROM league_members WHERE league_id = $1 AND user_id = $2
@@ -61,16 +39,20 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'You have been eliminated from this league' });
     }
 
-    // Get league settings
+    // Get league settings and sport provider
     const league = await db.getOne('SELECT * FROM leagues WHERE id = $1', [leagueId]);
+    const provider = getProvider(league.sport_id || 'nfl');
 
-    if (week < league.start_week) {
-      return res.status(400).json({ error: `Picks start from week ${league.start_week}` });
+    // Validate team exists
+    const team = provider.getTeam(teamId);
+    if (!team) {
+      return res.status(400).json({ error: 'Invalid team' });
     }
 
-    // Validate max week (23 = Super Bowl)
-    if (week > 23) {
-      return res.status(400).json({ error: 'Invalid week. Season ends at Super Bowl (week 23)' });
+    // Validate week/period
+    const periodValidation = provider.validatePeriod(week, league);
+    if (!periodValidation.valid) {
+      return res.status(400).json({ error: periodValidation.error });
     }
 
     // Check if this is a double pick week
@@ -83,11 +65,11 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     // Get week schedule (handle playoff weeks)
-    const { espnWeek, seasonType } = getEspnWeekParams(week);
-    const games = await getWeekSchedule(league.season, espnWeek, seasonType);
+    const { espnWeek, seasonType } = provider.getProviderPeriodParams(week);
+    const games = await provider.getSchedule(league.season, espnWeek, seasonType);
 
     // Check if team is playing this week
-    const teamGame = games.find(g => 
+    const teamGame = games.find(g =>
       g.homeTeam?.id === teamId || g.awayTeam?.id === teamId
     );
 
@@ -97,7 +79,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // Check if game has started - use status and date
     const gameStatus = teamGame.status || 'STATUS_SCHEDULED';
-    const gameStarted = gameStatus !== 'STATUS_SCHEDULED' || hasGameStarted(teamGame.date);
+    const gameStarted = gameStatus !== 'STATUS_SCHEDULED' || provider.hasGameStarted(teamGame.date);
     if (gameStarted) {
       return res.status(400).json({ error: 'Cannot pick a team whose game has already started' });
     }
@@ -136,7 +118,7 @@ router.post('/', authMiddleware, async (req, res) => {
         g.homeTeam?.id === existingPick.team_id || g.awayTeam?.id === existingPick.team_id
       );
 
-      if (existingGame && hasGameStarted(existingGame.date)) {
+      if (existingGame && provider.hasGameStarted(existingGame.date)) {
         return res.status(400).json({ error: 'Cannot change pick after game has started' });
       }
 
@@ -222,8 +204,9 @@ router.get('/league/:leagueId', authMiddleware, async (req, res) => {
     // Get used teams
     const usedTeams = picks.map(p => p.team_id);
 
-    // Get current week
-    const { week: currentWeek } = await getCurrentSeason();
+    // Get current week using league's sport provider
+    const leagueProvider = getProvider(league.sport_id || 'nfl');
+    const { week: currentWeek } = await leagueProvider.getCurrentSeason();
 
     res.json({
       success: true,
@@ -236,7 +219,7 @@ router.get('/league/:leagueId', authMiddleware, async (req, res) => {
         id: p.id,
         week: p.week,
         teamId: p.team_id,
-        team: getTeam(p.team_id),
+        team: leagueProvider.getTeam(p.team_id),
         result: p.result,
         pickNumber: p.pick_number || 1,
         createdAt: p.created_at
@@ -290,13 +273,14 @@ router.get('/available/:leagueId/:week', authMiddleware, async (req, res) => {
     const thisWeekTeams = new Set(currentPicks.map(p => p.team_id));
 
     // Get week schedule (handle playoff weeks)
-    const { espnWeek, seasonType } = getEspnWeekParams(weekNum);
-    const games = await getWeekSchedule(league.season, espnWeek, seasonType);
+    const availProvider = getProvider(league.sport_id || 'nfl');
+    const { espnWeek, seasonType } = availProvider.getProviderPeriodParams(weekNum);
+    const games = await availProvider.getSchedule(league.season, espnWeek, seasonType);
     const now = new Date();
 
     // Build available teams list
     const teamsPlaying = new Map();
-    
+
     console.log('Building available teams for week', weekNum, '- found', games.length, 'games');
     console.log('Current time (now):', now.toISOString());
     
@@ -407,7 +391,7 @@ router.get('/available/:leagueId/:week', authMiddleware, async (req, res) => {
       currentPicks: currentPicks.map(p => ({
         id: p.id,
         teamId: p.team_id,
-        team: getTeam(p.team_id),
+        team: availProvider.getTeam(p.team_id),
         pickNumber: p.pick_number || 1
       })),
       teams: teamsArray.sort((a, b) => 
@@ -423,11 +407,9 @@ router.get('/available/:leagueId/:week', authMiddleware, async (req, res) => {
 // Check and update pick results (can be called by a cron job or manually)
 router.post('/update-results', async (req, res) => {
   try {
-    const { season, week } = await getCurrentSeason();
-
-    // Get all pending picks for completed games
+    // Get all pending picks for completed games (include sport_id for provider lookup)
     const pendingPicks = await db.getAll(`
-      SELECT p.*, l.max_strikes, l.season
+      SELECT p.*, l.max_strikes, l.season, l.sport_id
       FROM picks p
       JOIN leagues l ON p.league_id = l.id
       WHERE p.result = 'pending'
@@ -436,13 +418,14 @@ router.post('/update-results', async (req, res) => {
     let updated = 0;
 
     for (const pick of pendingPicks) {
-      const { espnWeek, seasonType } = getEspnWeekParams(pick.week);
-      const games = await getWeekSchedule(pick.season, espnWeek, seasonType);
+      const pickProvider = getProvider(pick.sport_id || 'nfl');
+      const { espnWeek, seasonType } = pickProvider.getProviderPeriodParams(pick.week);
+      const games = await pickProvider.getSchedule(pick.season, espnWeek, seasonType);
       const game = games.find(g => g.id === pick.game_id);
 
       if (!game || game.status !== 'STATUS_FINAL') continue;
 
-      const winner = getGameWinner(game);
+      const winner = pickProvider.getGameWinner(game);
       let result;
 
       if (winner === 'TIE') {

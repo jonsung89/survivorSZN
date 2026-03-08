@@ -3,14 +3,7 @@ import { Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, Tr
 import { nflAPI } from '../api';
 import Loading from '../components/Loading';
 import TeamInfoDialog from '../components/TeamInfoDialog';
-
-// Playoff round names
-const PLAYOFF_ROUNDS = {
-  1: 'Wild Card Round',
-  2: 'Divisional Round',
-  3: 'Conference Championships',
-  5: 'Super Bowl'
-};
+import { PLAYOFF_ROUNDS, BROADCAST_NETWORKS } from '../sports/nfl/constants';
 
 export default function Schedule() {
   const [season, setSeason] = useState(2024);
@@ -268,75 +261,15 @@ export default function Schedule() {
   // Helper to get broadcast network logo
   const getBroadcastInfo = (broadcast) => {
     if (!broadcast) return null;
-    
+
     const broadcastUpper = broadcast.toUpperCase();
-    
-    // Map of networks to their logo URLs
-    const networks = {
-      'ESPN': {
-        logo: 'https://a.espncdn.com/favicon.ico',
-        color: 'text-red-400'
-      },
-      'ESPN+': {
-        logo: 'https://a.espncdn.com/favicon.ico',
-        color: 'text-red-400'
-      },
-      'ABC': {
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ABC-2021-LOGO.svg/120px-ABC-2021-LOGO.svg.png',
-        color: 'text-yellow-400'
-      },
-      'CBS': {
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/CBS_logo.svg/100px-CBS_logo.svg.png',
-        color: 'text-blue-400',
-        invert: true
-      },
-      'FOX': {
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Fox_Broadcasting_Company_logo_%282019%29.svg/100px-Fox_Broadcasting_Company_logo_%282019%29.svg.png',
-        color: 'text-blue-300',
-        invert: true
-      },
-      'NBC': {
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/NBC_logo.svg/100px-NBC_logo.svg.png',
-        color: 'text-purple-400'
-      },
-      'PEACOCK': {
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/NBC_logo.svg/100px-NBC_logo.svg.png',
-        color: 'text-purple-400'
-      },
-      'NFL NETWORK': {
-        logo: 'https://static.www.nfl.com/league/apps/clubs/icons/NFL_favicon.ico',
-        color: 'text-blue-400'
-      },
-      'NFLN': {
-        logo: 'https://static.www.nfl.com/league/apps/clubs/icons/NFL_favicon.ico',
-        color: 'text-blue-400'
-      },
-      'AMAZON': {
-        logo: 'https://images-na.ssl-images-amazon.com/images/G/01/primevideo/seo/primevideo-seo-logo.png',
-        color: 'text-cyan-400'
-      },
-      'PRIME': {
-        logo: 'https://images-na.ssl-images-amazon.com/images/G/01/primevideo/seo/primevideo-seo-logo.png',
-        color: 'text-cyan-400'
-      },
-      'PRIME VIDEO': {
-        logo: 'https://images-na.ssl-images-amazon.com/images/G/01/primevideo/seo/primevideo-seo-logo.png',
-        color: 'text-cyan-400'
-      },
-      'NETFLIX': {
-        logo: 'https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2016.ico',
-        color: 'text-red-500'
-      }
-    };
-    
-    // Find matching network
-    for (const [key, value] of Object.entries(networks)) {
+
+    for (const [key, value] of Object.entries(BROADCAST_NETWORKS)) {
       if (broadcastUpper.includes(key)) {
         return { name: broadcast, ...value };
       }
     }
-    
-    // Default - no logo
+
     return { name: broadcast, logo: null, color: 'text-white/40' };
   };
 

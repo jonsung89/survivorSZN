@@ -333,11 +333,20 @@ export const notificationAPI = {
   }
 };
 
+// Sports API
+export const sportsAPI = {
+  list: async () => {
+    const res = await fetch(`${API_URL}/sports`);
+    return res.json();
+  }
+};
+
 export default {
   auth: authAPI,
   league: leagueAPI,
   picks: picksAPI,
   nfl: nflAPI,
   user: userAPI,
-  notification: notificationAPI
+  notification: notificationAPI,
+  sports: sportsAPI
 };

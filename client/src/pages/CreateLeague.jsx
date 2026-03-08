@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { leagueAPI, nflAPI } from '../api';
 import { useToast } from '../components/Toast';
+import nflSport from '../sports/nfl';
 
 export default function CreateLeague() {
   const navigate = useNavigate();
@@ -30,12 +31,7 @@ export default function CreateLeague() {
     const fetchCurrentWeek = async () => {
       try {
         const data = await nflAPI.getSeason();
-        // Convert playoff weeks: ESPN returns week 1-4 with seasonType=3
-        // Frontend uses week 19-22 for playoffs
-        let week = data.week;
-        if (data.seasonType === 3) {
-          week = data.week + 18; // WC=19, DIV=20, CONF=21, SB=22
-        }
+        const week = nflSport.espnToAppWeek(data.week, data.seasonType);
         setCurrentWeek(week);
         setFormData(prev => ({ ...prev, startWeek: week }));
       } catch (err) {
@@ -77,7 +73,8 @@ export default function CreateLeague() {
         name: formData.name.trim(),
         password: formData.password,
         maxStrikes: formData.maxStrikes,
-        startWeek: formData.startWeek
+        startWeek: formData.startWeek,
+        sportId: 'nfl'
       });
 
       if (result.success) {
@@ -198,29 +195,11 @@ export default function CreateLeague() {
               onChange={handleChange}
               className="input-field"
             >
-              {Array.from({ length: 23 }, (_, i) => i + 1)
-                .filter(week => week >= currentWeek && week !== 22) // Skip Pro Bowl week
-                .map(week => {
-                  // Get week label
-                  let label;
-                  if (week <= 18) {
-                    label = `Week ${week}`;
-                  } else if (week === 19) {
-                    label = 'Wild Card';
-                  } else if (week === 20) {
-                    label = 'Divisional';
-                  } else if (week === 21) {
-                    label = 'Conference';
-                  } else if (week === 23) {
-                    label = 'Super Bowl';
-                  }
-                  
-                  return (
-                    <option key={week} value={week}>
-                      {week === currentWeek ? `${label} (Current Week)` : label}
-                    </option>
-                  );
-                })}
+              {nflSport.getCreationPeriods(currentWeek).map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {value === currentWeek ? `${label} (Current Week)` : label}
+                </option>
+              ))}
             </select>
           </div>
         </div>

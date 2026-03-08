@@ -14,42 +14,7 @@ import Loading from '../components/Loading';
 import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
 import ChatWidget from '../components/ChatWidget';
 import Avatar from '../components/Avatar';
-
-// NFL team data for display (keyed by ESPN team ID)
-const NFL_TEAMS = {
-  '1': { name: 'Falcons', city: 'Atlanta', abbreviation: 'ATL', color: '#A71930', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/atl.png' },
-  '2': { name: 'Bills', city: 'Buffalo', abbreviation: 'BUF', color: '#00338D', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/buf.png' },
-  '3': { name: 'Bears', city: 'Chicago', abbreviation: 'CHI', color: '#0B162A', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/chi.png' },
-  '4': { name: 'Bengals', city: 'Cincinnati', abbreviation: 'CIN', color: '#FB4F14', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/cin.png' },
-  '5': { name: 'Browns', city: 'Cleveland', abbreviation: 'CLE', color: '#311D00', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/cle.png' },
-  '6': { name: 'Cowboys', city: 'Dallas', abbreviation: 'DAL', color: '#003594', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/dal.png' },
-  '7': { name: 'Broncos', city: 'Denver', abbreviation: 'DEN', color: '#FB4F14', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/den.png' },
-  '8': { name: 'Lions', city: 'Detroit', abbreviation: 'DET', color: '#0076B6', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/det.png' },
-  '9': { name: 'Packers', city: 'Green Bay', abbreviation: 'GB', color: '#203731', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/gb.png' },
-  '10': { name: 'Titans', city: 'Tennessee', abbreviation: 'TEN', color: '#4B92DB', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/ten.png' },
-  '11': { name: 'Colts', city: 'Indianapolis', abbreviation: 'IND', color: '#002C5F', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/ind.png' },
-  '12': { name: 'Chiefs', city: 'Kansas City', abbreviation: 'KC', color: '#E31837', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/kc.png' },
-  '13': { name: 'Raiders', city: 'Las Vegas', abbreviation: 'LV', color: '#000000', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/lv.png' },
-  '14': { name: 'Rams', city: 'Los Angeles', abbreviation: 'LAR', color: '#003594', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/lar.png' },
-  '15': { name: 'Dolphins', city: 'Miami', abbreviation: 'MIA', color: '#008E97', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/mia.png' },
-  '16': { name: 'Vikings', city: 'Minnesota', abbreviation: 'MIN', color: '#4F2683', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/min.png' },
-  '17': { name: 'Patriots', city: 'New England', abbreviation: 'NE', color: '#002244', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/ne.png' },
-  '18': { name: 'Saints', city: 'New Orleans', abbreviation: 'NO', color: '#D3BC8D', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/no.png' },
-  '19': { name: 'Giants', city: 'New York', abbreviation: 'NYG', color: '#0B2265', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/nyg.png' },
-  '20': { name: 'Jets', city: 'New York', abbreviation: 'NYJ', color: '#125740', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/nyj.png' },
-  '21': { name: 'Eagles', city: 'Philadelphia', abbreviation: 'PHI', color: '#004C54', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/phi.png' },
-  '22': { name: 'Cardinals', city: 'Arizona', abbreviation: 'ARI', color: '#97233F', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/ari.png' },
-  '23': { name: 'Steelers', city: 'Pittsburgh', abbreviation: 'PIT', color: '#FFB612', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/pit.png' },
-  '24': { name: 'Chargers', city: 'Los Angeles', abbreviation: 'LAC', color: '#0080C6', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/lac.png' },
-  '25': { name: '49ers', city: 'San Francisco', abbreviation: 'SF', color: '#AA0000', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/sf.png' },
-  '26': { name: 'Seahawks', city: 'Seattle', abbreviation: 'SEA', color: '#002244', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/sea.png' },
-  '27': { name: 'Buccaneers', city: 'Tampa Bay', abbreviation: 'TB', color: '#D50A0A', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/tb.png' },
-  '28': { name: 'Commanders', city: 'Washington', abbreviation: 'WAS', color: '#5A1414', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png' },
-  '29': { name: 'Panthers', city: 'Carolina', abbreviation: 'CAR', color: '#0085CA', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/car.png' },
-  '30': { name: 'Jaguars', city: 'Jacksonville', abbreviation: 'JAX', color: '#006778', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/jax.png' },
-  '33': { name: 'Ravens', city: 'Baltimore', abbreviation: 'BAL', color: '#241773', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/bal.png' },
-  '34': { name: 'Texans', city: 'Houston', abbreviation: 'HOU', color: '#03202F', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/hou.png' },
-};
+import { getSportModule } from '../sports';
 
 export default function LeagueDetail() {
   const { leagueId } = useParams();
@@ -86,6 +51,11 @@ export default function LeagueDetail() {
   const hasTriggeredUpdateRef = useRef(false);
 
   const isCommissioner = league?.commissionerId === user?.id;
+
+  // Load sport module dynamically based on league's sport
+  const sport = useMemo(() => getSportModule(league?.sport_id || 'nfl'), [league?.sport_id]);
+  const NFL_TEAMS = sport.teams;
+  const { getWeekLabel, getShortWeekLabel, getWeekFullLabel, espnToAppWeek } = sport;
 
   // Helper to change week
   const handleWeekChange = (newWeek) => {
@@ -316,15 +286,7 @@ export default function LeagueDetail() {
       // Get current NFL week
       const seasonResult = await nflAPI.getSeason();
       if (seasonResult.week) {
-        // Convert playoff weeks: backend returns week 1-5 with seasonType=3
-        // Frontend uses week 19-21, 23 for playoffs (19=WC, 20=DIV, 21=CONF, 23=SB, skip 22 Pro Bowl)
-        let displayWeek = seasonResult.week;
-        if (seasonResult.seasonType === 3) {
-          // Map playoff week 1-5 to frontend weeks 19-21, 23
-          // Week 1 = Wild Card (19), Week 2 = Divisional (20), Week 3 = Conference (21), Week 4 = Pro Bowl (skip), Week 5 = Super Bowl (23)
-          const playoffWeekMap = { 1: 19, 2: 20, 3: 21, 4: 23, 5: 23 };
-          displayWeek = playoffWeekMap[seasonResult.week] || 19;
-        }
+        let displayWeek = espnToAppWeek(seasonResult.week, seasonResult.seasonType);
         setCurrentWeek(displayWeek);
         setSelectedWeek(displayWeek);
         
@@ -714,16 +676,6 @@ export default function LeagueDetail() {
     (_, i) => league.startWeek + i
   ).filter(w => w !== 22); // Skip Pro Bowl week
 
-  // Helper to get week label for display
-  const getWeekLabel = (week) => {
-    if (week <= 18) return `Week ${week}`;
-    if (week === 19) return 'Wild Card';
-    if (week === 20) return 'Divisional';
-    if (week === 21) return 'Conference';
-    if (week === 23) return 'Super Bowl';
-    return `Week ${week}`;
-  };
-
   return (
     <div className={`transition-all duration-300 ${isChatCollapsed ? 'lg:pr-16' : 'lg:pr-96 xl:pr-[420px]'}`}>
       {/* Main content - scrolls naturally, with padding for fixed chat sidebar */}
@@ -1062,17 +1014,8 @@ export default function LeagueDetail() {
 
           <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-1 sm:py-2 px-2 sm:px-4 scrollbar-hide">
             {weeks.map(week => {
-              // Playoff week labels
-              const weekLabel = week <= 18 ? week : 
-                week === 19 ? 'WC' : 
-                week === 20 ? 'DIV' : 
-                week === 21 ? 'CONF' : 
-                week === 23 ? 'SB' : week;
-              const weekFullLabel = week <= 18 ? `Week ${week}` : 
-                week === 19 ? 'Wild Card' : 
-                week === 20 ? 'Divisional' : 
-                week === 21 ? 'Conference' : 
-                week === 23 ? 'Super Bowl' : `Week ${week}`;
+              const weekLabel = getShortWeekLabel(week);
+              const weekFullLabel = getWeekFullLabel(week);
               
               return (
                 <button
@@ -1835,7 +1778,7 @@ export default function LeagueDetail() {
                   className={`flex-shrink-0 flex flex-col items-center p-3 rounded-xl w-24 h-28 snap-start ${bgClass} ${isCurrent ? 'ring-2 ring-emerald-500' : ''}`}
                 >
                   <span className="text-xs text-white/50 mb-2 text-center whitespace-nowrap">
-                    {week <= 18 ? `Week ${week}` : week === 19 ? 'Wild Card' : week === 20 ? 'Divisional' : week === 21 ? 'Conf' : week === 23 ? 'Super Bowl' : `Week ${week}`}
+                    {getWeekFullLabel(week)}
                     {isDoublePick && <span className="text-orange-400 ml-1">×2</span>}
                   </span>
                   
@@ -2233,7 +2176,7 @@ export default function LeagueDetail() {
                               : 'bg-white/10 text-white/60 hover:bg-white/20'
                           }`}
                         >
-                          {week <= 18 ? week : week === 19 ? 'WC' : week === 20 ? 'DIV' : week === 21 ? 'CONF' : week === 23 ? 'SB' : week}
+                          {getShortWeekLabel(week)}
                         </button>
                       ))}
                     </div>
@@ -2333,7 +2276,7 @@ export default function LeagueDetail() {
                 <div className="flex flex-wrap gap-2">
                   {weeks.map(week => {
                     const weekIsDouble = (league.doublePickWeeks || []).includes(week);
-                    const shortLabel = week <= 18 ? week : week === 19 ? 'WC' : week === 20 ? 'DIV' : week === 21 ? 'CONF' : week === 23 ? 'SB' : week;
+                    const shortLabel = getShortWeekLabel(week);
                     return (
                       <button
                         key={week}

@@ -48,6 +48,7 @@ export default function LeagueDetail() {
   const [gameStatuses, setGameStatuses] = useState({}); // { teamId: gameStatus }
   const [isChatCollapsed, setIsChatCollapsed] = useState(true); // Track chat sidebar state
   const [currentWeekTeams, setCurrentWeekTeams] = useState([]); // Teams playing this week
+  const [seasonOver, setSeasonOver] = useState(false);
   const hasTriggeredUpdateRef = useRef(false);
 
   const isCommissioner = league?.commissionerId === user?.id;
@@ -89,53 +90,90 @@ export default function LeagueDetail() {
     }
   };
 
-  // Helper to get effective strikes (database + any unprocessed losses from completed games)
-  // Checks ALL weeks up to currentWeek, not just the selected week
-  const getEffectiveStrikes = (member) => {
+  // Helper to get effective strikes
+  // throughWeek: if provided, computes strikes entirely from picks data through that week
+  //   (DB member.strikes is cumulative across ALL weeks, so we can't use it for week-scoped views)
+  // If not provided, uses DB member.strikes + unprocessed additions (for current elimination status)
+  const getEffectiveStrikes = (member, throughWeek) => {
     if (!member) return 0;
-    let strikes = member.strikes || 0;
-    
-    // Check all weeks up to currentWeek for unprocessed losses
-    for (let week = league?.startWeek || 1; week <= currentWeek; week++) {
+
+    const isWeekScoped = throughWeek != null;
+    // When week-scoped, compute entirely from picks data (DB strikes is cumulative and not week-scoped)
+    let strikes = isWeekScoped ? 0 : (member.strikes || 0);
+
+    const endWeek = isWeekScoped ? throughWeek : currentWeek;
+    const lastWeekToCheck = (isWeekScoped && throughWeek < currentWeek)
+      ? throughWeek  // viewing a past week — all weeks through it are concluded
+      : seasonOver ? currentWeek : currentWeek - 1;
+
+    for (let week = league?.startWeek || 1; week <= endWeek; week++) {
+      // Skip Pro Bowl week
+      if (week === 22) continue;
+
       const weekData = member.picks?.[week];
       const weekPicks = weekData?.picks || [];
-      const displayPicks = weekPicks.length > 0 
-        ? weekPicks 
+      const displayPicks = weekPicks.length > 0
+        ? weekPicks
         : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result }] : []);
-      
-      for (const pick of displayPicks) {
-        const dbResult = pick.result;
-        const effectiveResult = getPickResult(pick, pick.teamId);
-        
-        // If database says pending but game shows loss, add a strike
-        if (dbResult !== 'loss' && dbResult !== 'win' && effectiveResult === 'loss') {
-          strikes++;
+
+      if (displayPicks.length === 0 && week <= lastWeekToCheck) {
+        // No pick made for a past week = missed pick = strike
+        const isDoublePick = (league?.doublePickWeeks || []).includes(week);
+        strikes += isDoublePick ? 2 : 1;
+      } else {
+        for (const pick of displayPicks) {
+          const dbResult = pick.result;
+          const effectiveResult = getPickResult(pick, pick.teamId);
+
+          if (isWeekScoped) {
+            // Week-scoped: count ALL losses (both DB-processed and unprocessed)
+            if (dbResult === 'loss' || (dbResult !== 'win' && effectiveResult === 'loss')) {
+              strikes++;
+            }
+          } else {
+            // Current status: only count UNPROCESSED losses (DB strikes already covers processed ones)
+            if (dbResult !== 'loss' && dbResult !== 'win' && effectiveResult === 'loss') {
+              strikes++;
+            }
+          }
         }
       }
     }
-    
+
     return strikes;
   };
 
-  // Sort standings by effective strikes (ascending), then alphabetically by display name
+  // Sort standings by effective strikes through the loaded week
+  // Uses loadedWeek (not selectedWeek) so calculations match the currently loaded data
   const sortedStandings = useMemo(() => {
     if (!standings || standings.length === 0) return [];
-    
+
+    const weekForCalc = loadedWeek || selectedWeek;
+
+    const maxStrikes = league?.maxStrikes || 1;
+
     return [...standings].sort((a, b) => {
-      // First sort by effective strikes (fewer strikes = higher ranking)
-      const aStrikes = getEffectiveStrikes(a);
-      const bStrikes = getEffectiveStrikes(b);
-      
+      const aStrikes = getEffectiveStrikes(a, weekForCalc);
+      const bStrikes = getEffectiveStrikes(b, weekForCalc);
+      const aEliminated = aStrikes >= maxStrikes;
+      const bEliminated = bStrikes >= maxStrikes;
+
+      // Active members first
+      if (aEliminated !== bEliminated) {
+        return aEliminated ? 1 : -1;
+      }
+
+      // Then by strikes (fewer = higher ranking)
       if (aStrikes !== bStrikes) {
         return aStrikes - bStrikes;
       }
-      
-      // Then sort alphabetically by display name
+
+      // Then alphabetically
       const aName = (a.displayName || '').toLowerCase();
       const bName = (b.displayName || '').toLowerCase();
       return aName.localeCompare(bName);
     });
-  }, [standings, currentWeek, gameStatuses, league?.startWeek, league?.maxStrikes]);
+  }, [standings, currentWeek, loadedWeek, selectedWeek, gameStatuses, league?.startWeek, league?.maxStrikes, seasonOver]);
 
   // Get teams already used by a member
   const getMemberUsedTeams = (member, excludeWeek = null) => {
@@ -164,6 +202,7 @@ export default function LeagueDetail() {
   // Calculate matchup availability for current week (which players have which teams available)
   // Only shows for playoff weeks or when there are 4 or fewer games
   const matchupAvailability = useMemo(() => {
+    if (seasonOver) return null;
     if (!standings || standings.length === 0 || !currentWeekTeams || currentWeekTeams.length === 0) {
       return null;
     }
@@ -216,7 +255,7 @@ export default function LeagueDetail() {
                  selectedWeek === 20 ? 'Divisional Round' :
                  selectedWeek === 19 ? 'Wild Card' : `Week ${selectedWeek}`
     };
-  }, [standings, currentWeekTeams, selectedWeek]);
+  }, [standings, currentWeekTeams, selectedWeek, seasonOver]);
 
   useEffect(() => {
     loadData();
@@ -285,6 +324,9 @@ export default function LeagueDetail() {
 
       // Get current NFL week
       const seasonResult = await nflAPI.getSeason();
+      if (seasonResult.isSeasonOver) {
+        setSeasonOver(true);
+      }
       if (seasonResult.week) {
         let displayWeek = espnToAppWeek(seasonResult.week, seasonResult.seasonType);
         setCurrentWeek(displayWeek);
@@ -651,6 +693,7 @@ export default function LeagueDetail() {
 
   const needsPickThisWeek = () => {
     if (!league) return false;
+    if (seasonOver) return false;
     const myMember = league.members?.find(m => m.userId === user?.id);
     if (myMember?.status === 'eliminated') return false;
     if (currentWeek < league.startWeek) return false;
@@ -684,7 +727,7 @@ export default function LeagueDetail() {
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-3 sm:gap-4 animate-in">
-          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-nfl-blue to-blue-700 flex items-center justify-center shadow-lg flex-shrink-0">
+          <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br ${sport.gradientClasses || 'from-blue-500 to-blue-700'} flex items-center justify-center shadow-lg flex-shrink-0`}>
             <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
           </div>
           <div className="min-w-0">
@@ -747,6 +790,45 @@ export default function LeagueDetail() {
           )}
         </div>
       </div>
+
+      {/* Season Concluded Banner */}
+      {seasonOver && (() => {
+        const activeMembers = league.members?.filter(m => m.status === 'active') || [];
+        const winners = activeMembers.length > 0 ? activeMembers : null;
+        return (
+          <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-yellow-600/10 animate-in" style={{ animationDelay: '25ms' }}>
+            <div className="flex items-center gap-3 mb-2">
+              <Trophy className="w-6 h-6 text-amber-400" />
+              <h2 className="text-lg font-semibold text-white">Season Complete</h2>
+            </div>
+            {winners ? (
+              <div className="mt-2">
+                <p className="text-white/60 text-sm mb-2">
+                  {winners.length === 1 ? 'Winner' : `${winners.length} Winners`}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {winners.map(w => (
+                    <span
+                      key={w.userId}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                        w.userId === user?.id
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'bg-white/10 text-white/70'
+                      }`}
+                    >
+                      <Trophy className="w-3.5 h-3.5" />
+                      {w.displayName}
+                      {w.userId === user?.id && <span className="text-xs ml-1">(You)</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-white/50 text-sm">No survivors — everyone was eliminated!</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Prize Pot Display */}
       {(league.entryFee > 0 || league.prizePotOverride) && (
@@ -1076,7 +1158,7 @@ export default function LeagueDetail() {
             const isPlayoffWeek = selectedWeek > 18;
             const isMatchupsTBD = isPlayoffWeek && selectedWeek > currentWeek;
             
-            const canMakePick = selectedWeek >= currentWeek && !isEliminated && !isMatchupsTBD;
+            const canMakePick = selectedWeek >= currentWeek && !isEliminated && !isMatchupsTBD && !seasonOver;
             
             return (
               <div className="flex flex-col items-center justify-center h-full">
@@ -1137,7 +1219,7 @@ export default function LeagueDetail() {
           });
           const myEffectiveStrikes = getEffectiveStrikes(myStanding);
           const isEffectivelyEliminated = myStanding?.status === 'eliminated' || myEffectiveStrikes >= (league?.maxStrikes || 1);
-          const canEdit = allGamesScheduled && !isEffectivelyEliminated;
+          const canEdit = allGamesScheduled && !isEffectivelyEliminated && !seasonOver;
           
           return (
             <>
@@ -1373,34 +1455,44 @@ export default function LeagueDetail() {
             <Users className="w-4 h-4 sm:w-5 sm:h-5" />
             Standings
           </h2>
-          <span className="text-white/40 text-xs sm:text-sm">{getWeekLabel(selectedWeek)}</span>
+          <span className="text-white/40 text-xs sm:text-sm">
+            After {getWeekLabel(loadedWeek || selectedWeek)}{seasonOver && (loadedWeek || selectedWeek) >= currentWeek ? ' (Final)' : ''}
+          </span>
         </div>
 
+        {/* isLoadingWeek: true when standings data doesn't match the selected week yet */}
+        {(() => {
+          const isLoadingWeek = loadingStandings || loadedWeek !== selectedWeek;
+          return (<>
         {/* Mobile Card View */}
         <div className="sm:hidden divide-y divide-white/5">
           {sortedStandings.map((member, index) => {
-            const weekData = member.picks?.[selectedWeek];
+            const displayWeek = loadedWeek || selectedWeek;
+            const weekData = member.picks?.[displayWeek];
             const weekPicks = weekData?.picks || [];
-            const isDoublePick = (league.doublePickWeeks || []).includes(selectedWeek);
-            
+            const isDoublePick = (league.doublePickWeeks || []).includes(displayWeek);
+
             // For backward compatibility, if no picks array but has teamId, create one
-            const displayPicks = weekPicks.length > 0 
-              ? weekPicks 
+            const displayPicks = weekPicks.length > 0
+              ? weekPicks
               : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result, visible: weekData.visible }] : []);
-            
-            // Calculate effective strikes from completed games
-            const effectiveStrikes = getEffectiveStrikes(member);
+
+            // Calculate effective strikes through loaded week (matches the data)
+            const effectiveStrikes = getEffectiveStrikes(member, displayWeek);
             const effectivelyEliminated = effectiveStrikes >= (league?.maxStrikes || 1);
-            const effectiveStatus = effectivelyEliminated ? 'eliminated' : member.status;
-            
+            // Derive status entirely from strikes (DB member.status is cumulative and not week-scoped)
+            const effectiveStatus = effectivelyEliminated ? 'eliminated' : 'active';
+            // Show "Winner" only when viewing final week of a concluded season
+            const isFinalView = seasonOver && displayWeek >= currentWeek;
+
             return (
-              <div 
+              <div
                 key={member.memberId}
                 className={`p-3 ${member.isMe ? 'bg-nfl-blue/10' : ''} ${effectiveStatus === 'eliminated' ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <Avatar 
+                    <Avatar
                       userId={member.userId}
                       name={member.displayName}
                       size="sm"
@@ -1416,51 +1508,68 @@ export default function LeagueDetail() {
                       )}
                     </div>
                   </div>
-                  <span className={`badge text-xs ${effectiveStatus === 'active' ? 'badge-active' : 'badge-eliminated'}`}>
-                    {effectiveStatus}
-                  </span>
+                  {isLoadingWeek ? (
+                    <div className="shimmer h-5 w-14 rounded" />
+                  ) : (
+                    <span className={`badge text-xs ${
+                      isFinalView && effectiveStatus === 'active'
+                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        : effectiveStatus === 'active' ? 'badge-active' : 'badge-eliminated'
+                    }`}>
+                      {isFinalView && effectiveStatus === 'active' ? 'Winner' : effectiveStatus}
+                    </span>
+                  )}
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="flex gap-1">
-                      {Array.from({ length: league.maxStrikes }).map((_, i) => (
-                        <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < effectiveStrikes ? 'bg-red-500' : 'bg-white/20'}`} />
-                      ))}
-                    </div>
-                    
-                    {displayPicks.length > 0 ? (
-                      <div className="flex items-center gap-2 ml-2">
-                        {displayPicks.map((pick, idx) => {
-                          if (pick.visible === false) {
-                            return <EyeOff key={idx} className="w-4 h-4 text-white/30" />;
-                          }
-                          const team = NFL_TEAMS[String(pick.teamId)];
-                          const result = getPickResult(pick, pick.teamId);
-                          return (
-                            <div key={idx} className="flex items-center gap-1">
-                              {team?.logo ? (
-                                <img src={team.logo} alt={team.name} className="w-5 h-5 object-contain" />
-                              ) : (
-                                <div className="w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: team?.color || '#666' }}>
-                                  <span className="text-[8px] text-white font-bold">{team?.abbreviation}</span>
+                    {isLoadingWeek ? (
+                      <>
+                        <div className="shimmer h-2.5 w-16 rounded-full" />
+                        <div className="shimmer h-5 w-24 rounded ml-2" />
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex gap-1">
+                          {Array.from({ length: league.maxStrikes }).map((_, i) => (
+                            <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < effectiveStrikes ? 'bg-red-500' : 'bg-white/20'}`} />
+                          ))}
+                        </div>
+
+                        {displayPicks.length > 0 ? (
+                          <div className="flex items-center gap-2 ml-2">
+                            {displayPicks.map((pick, idx) => {
+                              if (pick.visible === false) {
+                                return <EyeOff key={idx} className="w-4 h-4 text-white/30" />;
+                              }
+                              const team = NFL_TEAMS[String(pick.teamId)];
+                              const result = getPickResult(pick, pick.teamId);
+                              return (
+                                <div key={idx} className="flex items-center gap-1">
+                                  {team?.logo ? (
+                                    <img src={team.logo} alt={team.name} className="w-5 h-5 object-contain" />
+                                  ) : (
+                                    <div className="w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: team?.color || '#666' }}>
+                                      <span className="text-[8px] text-white font-bold">{team?.abbreviation}</span>
+                                    </div>
+                                  )}
+                                  {!isDoublePick && <span className="text-white/70 text-xs">{team?.name}</span>}
+                                  {result && result !== 'pending' && (
+                                    <span className={`text-xs font-bold ${result === 'win' ? 'text-green-400' : 'text-red-400'}`}>
+                                      {result === 'win' ? 'W' : 'L'}
+                                    </span>
+                                  )}
                                 </div>
-                              )}
-                              {!isDoublePick && <span className="text-white/70 text-xs">{team?.name}</span>}
-                              {result && result !== 'pending' && (
-                                <span className={`text-xs font-bold ${result === 'win' ? 'text-green-400' : 'text-red-400'}`}>
-                                  {result === 'win' ? 'W' : 'L'}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : selectedWeek <= currentWeek && selectedWeek >= league.startWeek ? (
-                      effectiveStatus === 'eliminated' 
-                        ? <span className="text-white/20 text-xs ml-2">—</span>
-                        : <span className="text-white/30 text-xs ml-2">No pick</span>
-                    ) : null}
+                              );
+                            })}
+                          </div>
+                        ) : selectedWeek <= currentWeek && selectedWeek >= league.startWeek ? (
+                          effectiveStatus === 'eliminated'
+                            ? <span className="text-white/20 text-xs ml-2">—</span>
+                            : <span className="text-white/30 text-xs ml-2">No pick</span>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                   
                   {isCommissioner && (
@@ -1501,22 +1610,26 @@ export default function LeagueDetail() {
             </thead>
             <tbody>
               {sortedStandings.map((member, index) => {
-                const weekData = member.picks?.[selectedWeek];
+                const displayWeek = loadedWeek || selectedWeek;
+                const weekData = member.picks?.[displayWeek];
                 const weekPicks = weekData?.picks || [];
-                const isDoublePick = (league.doublePickWeeks || []).includes(selectedWeek);
-                
+                const isDoublePick = (league.doublePickWeeks || []).includes(displayWeek);
+
                 // For backward compatibility, if no picks array but has teamId, create one
-                const displayPicks = weekPicks.length > 0 
-                  ? weekPicks 
+                const displayPicks = weekPicks.length > 0
+                  ? weekPicks
                   : (weekData?.teamId ? [{ teamId: weekData.teamId, result: weekData.result, visible: weekData.visible, gameStatus: weekData.gameStatus, game: weekData.game }] : []);
-                
-                // Calculate effective strikes from completed games
-                const effectiveStrikes = getEffectiveStrikes(member);
+
+                // Calculate effective strikes through loaded week (matches the data)
+                const effectiveStrikes = getEffectiveStrikes(member, displayWeek);
                 const effectivelyEliminated = effectiveStrikes >= (league?.maxStrikes || 1);
-                const effectiveStatus = effectivelyEliminated ? 'eliminated' : member.status;
-                
+                // Derive status entirely from strikes (DB member.status is cumulative and not week-scoped)
+                const effectiveStatus = effectivelyEliminated ? 'eliminated' : 'active';
+                // Show "Winner" only when viewing final week of a concluded season
+                const isFinalView = seasonOver && displayWeek >= currentWeek;
+
                 return (
-                  <tr 
+                  <tr
                     key={member.memberId}
                     className={`border-b border-white/5 transition-colors h-[85px] ${
                       member.isMe ? 'bg-nfl-blue/10' : 'hover:bg-white/5'
@@ -1524,7 +1637,7 @@ export default function LeagueDetail() {
                   >
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <Avatar 
+                        <Avatar
                           userId={member.userId}
                           name={member.displayName}
                           size="md"
@@ -1544,27 +1657,37 @@ export default function LeagueDetail() {
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center justify-center gap-1">
-                        {Array.from({ length: league.maxStrikes }).map((_, i) => (
-                          <div
-                            key={i}
-                            className={`w-3 h-3 rounded-full ${
-                              i < effectiveStrikes
-                                ? 'bg-red-500'
-                                : 'bg-white/20'
-                            }`}
-                          />
-                        ))}
-                      </div>
+                      {isLoadingWeek ? (
+                        <div className="flex justify-center"><div className="shimmer h-3 w-20 rounded-full" /></div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1">
+                          {Array.from({ length: league.maxStrikes }).map((_, i) => (
+                            <div
+                              key={i}
+                              className={`w-3 h-3 rounded-full ${
+                                i < effectiveStrikes
+                                  ? 'bg-red-500'
+                                  : 'bg-white/20'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-center">
-                      <span className={`badge ${
-                        effectiveStatus === 'active' 
-                          ? 'badge-active' 
-                          : 'badge-eliminated'
-                      }`}>
-                        {effectiveStatus}
-                      </span>
+                      {isLoadingWeek ? (
+                        <div className="flex justify-center"><div className="shimmer h-5 w-16 rounded" /></div>
+                      ) : (
+                        <span className={`badge ${
+                          isFinalView && effectiveStatus === 'active'
+                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                            : effectiveStatus === 'active'
+                              ? 'badge-active'
+                              : 'badge-eliminated'
+                        }`}>
+                          {isFinalView && effectiveStatus === 'active' ? 'Winner' : effectiveStatus}
+                        </span>
+                      )}
                     </td>
                     {isCommissioner && league.entryFee > 0 && (
                       <td className="text-center px-4 py-3">
@@ -1592,7 +1715,12 @@ export default function LeagueDetail() {
                     )}
                     <td className="px-4 py-4">
                       <div className="flex items-center justify-center h-[52px]">
-                        {displayPicks.length > 0 ? (
+                        {isLoadingWeek ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="shimmer w-8 h-8 rounded-full" />
+                            <div className="shimmer h-3 w-12 rounded" />
+                          </div>
+                        ) : displayPicks.length > 0 ? (
                           isDoublePick ? (
                             // Double pick layout: each team as a card with logo, name, W/L
                             <div className="flex items-center gap-4">
@@ -1710,6 +1838,8 @@ export default function LeagueDetail() {
             </tbody>
           </table>
         </div>
+        </>);
+        })()}
 
         {standings.length === 0 && (
           <div className="p-12 text-center">
@@ -1744,7 +1874,30 @@ export default function LeagueDetail() {
               }
             }}
           >
-            {weeks.filter(week => week <= currentWeek + 1).map(week => {
+            {(() => {
+              // Compute the week the user was eliminated (strikes >= maxStrikes)
+              const maxStrikes = league.maxStrikes || 1;
+              let cumulativeStrikes = 0;
+              let eliminatedAfterWeek = null;
+              const lastWeek = seasonOver ? currentWeek : currentWeek - 1;
+              for (let w = league.startWeek; w <= lastWeek; w++) {
+                if (w === 22) continue; // Skip Pro Bowl
+                const wPicks = getPicksForWeek(w);
+                const isDP = (league.doublePickWeeks || []).includes(w);
+                if (wPicks.length === 0) {
+                  cumulativeStrikes += isDP ? 2 : 1;
+                } else {
+                  for (const p of wPicks) {
+                    const r = getPickResult(p, p.teamId);
+                    if (r === 'loss') cumulativeStrikes++;
+                  }
+                }
+                if (cumulativeStrikes >= maxStrikes && eliminatedAfterWeek === null) {
+                  eliminatedAfterWeek = w;
+                }
+              }
+              return weeks.filter(week => week <= currentWeek + 1).map(week => {
+              const isElimBeforeThisWeek = eliminatedAfterWeek !== null && week > eliminatedAfterWeek;
               const weekPicks = getPicksForWeek(week);
               const isDoublePick = (league.doublePickWeeks || []).includes(week);
               const requiredPicks = isDoublePick ? 2 : 1;
@@ -1760,7 +1913,11 @@ export default function LeagueDetail() {
               const isComplete = weekPicks.length === requiredPicks;
               
               let bgClass = 'bg-white/5 border border-white/10';
-              if (weekPicks.length > 0) {
+              const isPastWeek = week < currentWeek || (week === currentWeek && seasonOver);
+              if (isElimBeforeThisWeek && weekPicks.length === 0 && isPastWeek) {
+                // Already eliminated — gray/muted card
+                bgClass = 'bg-white/[0.02] border border-white/5';
+              } else if (weekPicks.length > 0) {
                 if (hasLoss) {
                   bgClass = 'bg-red-500/20 border border-red-500/30';
                 } else if (hasPending) {
@@ -1768,6 +1925,9 @@ export default function LeagueDetail() {
                 } else if (hasWin) {
                   bgClass = 'bg-green-500/20 border border-green-500/30';
                 }
+              } else if (week >= league.startWeek && isPastWeek) {
+                // Missed pick while still active = strike
+                bgClass = 'bg-red-500/20 border border-red-500/30';
               } else if (week < league.startWeek) {
                 bgClass = 'bg-white/[0.02] border border-white/5';
               }
@@ -1841,16 +2001,43 @@ export default function LeagueDetail() {
                       )}
                     </>
                   ) : week >= league.startWeek ? (
-                    <div className="flex items-center gap-1">
-                      <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/30 text-lg">
-                        ?
-                      </div>
-                      {isDoublePick && (
+                    (week < currentWeek || (week === currentWeek && seasonOver)) ? (
+                      isElimBeforeThisWeek ? (
+                        // Already eliminated before this week — gray/muted
+                        <>
+                          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                            <span className="text-white/15 text-lg">—</span>
+                          </div>
+                          <span className="text-xs font-medium text-white/20">OUT</span>
+                        </>
+                      ) : (
+                        // Still active but missed — red
+                        <>
+                          <div className="flex items-center gap-1 mb-1">
+                            <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                              <X className="w-5 h-5 text-red-400" />
+                            </div>
+                            {isDoublePick && (
+                              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                                <X className="w-5 h-5 text-red-400" />
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-xs font-medium text-red-400">MISS</span>
+                        </>
+                      )
+                    ) : (
+                      <div className="flex items-center gap-1">
                         <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/30 text-lg">
                           ?
                         </div>
-                      )}
-                    </div>
+                        {isDoublePick && (
+                          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/30 text-lg">
+                            ?
+                          </div>
+                        )}
+                      </div>
+                    )
                   ) : (
                     <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/20">
                       —
@@ -1858,7 +2045,8 @@ export default function LeagueDetail() {
                   )}
                 </div>
               );
-            })}
+            });
+            })()}
           </div>
         </div>
       </div>

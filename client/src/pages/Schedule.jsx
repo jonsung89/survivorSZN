@@ -5,7 +5,16 @@ import Loading from '../components/Loading';
 import TeamInfoDialog from '../components/TeamInfoDialog';
 import { PLAYOFF_ROUNDS, BROADCAST_NETWORKS } from '../sports/nfl/constants';
 
+// All sports we want to show tabs for (even if not yet implemented)
+const SPORT_TABS = [
+  { id: 'nfl', name: 'NFL', implemented: true },
+  { id: 'nba', name: 'NBA', implemented: false },
+  { id: 'mlb', name: 'MLB', implemented: false },
+  { id: 'nhl', name: 'NHL', implemented: false },
+];
+
 export default function Schedule() {
+  const [selectedSport, setSelectedSport] = useState('nfl');
   const [season, setSeason] = useState(2024);
   const [currentWeek, setCurrentWeek] = useState(1);
   const [currentSeasonType, setCurrentSeasonType] = useState(2);
@@ -34,7 +43,7 @@ export default function Schedule() {
 
   useEffect(() => {
     let cancelled = false;
-    
+
     const loadSeason = async () => {
       try {
         const result = await nflAPI.getSeason();
@@ -1029,8 +1038,36 @@ export default function Schedule() {
     return <Loading fullScreen />;
   }
 
+  const selectedSportTab = SPORT_TABS.find(s => s.id === selectedSport);
+
   return (
     <div className="max-w-3xl mx-auto px-3 sm:px-4 pt-0 sm:py-8 pb-4">
+      {/* Sport Tabs */}
+      <div className="flex gap-2 mb-4 animate-in">
+        {SPORT_TABS.map(sport => (
+          <button
+            key={sport.id}
+            onClick={() => setSelectedSport(sport.id)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              selectedSport === sport.id
+                ? 'bg-white/15 text-white'
+                : 'bg-white/5 text-white/40 hover:text-white/60'
+            }`}
+          >
+            {sport.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Non-implemented sport placeholder */}
+      {!selectedSportTab?.implemented ? (
+        <div className="glass-card rounded-xl sm:rounded-2xl p-8 sm:p-12 text-center animate-in">
+          <Calendar className="w-12 h-12 sm:w-16 sm:h-16 text-white/20 mx-auto mb-4" />
+          <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">{selectedSportTab?.name} Schedule</h2>
+          <p className="text-white/50 text-sm sm:text-base">Coming soon! Stay tuned.</p>
+        </div>
+      ) : (
+      <>
       {/* Header with Season Dropdown */}
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 animate-in">
         <div>
@@ -1261,10 +1298,12 @@ export default function Schedule() {
 
       {/* Team Info Dialog */}
       {teamInfoDialog.open && (
-        <TeamInfoDialog 
+        <TeamInfoDialog
           team={teamInfoDialog.team}
           onClose={() => setTeamInfoDialog({ open: false, team: null })}
         />
+      )}
+      </>
       )}
     </div>
   );

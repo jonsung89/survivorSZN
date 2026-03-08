@@ -91,6 +91,11 @@ class BaseSportProvider {
   /** Get league-wide rankings */
   async getLeagueRankings() { return null; }
 
+  /** Check if a season has concluded */
+  async isSeasonOver(season) {
+    return false;
+  }
+
   /** Clear cached data */
   clearCache() {}
 }

@@ -22,6 +22,11 @@ export default {
   getEspnWeekParams,
   espnToAppWeek,
 
+  // UI
+  gradientClasses: 'from-nfl-blue to-blue-700',
+  secondaryGradient: 'from-nfl-blue/20 to-purple-600/20',
+  borderColor: 'border-nfl-blue/30',
+
   // Config
   maxPeriod: MAX_WEEK,
   skipPeriods: SKIP_WEEKS,

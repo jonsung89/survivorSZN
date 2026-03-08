@@ -16,3 +16,8 @@ export function getAllSports() {
     gameType: m.gameType,
   }));
 }
+
+export function getSportGradient(sportId) {
+  const module = getSportModule(sportId);
+  return module.gradientClasses || 'from-blue-500 to-blue-700';
+}

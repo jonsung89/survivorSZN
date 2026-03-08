@@ -86,14 +86,18 @@ export default function Navbar() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/dashboard" className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-nfl-red to-red-700 flex items-center justify-center shadow-lg">
-                <span className="text-white font-display font-bold text-lg">🏈</span>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-lg">
+                <Trophy className="w-5 h-5 text-white" />
               </div>
               <div className="block">
                 <h1 className="font-display font-bold text-xl text-white tracking-wide">
                   SurvivorSZN
                 </h1>
-                <p className="text-[10px] text-white/50 -mt-1 tracking-widest">NFL Survivor Pool</p>
+                <p className="text-[10px] text-white/50 -mt-1 tracking-widest flex gap-[3px]">
+                  <span className="tagline-word">Outlast.</span>
+                  <span className="tagline-word">Survive.</span>
+                  <span className="tagline-word font-semibold text-white/70">Win.</span>
+                </p>
               </div>
             </Link>
 

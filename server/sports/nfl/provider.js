@@ -93,6 +93,25 @@ class NFLProvider extends BaseSportProvider {
     return nflService.getTeamSeasonResults(teamId, season);
   }
 
+  async isSeasonOver(season) {
+    try {
+      // Check if Super Bowl game (ESPN seasonType 3, week 5) is final
+      const games = await nflService.getWeekSchedule(season, 5, 3);
+      if (Array.isArray(games) && games.length > 0) {
+        return games.every(g => g.status === 'STATUS_FINAL');
+      }
+      // Fallback: date-based check — NFL season for year X ends by March of X+1
+      const now = new Date();
+      const currentNFLSeason = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+      return season < currentNFLSeason || (season === currentNFLSeason && now.getMonth() >= 2);
+    } catch (e) {
+      // Fallback: date-based check
+      const now = new Date();
+      const currentNFLSeason = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+      return season < currentNFLSeason || (season === currentNFLSeason && now.getMonth() >= 2);
+    }
+  }
+
   clearCache() {
     nflService.clearCache();
   }

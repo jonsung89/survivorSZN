@@ -272,6 +272,23 @@ body {
   }
 }
 
+/* Shimmer loading effect for standings cells */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
 /* Chat new message glow */
 @keyframes newMessageGlow {
   0%, 100% {
@@ -357,6 +374,83 @@ body {
   background: rgba(255, 255, 255, 0.15);
   color: white;
 }
+
+/* Tagline slide-in animation (navbar / login) */
+@keyframes taglineSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.tagline-word {
+  opacity: 0;
+  animation: taglineSlideIn 0.4s ease-out forwards;
+}
+
+.tagline-word:nth-child(1) { animation-delay: 0.3s; }
+.tagline-word:nth-child(2) { animation-delay: 0.6s; }
+.tagline-word:nth-child(3) { animation-delay: 0.9s; }
+
+/* Splash screen animations */
+@keyframes splashIconIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes splashTitleIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes splashWordIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.splash-icon {
+  opacity: 0;
+  animation: splashIconIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s forwards;
+}
+
+.splash-title {
+  opacity: 0;
+  animation: splashTitleIn 0.5s ease-out 0.6s forwards;
+}
+
+.splash-word {
+  opacity: 0;
+  animation: splashWordIn 0.4s ease-out forwards;
+}
+
+.splash-word:nth-child(1) { animation-delay: 1.0s; }
+.splash-word:nth-child(2) { animation-delay: 1.3s; }
+.splash-word:nth-child(3) { animation-delay: 1.6s; }
 
 /* Toast notifications */
 .toast {

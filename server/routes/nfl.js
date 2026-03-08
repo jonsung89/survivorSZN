@@ -12,12 +12,15 @@ const {
   getTeamGameStatus,
   clearCache
 } = require('../services/nfl');
+const { getProvider } = require('../sports');
 
 // Get current season info
 router.get('/season', async (req, res) => {
   try {
     const seasonInfo = await getCurrentSeason();
-    res.json(seasonInfo);
+    const provider = getProvider('nfl');
+    const isSeasonOver = await provider.isSeasonOver(seasonInfo.season);
+    res.json({ ...seasonInfo, isSeasonOver });
   } catch (error) {
     console.error('Get season error:', error);
     res.status(500).json({ error: 'Failed to get season info' });

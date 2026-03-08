@@ -142,8 +142,9 @@ router.get('/pending-picks', authMiddleware, async (req, res) => {
       WHERE lm.user_id = $1 AND lm.status = 'active' AND l.status = 'active'
     `, [user.id]);
 
-    // Cache current week per sport to avoid redundant API calls
+    // Cache current week and season-over status per sport
     const currentWeekBySport = {};
+    const seasonOverBySport = {};
 
     const pendingPicks = [];
 
@@ -157,8 +158,12 @@ router.get('/pending-picks', authMiddleware, async (req, res) => {
         currentWeekBySport[sportId] = provider.espnToAppWeek
           ? provider.espnToAppWeek(seasonData.week, seasonData.seasonType)
           : seasonData.week;
+        seasonOverBySport[sportId] = await provider.isSeasonOver(seasonData.season);
       }
       const internalWeek = currentWeekBySport[sportId];
+
+      // Skip if season is over for this sport
+      if (seasonOverBySport[sportId]) continue;
 
       // Skip if week is before league start
       if (internalWeek < membership.start_week) continue;

@@ -1,9 +1,11 @@
+import { useState, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { ToastProvider } from './components/Toast';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import SplashScreen from './components/SplashScreen';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Leagues from './pages/Leagues';
@@ -171,11 +173,22 @@ function AppRoutes() {
 }
 
 export default function App() {
+  const [showSplash] = useState(() => !sessionStorage.getItem('splashShown'));
+  const [splashDone, setSplashDone] = useState(!showSplash);
+
+  const handleSplashComplete = useCallback(() => {
+    sessionStorage.setItem('splashShown', '1');
+    setSplashDone(true);
+  }, []);
+
   return (
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
           <SocketProvider>
+            {showSplash && !splashDone && (
+              <SplashScreen onComplete={handleSplashComplete} />
+            )}
             <AppRoutes />
           </SocketProvider>
         </AuthProvider>

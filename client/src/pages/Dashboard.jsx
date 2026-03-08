@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Trophy, 
-  AlertTriangle, 
-  ChevronRight, 
+import {
+  Trophy,
+  AlertTriangle,
+  ChevronRight,
   Plus,
   Users,
-  Calendar
+  Calendar,
+  X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { leagueAPI, userAPI, nflAPI } from '../api';
 import Loading from '../components/Loading';
 import { BROADCAST_NETWORKS } from '../sports/nfl/constants';
 import { getWeekLabel } from '../sports/nfl/weekUtils';
-import { getSportModule } from '../sports';
+import { getSportModule, getSportGradient } from '../sports';
 
 // Network broadcast info lookup
 const getBroadcastInfo = (broadcast) => {
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const [allGames, setAllGames] = useState([]);
   const [weekStarted, setWeekStarted] = useState(false);
   const [gameDetails, setGameDetails] = useState({});
+  const [winnersDialog, setWinnersDialog] = useState({ open: false, leagueName: '', winners: [] });
 
   // BroadcastIcon component (same as Schedule.jsx)
   const BroadcastIcon = ({ broadcast }) => {
@@ -96,53 +98,32 @@ export default function Dashboard() {
         }
 
         setSeasonInfo(seasonData);
-        
-        // DEBUG: Log season data
-        console.log('=== DASHBOARD DEBUG ===');
-        console.log('Season data:', seasonData);
-        console.log('Week:', seasonData?.week, 'SeasonType:', seasonData?.seasonType);
+
+        // Skip schedule fetch if season is over
+        if (seasonData?.isSeasonOver) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
 
         // Fetch schedule to get first game time
         if (seasonData?.week) {
           try {
-            // Pass seasonType for playoffs (3) vs regular season (2)
             const scheduleData = await nflAPI.getSchedule(seasonData.week, null, seasonData.seasonType || 2);
-            
-            // DEBUG: Log schedule data
-            console.log('Schedule API called with week:', seasonData.week, 'seasonType:', seasonData.seasonType || 2);
-            console.log('Schedule data:', scheduleData);
-            console.log('Games count:', scheduleData?.games?.length);
-            
+
             if (cancelled) return;
-            
+
             if (scheduleData?.games?.length > 0) {
               const now = new Date();
               const games = scheduleData.games;
-              
-              // Store all games for the week
+
               setAllGames(games);
-              
-              // Check if any games have started (in progress, final, or past scheduled time)
+
               const hasStartedGames = games.some(g => {
                 if (g.status === 'STATUS_IN_PROGRESS' || g.status === 'STATUS_FINAL') return true;
-                // Also check if scheduled time has passed
                 const gameTime = new Date(g.date);
                 return gameTime <= now && g.status !== 'STATUS_SCHEDULED';
               });
               setWeekStarted(hasStartedGames);
-              
-              // DEBUG: Log game analysis
-              console.log('Current time:', now.toISOString());
-              console.log('Has started games:', hasStartedGames);
-              console.log('Games with dates:', games.map(g => ({
-                id: g.id,
-                name: g.shortName || g.name,
-                date: g.date,
-                status: g.status,
-                isFuture: new Date(g.date) > now
-              })));
-              
-              // firstGame will be calculated by the allGames useEffect
             }
           } catch (err) {
             console.error('Failed to fetch schedule:', err);
@@ -303,14 +284,18 @@ export default function Dashboard() {
           Welcome back, {user?.displayName || 'Player'}!
         </h1>
         <p className="text-white/60 mt-1 text-base">
-          {seasonInfo ? `${getWeekLabel(seasonInfo.week, seasonInfo.seasonType)} • ${seasonInfo.season} Season` : 'Loading season info...'}
+          {seasonInfo
+            ? seasonInfo.isSeasonOver
+              ? `${seasonInfo.season} Season Complete • Offseason`
+              : `${getWeekLabel(seasonInfo.week, seasonInfo.seasonType)} • ${seasonInfo.season} Season`
+            : 'Loading season info...'}
         </p>
       </div>
 
-      {/* Countdown to Next Game - shows when there are upcoming games */}
-      {countdown && firstGame && (
+      {/* Countdown to Next Game - shows when there are upcoming games and season is active */}
+      {!seasonInfo?.isSeasonOver && countdown && firstGame && (
         <div className="mb-6 sm:mb-8 animate-in" style={{ animationDelay: '25ms' }}>
-          <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-nfl-blue/20 to-purple-600/20 border border-nfl-blue/30">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-blue-500/20 to-purple-600/20 border border-blue-500/30">
             <div className="flex items-center justify-between gap-4">
               {/* Matchup */}
               <div className="flex items-center gap-3">
@@ -386,8 +371,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Live Games - shows when week has started */}
-      {weekStarted && allGames.length > 0 && (() => {
+      {/* Live Games - shows when week has started and season is active */}
+      {!seasonInfo?.isSeasonOver && weekStarted && allGames.length > 0 && (() => {
         const now = new Date();
         
         // Helper to check if game is currently being played
@@ -524,8 +509,8 @@ export default function Dashboard() {
         );
       })()}
 
-      {/* Pending Picks Alert */}
-      {pendingPicks.length > 0 && (
+      {/* Pending Picks Alert - hidden when season is over */}
+      {!seasonInfo?.isSeasonOver && pendingPicks.length > 0 && (
         <div className="mb-6 sm:mb-8 animate-in" style={{ animationDelay: '50ms' }}>
           <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl p-4">
             <div className="flex items-start gap-3">
@@ -588,9 +573,15 @@ export default function Dashboard() {
               </Link>
             </div>
           </div>
-        ) : (
-          <div className="glass-card rounded-xl overflow-hidden">
-            {leagues.slice(0, 10).map((league, i) => (
+        ) : (() => {
+          const currentLeagues = leagues.filter(l => !l.seasonOver);
+          const pastLeagues = leagues.filter(l => l.seasonOver);
+
+          const renderLeagueRow = (league, i, isPast) => {
+            const sportMod = getSportModule(league.sportId || 'nfl');
+            const isWinner = isPast && league.winners?.some(w => w.isMe);
+
+            return (
               <Link
                 key={league.id}
                 to={`/league/${league.id}`}
@@ -600,43 +591,73 @@ export default function Dashboard() {
               >
                 {/* League icon */}
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  league.memberStatus === 'eliminated' 
-                    ? 'bg-red-500/20' 
-                    : 'bg-gradient-to-br from-nfl-blue to-blue-700'
+                  isWinner
+                    ? 'bg-gradient-to-br from-amber-500 to-yellow-600'
+                    : league.memberStatus === 'eliminated'
+                      ? 'bg-red-500/20'
+                      : `bg-gradient-to-br ${getSportGradient(league.sportId)}`
                 }`}>
                   <Trophy className={`w-5 h-5 ${
-                    league.memberStatus === 'eliminated' ? 'text-red-400' : 'text-white'
+                    isWinner ? 'text-white' : league.memberStatus === 'eliminated' ? 'text-red-400' : 'text-white'
                   }`} />
                 </div>
-                
+
                 {/* League name and status */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-white text-base truncate">
-                      {league.name}
-                    </h3>
-                    {league.isCommissioner && (
-                      <span className="text-purple-400 text-sm">★</span>
-                    )}
+                    <h3 className="font-semibold text-white text-base truncate">{league.name}</h3>
+                    {league.isCommissioner && <span className="badge badge-active text-xs">Commish</span>}
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-white/10 text-white/40 uppercase">{sportMod.name}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <span className={league.memberStatus === 'active' ? 'text-green-400' : 'text-red-400'}>
-                      {league.memberStatus === 'active' ? 'Active' : 'Eliminated'}
-                    </span>
-                    <span className="text-white/30">•</span>
-                    <span className="text-white/50">
-                      {league.activeCount}/{league.memberCount} alive
-                    </span>
+                    {isPast ? (
+                      isWinner ? (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners });
+                          }}
+                          className="text-amber-400 font-medium hover:text-amber-300 transition-colors"
+                        >
+                          Winner!{league.winners?.length > 1 && ` (+${league.winners.length - 1} other${league.winners.length > 2 ? 's' : ''})`}
+                        </button>
+                      ) : league.winners?.length > 0 ? (
+                        league.winners.length <= 3 ? (
+                          <span className="text-white/50">Won by {league.winners.map(w => w.displayName).join(', ')}</span>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners });
+                            }}
+                            className="text-white/50 hover:text-white/70 transition-colors"
+                          >
+                            {league.winners.length} winners
+                          </button>
+                        )
+                      ) : league.memberStatus === 'eliminated' ? (
+                        <span className="text-white/40">Eliminated</span>
+                      ) : (
+                        <span className="text-white/40">Season Complete</span>
+                      )
+                    ) : (
+                      <>
+                        <span className={league.memberStatus === 'active' ? 'text-green-400' : 'text-red-400'}>
+                          {league.memberStatus === 'active' ? 'Active' : 'Eliminated'}
+                        </span>
+                        <span className="text-white/30">•</span>
+                        <span className="text-white/50">{league.activeCount}/{league.memberCount} alive</span>
+                      </>
+                    )}
                   </div>
                 </div>
-                
-                {/* Current pick */}
+
+                {/* Right side: pick or strike info */}
                 <div className="flex items-center gap-3">
-                  {league.memberStatus === 'active' && league.currentPickTeamId ? (
+                  {!isPast && league.memberStatus === 'active' && league.currentPickTeamId ? (
                     <div className="flex items-center gap-2">
                       {(() => {
-                        const leagueSport = getSportModule(league.sport_id || 'nfl');
-                        const team = leagueSport.getTeam(league.currentPickTeamId);
+                        const team = sportMod.getTeam(league.currentPickTeamId);
                         return team ? (
                           <>
                             {team.logo && <img src={team.logo} alt="" className="w-6 h-6 object-contain" />}
@@ -645,28 +666,47 @@ export default function Dashboard() {
                         ) : null;
                       })()}
                     </div>
-                  ) : league.memberStatus === 'active' ? (
+                  ) : !isPast && league.memberStatus === 'active' ? (
                     <span className="text-amber-400 text-sm font-medium">No pick</span>
                   ) : null}
-                  
+
                   {/* Strike dots */}
                   <div className="flex gap-1">
                     {Array.from({ length: league.maxStrikes }).map((_, j) => (
                       <div
                         key={j}
-                        className={`w-2 h-2 rounded-full ${
-                          j < league.strikes ? 'bg-red-500' : 'bg-white/20'
-                        }`}
+                        className={`w-2 h-2 rounded-full ${j < league.strikes ? 'bg-red-500' : 'bg-white/20'}`}
                       />
                     ))}
                   </div>
-                  
+
                   <ChevronRight className="w-4 h-4 text-white/30" />
                 </div>
               </Link>
-            ))}
-          </div>
-        )}
+            );
+          };
+
+          return (
+            <div className="space-y-4">
+              {currentLeagues.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Current Season</h3>
+                  <div className="glass-card rounded-xl overflow-hidden">
+                    {currentLeagues.slice(0, 10).map((league, i) => renderLeagueRow(league, i, false))}
+                  </div>
+                </div>
+              )}
+              {pastLeagues.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Past Seasons</h3>
+                  <div className="glass-card rounded-xl overflow-hidden">
+                    {pastLeagues.slice(0, 5).map((league, i) => renderLeagueRow(league, i, true))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Quick Actions */}
@@ -699,6 +739,31 @@ export default function Dashboard() {
           <ChevronRight className="w-5 h-5 text-white/30 group-hover:text-white/60 transition-colors flex-shrink-0" />
         </Link>
       </div>
+
+      {/* Winners Dialog */}
+      {winnersDialog.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setWinnersDialog({ open: false, leagueName: '', winners: [] })}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="glass-card rounded-2xl p-6 max-w-sm w-full relative z-10 animate-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">{winnersDialog.leagueName}</h3>
+              <button onClick={() => setWinnersDialog({ open: false, leagueName: '', winners: [] })} className="text-white/40 hover:text-white/60 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-white/50 text-sm mb-3">{winnersDialog.winners.length} Winners</p>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {winnersDialog.winners.map((w, i) => (
+                <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-white/5">
+                  <Trophy className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <span className="text-white text-sm">{w.displayName}</span>
+                  {w.isMe && <span className="text-amber-400 text-xs font-medium ml-auto">You</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

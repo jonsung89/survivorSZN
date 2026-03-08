@@ -123,7 +123,11 @@ export default function Login() {
           <h1 className="text-4xl sm:text-5xl font-display font-black text-white tracking-tight">
             SURVIVOR<span className="text-nfl-red">SZN</span>
           </h1>
-          <p className="text-white/60 mt-2 text-sm sm:text-base">NFL Survivor Pool</p>
+          <p className="text-white/60 mt-2 text-sm sm:text-base flex items-center justify-center gap-1.5 tracking-wide">
+            <span className="tagline-word">Outlast.</span>
+            <span className="tagline-word">Survive.</span>
+            <span className="tagline-word font-semibold text-white/80">Win.</span>
+          </p>
         </div>
 
         <div className="glass-card rounded-xl sm:rounded-2xl p-6 sm:p-8">

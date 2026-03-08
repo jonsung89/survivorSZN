@@ -298,14 +298,15 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
     }
 
     const leagues = await db.getAll(`
-      SELECT 
-        l.id, 
-        l.name, 
+      SELECT
+        l.id,
+        l.name,
         l.max_strikes,
         l.start_week,
         l.season,
         l.status,
         l.commissioner_id,
+        l.sport_id,
         lm.strikes,
         lm.status as member_status,
         COUNT(DISTINCT lm2.id) as member_count,
@@ -325,7 +326,7 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
         FROM picks
         WHERE user_id = $1 AND week = $2
       `, [user.id, currentWeek]);
-      
+
       picks.forEach(p => {
         pickMap[p.league_id] = p.team_id;
       });
@@ -333,22 +334,73 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
       console.error('Failed to get picks:', pickError);
     }
 
+    // Determine season-over status per sport+season (cached)
+    const seasonOverCache = {};
+    for (const l of leagues) {
+      const key = `${l.sport_id || 'nfl'}_${l.season}`;
+      if (seasonOverCache[key] === undefined) {
+        try {
+          const provider = getProvider(l.sport_id || 'nfl');
+          seasonOverCache[key] = await provider.isSeasonOver(l.season);
+        } catch (e) {
+          seasonOverCache[key] = false;
+        }
+      }
+    }
+
+    // Batch-fetch winners for concluded leagues with active members
+    const concludedLeagueIds = leagues
+      .filter(l => {
+        const key = `${l.sport_id || 'nfl'}_${l.season}`;
+        return seasonOverCache[key] && parseInt(l.active_count) > 0;
+      })
+      .map(l => l.id);
+
+    let winnersMap = {};
+    if (concludedLeagueIds.length > 0) {
+      try {
+        const winners = await db.getAll(`
+          SELECT lm.league_id, u.display_name, lm.user_id
+          FROM league_members lm
+          JOIN users u ON u.id = lm.user_id
+          WHERE lm.league_id = ANY($1) AND lm.status = 'active'
+        `, [concludedLeagueIds]);
+
+        winners.forEach(w => {
+          if (!winnersMap[w.league_id]) winnersMap[w.league_id] = [];
+          winnersMap[w.league_id].push({
+            displayName: w.display_name,
+            isMe: w.user_id === user.id
+          });
+        });
+      } catch (winnerError) {
+        console.error('Failed to get winners:', winnerError);
+      }
+    }
+
     res.json({
       success: true,
-      leagues: leagues.map(l => ({
-        id: l.id,
-        name: l.name,
-        maxStrikes: l.max_strikes,
-        startWeek: l.start_week,
-        season: l.season,
-        status: l.status,
-        strikes: l.strikes,
-        memberStatus: l.member_status,
-        memberCount: parseInt(l.member_count),
-        activeCount: parseInt(l.active_count),
-        isCommissioner: l.commissioner_id === user.id,
-        currentPickTeamId: pickMap[l.id] || null
-      }))
+      leagues: leagues.map(l => {
+        const seasonKey = `${l.sport_id || 'nfl'}_${l.season}`;
+        const seasonOver = seasonOverCache[seasonKey] || false;
+        return {
+          id: l.id,
+          name: l.name,
+          maxStrikes: l.max_strikes,
+          startWeek: l.start_week,
+          season: l.season,
+          status: l.status,
+          strikes: l.strikes,
+          memberStatus: l.member_status,
+          memberCount: parseInt(l.member_count),
+          activeCount: parseInt(l.active_count),
+          isCommissioner: l.commissioner_id === user.id,
+          currentPickTeamId: pickMap[l.id] || null,
+          sportId: l.sport_id || 'nfl',
+          seasonOver,
+          winners: seasonOver ? (winnersMap[l.id] || null) : null
+        };
+      })
     });
   } catch (error) {
     console.error('Get my leagues error:', error);

@@ -258,9 +258,18 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
         const parseOdds = () => {
           const odds = competition?.odds?.[0];
           if (!odds) return null;
+          const homeML = odds.moneyline?.home?.close?.odds;
+          const awayML = odds.moneyline?.away?.close?.odds;
           return {
             spread: odds.details || null,
-            overUnder: odds.overUnder || null
+            overUnder: odds.overUnder || null,
+            homeSpreadOdds: odds.pointSpread?.home?.close?.odds || null,
+            awaySpreadOdds: odds.pointSpread?.away?.close?.odds || null,
+            homeMoneyLine: homeML ? parseInt(homeML) : null,
+            awayMoneyLine: awayML ? parseInt(awayML) : null,
+            homeFavorite: odds.homeTeamOdds?.favorite || false,
+            awayFavorite: odds.awayTeamOdds?.favorite || false,
+            provider: odds.provider?.name || 'ESPN BET'
           };
         };
 
@@ -333,7 +342,85 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
         return null;
       }
 
-      return parseGameDetails(data);
+      const sportResult = parseGameDetails(data);
+
+      // --- Parse common data from ESPN summary (shared across all daily sports) ---
+
+      // Probable pitchers (MLB)
+      let probablePitchers = null;
+      try {
+        const comps = data.header?.competitions?.[0]?.competitors || [];
+        const pitchers = [];
+        for (const comp of comps) {
+          const team = comp.team || {};
+          for (const p of (comp.probables || [])) {
+            const ath = p.athlete || {};
+            const stats = {};
+            const splits = p.statistics?.splits?.categories || [];
+            for (const cat of splits) {
+              if (cat.abbreviation && cat.displayValue != null) {
+                stats[cat.abbreviation] = cat.displayValue;
+              }
+            }
+            pitchers.push({
+              team: { id: team.id, abbreviation: team.abbreviation, logo: team.logo },
+              name: ath.displayName || p.displayName,
+              jersey: ath.jersey || null,
+              headshot: ath.headshot?.href || ath.headshot || null,
+              stats
+            });
+          }
+        }
+        if (pitchers.length > 0) probablePitchers = pitchers;
+      } catch (e) { /* ignore */ }
+
+      // Last 5 games
+      let lastFiveGames = null;
+      try {
+        const l5 = data.lastFiveGames || [];
+        if (l5.length > 0) {
+          lastFiveGames = {};
+          for (const teamData of l5) {
+            const teamAbbr = teamData.team?.abbreviation;
+            if (!teamAbbr) continue;
+            lastFiveGames[teamAbbr] = (teamData.events || []).map(e => ({
+              date: e.gameDate,
+              result: e.gameResult, // W, L, T
+              opponent: e.opponent?.abbreviation || '?',
+              opponentName: e.opponent?.displayName || e.opponent?.shortDisplayName || e.opponent?.abbreviation || '?',
+              opponentLogo: e.opponent?.logo || null,
+              score: e.score,
+              atVs: e.atVs || (e.atHome === true ? 'vs' : e.atHome === false ? '@' : '@')
+            }));
+          }
+        }
+      } catch (e) { /* ignore */ }
+
+      // Injuries
+      let injuries = null;
+      try {
+        const injData = data.injuries || [];
+        if (injData.length > 0) {
+          injuries = {};
+          for (const teamInj of injData) {
+            const teamName = teamInj.team?.abbreviation || teamInj.team?.displayName;
+            if (!teamName) continue;
+            injuries[teamName] = (teamInj.injuries || []).map(p => ({
+              name: p.athlete?.displayName || '?',
+              position: p.athlete?.position?.abbreviation || '?',
+              status: p.status || '?',
+              type: p.type?.description || null
+            }));
+          }
+        }
+      } catch (e) { /* ignore */ }
+
+      return {
+        ...sportResult,
+        ...(probablePitchers && { probablePitchers }),
+        ...(lastFiveGames && { lastFiveGames }),
+        ...(injuries && { injuries })
+      };
     } catch (error) {
       console.error(`[${sportName}] getGameDetails error for ${gameId}:`, error.message);
       return null;

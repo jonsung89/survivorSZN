@@ -42,12 +42,12 @@ const SEASON_STATS_CONFIG = {
     { key: 'avgAssists', label: 'APG' },
   ],
   mlb: [
-    { key: 'runs', label: 'Runs' },
     { key: 'avg', label: 'AVG' },
+    { key: 'runs', label: 'R' },
+    { key: 'hits', label: 'H' },
     { key: 'ERA', label: 'ERA' },
-    { key: 'hits', label: 'Hits' },
     { key: 'saves', label: 'SV' },
-    { key: 'errors', label: 'Errors' },
+    { key: 'wins', label: 'W' },
   ],
   nhl: [
     { key: 'avgGoals', label: 'GF/G', rankingsKey: 'goals' },
@@ -734,39 +734,47 @@ export default function Schedule() {
     return (
       <div className="mt-3 pt-3 border-t border-fg/10 space-y-4">
         {/* Betting Lines */}
-        {odds && (
-          <div className="space-y-2">
-            <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              Betting Lines
-            </h4>
-            <div className="grid grid-cols-3 gap-2">
-              {odds.spread && (
-                <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
-                  <div className="text-xs sm:text-sm text-fg/50">Spread</div>
-                  <div className="text-sm sm:text-base font-semibold text-fg">{odds.spread}</div>
-                </div>
-              )}
-              {odds.overUnder && (
-                <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
-                  <div className="text-xs sm:text-sm text-fg/50">O/U</div>
-                  <div className="text-sm sm:text-base font-semibold text-fg">{odds.overUnder}</div>
-                </div>
-              )}
-              {(odds.homeMoneyLine || odds.awayMoneyLine) && (
-                <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
-                  <div className="text-xs sm:text-sm text-fg/50">Moneyline</div>
-                  <div className="text-sm sm:text-base font-semibold text-fg">
-                    {game.awayTeam?.abbreviation} {odds.awayMoneyLine > 0 ? '+' : ''}{odds.awayMoneyLine}
+        {odds && (() => {
+          const hasSpread = !!odds.spread;
+          const hasOU = !!odds.overUnder;
+          const hasML = !!(odds.homeMoneyLine != null || odds.awayMoneyLine != null);
+          const cellCount = [hasSpread, hasOU, hasML].filter(Boolean).length;
+          if (cellCount === 0) return null;
+          const gridClass = cellCount === 3 ? 'grid grid-cols-3 gap-2' : cellCount === 2 ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-1 gap-2 max-w-xs';
+          return (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                Betting Lines
+              </h4>
+              <div className={gridClass}>
+                {hasSpread && (
+                  <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
+                    <div className="text-xs sm:text-sm text-fg/50">Spread</div>
+                    <div className="text-sm sm:text-base font-semibold text-fg">{odds.spread}</div>
                   </div>
-                  <div className="text-sm sm:text-base font-semibold text-fg">
-                    {game.homeTeam?.abbreviation} {odds.homeMoneyLine > 0 ? '+' : ''}{odds.homeMoneyLine}
+                )}
+                {hasOU && (
+                  <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
+                    <div className="text-xs sm:text-sm text-fg/50">O/U</div>
+                    <div className="text-sm sm:text-base font-semibold text-fg">{odds.overUnder}</div>
                   </div>
-                </div>
-              )}
+                )}
+                {hasML && (
+                  <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
+                    <div className="text-xs sm:text-sm text-fg/50">Moneyline</div>
+                    <div className="text-sm sm:text-base font-semibold text-fg">
+                      {game.awayTeam?.abbreviation} {odds.awayMoneyLine > 0 ? '+' : ''}{odds.awayMoneyLine}
+                    </div>
+                    <div className="text-sm sm:text-base font-semibold text-fg">
+                      {game.homeTeam?.abbreviation} {odds.homeMoneyLine > 0 ? '+' : ''}{odds.homeMoneyLine}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         
         {/* Win Probability */}
         {details?.winProbability && (() => {
@@ -805,8 +813,9 @@ export default function Schedule() {
           );
         })()}
 
-        {/* Team Season Stats — Sport-specific (hidden during preseason) */}
-        {sportStatuses[selectedSport] !== 'preseason' && (() => {
+        {/* Team Season Stats — Sport-specific */}
+        {(() => {
+          const isPreseason = sportStatuses[selectedSport] === 'preseason';
           const config = SEASON_STATS_CONFIG[selectedSport] || SEASON_STATS_CONFIG.nfl;
 
           // Build stat rows for a team from scoreboard + details data
@@ -891,7 +900,7 @@ export default function Schedule() {
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
                 <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                Season Averages
+                {isPreseason ? 'Preseason Stats' : 'Season Averages'}
               </h4>
               <div className="grid grid-cols-2 gap-3">
                 <TeamSeasonColumn team={game.awayTeam} data={awayData} />
@@ -901,7 +910,151 @@ export default function Schedule() {
           );
         })()}
         
-        {/* Injuries */}
+        {/* Probable Pitchers (MLB) */}
+        {details?.probablePitchers && details.probablePitchers.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              Probable Pitchers
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              {details.probablePitchers.map((pitcher, i) => (
+                <div key={i} className="bg-fg/5 rounded-lg p-3 flex items-center gap-3">
+                  {pitcher.headshot ? (
+                    <img src={pitcher.headshot} alt="" className="w-12 h-12 rounded-full object-cover bg-fg/10 flex-shrink-0" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-fg/10 flex items-center justify-center text-fg/30 text-xs font-bold flex-shrink-0">
+                      {pitcher.team?.abbreviation || 'P'}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      {pitcher.team?.logo && <img src={tl(pitcher.team.logo)} alt="" className="w-4 h-4 object-contain" />}
+                      <span className="text-xs text-fg/50">{pitcher.team?.abbreviation}</span>
+                    </div>
+                    <div className="text-sm font-semibold text-fg truncate">{pitcher.name}</div>
+                    {Object.keys(pitcher.stats || {}).length > 0 && (
+                      <div className="text-xs text-fg/50 mt-0.5">
+                        {pitcher.stats.W && pitcher.stats.L ? `${pitcher.stats.W}-${pitcher.stats.L}` : ''}
+                        {pitcher.stats.ERA ? ` · ${pitcher.stats.ERA} ERA` : ''}
+                        {pitcher.stats.WHIP ? ` · ${pitcher.stats.WHIP} WHIP` : ''}
+                        {pitcher.stats.K ? ` · ${pitcher.stats.K} K` : ''}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Last 5 Games */}
+        {details?.lastFiveGames && (() => {
+          const teams = [
+            { team: game.awayTeam, games: details.lastFiveGames[game.awayTeam?.abbreviation] },
+            { team: game.homeTeam, games: details.lastFiveGames[game.homeTeam?.abbreviation] }
+          ].filter(t => t.games?.length > 0);
+          if (teams.length === 0) return null;
+          return (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                Last 5 Games
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {teams.map(({ team, games }) => (
+                  <div key={team?.id} className="bg-fg/5 rounded-lg p-2 sm:p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      {team?.logo && <img src={tl(team.logo)} alt="" className="w-5 h-5 object-contain" />}
+                      <span className="text-sm font-semibold text-fg">{team?.abbreviation}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {games.map((g, i) => {
+                        const dateStr = g.date ? (() => {
+                          const d = new Date(g.date);
+                          return `${d.getMonth() + 1}/${d.getDate()}`;
+                        })() : '';
+                        return (
+                          <div key={i} className="flex items-center justify-between text-xs sm:text-sm">
+                            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                              <span className="text-fg/40 w-8 sm:w-10 flex-shrink-0">{dateStr}</span>
+                              <span className="text-fg/50 w-5 sm:w-7 flex-shrink-0 text-center">{g.atVs === 'vs' ? 'vs.' : '@'}</span>
+                              {g.opponentLogo && <img src={tl(g.opponentLogo)} alt="" className="w-4 h-4 sm:w-5 sm:h-5 object-contain flex-shrink-0" />}
+                              <span className="text-fg/70 truncate">
+                                <span className="hidden sm:inline">{g.opponentName || g.opponent}</span>
+                                <span className="sm:hidden">{g.opponent}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                              <span className={`font-bold ${g.result === 'W' ? 'text-green-500' : g.result === 'L' ? 'text-red-500' : 'text-fg/50'}`}>
+                                {g.result}
+                              </span>
+                              <span className="text-fg/60 font-medium">{g.score}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Injuries (daily sports — from game summary) */}
+        {details?.injuries && (() => {
+          const awayKey = game.awayTeam?.abbreviation;
+          const homeKey = game.homeTeam?.abbreviation;
+          const awayInj = details.injuries[awayKey] || [];
+          const homeInj = details.injuries[homeKey] || [];
+          // Filter to key injuries only
+          const filterKey = (list) => list.filter(p => {
+            const s = (p.status || '').toLowerCase();
+            return s.includes('out') || s.includes('day-to-day') || s === 'doubtful';
+          }).slice(0, 5);
+          const awayFiltered = filterKey(awayInj);
+          const homeFiltered = filterKey(homeInj);
+          if (awayFiltered.length === 0 && homeFiltered.length === 0) return null;
+          const InjList = ({ injuries: injList }) => (
+            <div className="text-xs text-fg/60 space-y-0.5">
+              {injList.map((inj, i) => (
+                <div key={i}>
+                  <span className={inj.status?.toLowerCase().includes('out') ? 'text-red-500' : 'text-yellow-400'}>
+                    {inj.status}
+                  </span>
+                  {' '}{inj.name} <span className="text-fg/40">({inj.position})</span>
+                </div>
+              ))}
+            </div>
+          );
+          return (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                Injury Report
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    {game.awayTeam?.logo && <img src={tl(game.awayTeam.logo)} alt="" className="w-4 h-4" />}
+                    <span className="text-xs text-fg/50">{awayKey}</span>
+                  </div>
+                  {awayFiltered.length > 0 ? <InjList injuries={awayFiltered} /> : <span className="text-xs text-fg/30">None reported</span>}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    {game.homeTeam?.logo && <img src={tl(game.homeTeam.logo)} alt="" className="w-4 h-4" />}
+                    <span className="text-xs text-fg/50">{homeKey}</span>
+                  </div>
+                  {homeFiltered.length > 0 ? <InjList injuries={homeFiltered} /> : <span className="text-xs text-fg/30">None reported</span>}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* NFL Injuries (from separate injury endpoint) */}
         {(() => {
           const injuriesData = gameInjuries[game.id] || {};
           

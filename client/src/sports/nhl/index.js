@@ -12,6 +12,7 @@ export default {
   gradientClasses: 'from-gray-800 to-gray-950',
   secondaryGradient: 'from-gray-800/20 to-gray-950/20',
   borderColor: 'border-gray-600/30',
+  badgeClasses: 'bg-slate-400/15 text-slate-400',
   accentColor: '#000000',
 
   // Sport-specific config

@@ -26,6 +26,7 @@ export default {
   gradientClasses: 'from-nfl-blue to-blue-700',
   secondaryGradient: 'from-nfl-blue/20 to-purple-600/20',
   borderColor: 'border-nfl-blue/30',
+  badgeClasses: 'bg-blue-400/15 text-blue-400',
 
   // Config
   maxPeriod: MAX_WEEK,

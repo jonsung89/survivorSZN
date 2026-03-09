@@ -20,11 +20,27 @@
   /* Text */
   --color-text-primary: 240 240 243;   /* #f0f0f3 — headings, body */
 
+  /* Foreground — used for text, borders, overlays via Tailwind opacity (text-fg/60, bg-fg/5…) */
+  --color-fg: 255 255 255;             /* white in dark mode */
+
   /* Brand */
   --nfl-blue: #013369;
   --nfl-red: #D50A0A;
   --field-green: #1B4D3E;
   --gold: #FFB612;
+}
+
+/* ── Light Mode ──────────────────────────────────────────────────── */
+.light {
+  --color-base: 244 244 248;           /* #f4f4f8 — page bg */
+  --color-body-from: 240 240 245;
+  --color-body-via: 246 246 250;
+  --color-body-to: 242 242 247;
+  --color-surface: 255 255 255;        /* #ffffff — cards */
+  --color-elevated: 255 255 255;       /* #ffffff — modals */
+  --color-inset: 236 236 241;          /* #ececf1 — inset areas */
+  --color-text-primary: 17 17 21;      /* #111115 — body text */
+  --color-fg: 17 17 21;               /* near-black foreground */
 }
 
 * {
@@ -184,14 +200,14 @@ body {
 /* Buttons */
 .btn-primary {
   @apply px-6 py-3 rounded-xl font-semibold transition-all duration-200;
-  background: linear-gradient(135deg, #D50A0A 0%, #b30909 100%);
+  background: linear-gradient(135deg, #8B5CF6 0%, #4F46E5 100%);
   color: white;
-  box-shadow: 0 4px 14px rgba(213, 10, 10, 0.4);
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.4);
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(213, 10, 10, 0.5);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
 }
 
 .btn-primary:active {
@@ -233,6 +249,17 @@ body {
 
 .input-field::placeholder {
   color: rgba(255, 255, 255, 0.4);
+}
+
+select.input-field {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.5rem;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.75rem center / 1rem rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+select.input-field:focus {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.75rem center / 1rem rgba(255, 255, 255, 0.08);
 }
 
 /* Week selector */
@@ -509,6 +536,12 @@ body {
   @apply fixed inset-0 z-50 flex items-center justify-center p-4;
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body:has(.modal-overlay) {
+  overflow: hidden;
 }
 
 .modal-content {
@@ -540,4 +573,137 @@ body {
   .teams-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LIGHT MODE OVERRIDES
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Scrollbar — dark-on-light */
+.light ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+}
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Glass card — frosted white */
+.light .glass-card {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.light .glass-card-dark {
+  background: rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Team card */
+.light .team-card {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.light .team-card:hover:not(.team-card-disabled) {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.light .team-card-selected {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+.light .team-card-locked {
+  background: rgba(239, 68, 68, 0.05);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+/* Secondary button */
+.light .btn-secondary {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: rgb(var(--color-text-primary));
+}
+.light .btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Input field */
+.light .input-field {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: rgb(var(--color-text-primary));
+}
+.light .input-field:focus {
+  background: white;
+  border-color: #013369;
+  box-shadow: 0 0 0 3px rgba(1, 51, 105, 0.15);
+}
+.light .input-field::placeholder {
+  color: rgba(0, 0, 0, 0.35);
+}
+
+.light select.input-field {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(0,0,0,0.4)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.75rem center / 1rem rgba(0, 0, 0, 0.03);
+}
+.light select.input-field:focus {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(0,0,0,0.4)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.75rem center / 1rem white;
+}
+
+/* Week tabs */
+.light .week-tab {
+  color: rgba(0, 0, 0, 0.5);
+}
+.light .week-tab:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgb(var(--color-text-primary));
+}
+/* week-tab-active keeps its blue gradient — fine in both modes */
+
+/* Navigation links */
+.light .nav-link {
+  color: rgba(0, 0, 0, 0.6);
+}
+.light .nav-link:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgb(var(--color-text-primary));
+}
+.light .nav-link-active {
+  background: rgba(0, 0, 0, 0.08);
+  color: rgb(var(--color-text-primary));
+}
+
+/* Strike dots */
+.light .strike-dot-empty {
+  background: rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* Modal */
+.light .modal-content {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+}
+.light .modal-overlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Spinner */
+.light .spinner {
+  border-color: rgba(0, 0, 0, 0.1);
+  border-top-color: rgb(var(--color-text-primary));
+}
+
+/* Shimmer */
+.light .shimmer {
+  background: linear-gradient(90deg, rgba(0,0,0,0.03) 25%, rgba(0,0,0,0.06) 50%, rgba(0,0,0,0.03) 75%);
+  background-size: 200% 100%;
 }

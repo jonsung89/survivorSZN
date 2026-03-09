@@ -14,6 +14,7 @@ export default {
         'surface': 'rgb(var(--color-surface) / <alpha-value>)',
         'elevated': 'rgb(var(--color-elevated) / <alpha-value>)',
         'inset': 'rgb(var(--color-inset) / <alpha-value>)',
+        'fg': 'rgb(var(--color-fg) / <alpha-value>)',
 
         /* Brand / sport colors */
         'nfl-blue': '#013369',

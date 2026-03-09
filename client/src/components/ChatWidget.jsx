@@ -276,26 +276,28 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     }
   }, [leagueId]);
 
-  // Auto-scroll to bottom on new messages
+  // Track message count to distinguish new messages from reactions/edits
+  const prevMessageCountRef = useRef(0);
+
+  // Auto-scroll to bottom on new messages (not on reactions/edits)
   useEffect(() => {
     if (messagesEndRef.current && messages.length > 0) {
+      const isNewMessage = messages.length > prevMessageCountRef.current;
+      prevMessageCountRef.current = messages.length;
+
       if (initialLoadRef.current) {
         // Initial load: wait for images to render, then scroll instantly
         initialLoadRef.current = false;
-        // Multiple attempts to ensure images have loaded
         const scrollToBottom = () => {
           if (messagesEndRef.current) {
             messagesEndRef.current.scrollIntoView({ behavior: 'instant' });
           }
         };
-        // Immediate scroll
         scrollToBottom();
-        // Scroll again after short delay for images starting to load
         setTimeout(scrollToBottom, 100);
-        // Scroll again after longer delay for slower images/GIFs
         setTimeout(scrollToBottom, 500);
-      } else {
-        // Subsequent messages: smooth scroll
+      } else if (isNewMessage) {
+        // Only smooth scroll for genuinely new messages
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
     }
@@ -925,11 +927,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     return (
       <div className="absolute inset-0 bg-canvas z-10 flex flex-col">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 bg-elevated border-b border-white/10">
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg">
-            <ChevronLeft className="w-5 h-5 text-white/60" />
+        <div className="flex items-center gap-3 px-4 py-3 bg-elevated border-b border-fg/10">
+          <button onClick={onClose} className="p-1 hover:bg-fg/10 rounded-lg">
+            <ChevronLeft className="w-5 h-5 text-fg/60" />
           </button>
-          <span className="font-semibold text-white">Profile</span>
+          <span className="font-semibold text-fg">Profile</span>
         </div>
 
         {/* Profile Content */}
@@ -945,48 +947,48 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 showOnlineRing={true}
               />
             </div>
-            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <h3 className="text-xl font-bold text-fg flex items-center gap-2">
               {profile.displayName}
               {isCommissioner && (
                 <Crown className="w-5 h-5 text-yellow-500" />
               )}
             </h3>
             <div className="flex items-center gap-2 mt-1">
-              <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-white/30'}`} />
-              <span className="text-sm text-white/50">{isOnline ? 'Online' : 'Offline'}</span>
+              <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-fg/30'}`} />
+              <span className="text-sm text-fg/50">{isOnline ? 'Online' : 'Offline'}</span>
             </div>
           </div>
 
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-white/5 rounded-xl p-3 text-center flex flex-col justify-center">
-              <p className="text-2xl font-bold text-white h-8 flex items-center justify-center">{wins}</p>
-              <p className="text-xs text-white/50">Wins</p>
+            <div className="bg-fg/5 rounded-xl p-3 text-center flex flex-col justify-center">
+              <p className="text-2xl font-bold text-fg h-8 flex items-center justify-center">{wins}</p>
+              <p className="text-xs text-fg/50">Wins</p>
             </div>
-            <div className="bg-white/5 rounded-xl p-3 text-center flex flex-col justify-center">
-              <p className="text-2xl font-bold text-white h-8 flex items-center justify-center">{losses}</p>
-              <p className="text-xs text-white/50">Losses</p>
+            <div className="bg-fg/5 rounded-xl p-3 text-center flex flex-col justify-center">
+              <p className="text-2xl font-bold text-fg h-8 flex items-center justify-center">{losses}</p>
+              <p className="text-xs text-fg/50">Losses</p>
             </div>
-            <div className="bg-white/5 rounded-xl p-3 text-center flex flex-col justify-center">
+            <div className="bg-fg/5 rounded-xl p-3 text-center flex flex-col justify-center">
               <div className="flex items-center justify-center gap-1 h-8">
                 {Array.from({ length: maxStrikes }).map((_, i) => (
                   <span
                     key={i}
-                    className={`w-3 h-3 rounded-full ${i < strikes ? 'bg-red-500' : 'bg-white/20'}`}
+                    className={`w-3 h-3 rounded-full ${i < strikes ? 'bg-red-500' : 'bg-fg/20'}`}
                   />
                 ))}
               </div>
-              <p className="text-xs text-white/50 mt-1">Strikes</p>
+              <p className="text-xs text-fg/50 mt-1">Strikes</p>
             </div>
           </div>
 
           {/* Status */}
-          <div className="bg-white/5 rounded-xl p-4 mb-6">
-            <p className="text-sm text-white/50 mb-2">Status</p>
+          <div className="bg-fg/5 rounded-xl p-4 mb-6">
+            <p className="text-sm text-fg/50 mb-2">Status</p>
             <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
               status === 'active' ? 'bg-emerald-500/20 text-emerald-400' :
               status === 'eliminated' ? 'bg-red-500/20 text-red-400' :
-              'bg-white/10 text-white/60'
+              'bg-fg/10 text-fg/60'
             }`}>
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </span>
@@ -995,24 +997,24 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           {/* Recent Picks */}
           {picks.length > 0 && (
             <div>
-              <p className="text-sm text-white/50 mb-3">Recent Picks</p>
+              <p className="text-sm text-fg/50 mb-3">Recent Picks</p>
               <div className="space-y-2">
                 {picks.slice(-5).reverse().map((pick, idx) => {
                   const team = NFL_TEAMS[pick.teamId];
                   return (
-                    <div key={idx} className="flex items-center gap-3 bg-white/5 rounded-lg p-2">
+                    <div key={idx} className="flex items-center gap-3 bg-fg/5 rounded-lg p-2">
                       {team?.logo && (
                         <img src={team.logo} alt={team.name} className="w-8 h-8" />
                       )}
                       <div className="flex-1">
-                        <p className="text-sm text-white">{team?.name || pick.teamId}</p>
-                        <p className="text-xs text-white/50">Week {pick.week}</p>
+                        <p className="text-sm text-fg">{team?.name || pick.teamId}</p>
+                        <p className="text-xs text-fg/50">Week {pick.week}</p>
                       </div>
                       {pick.result && (
                         <span className={`text-xs font-medium px-2 py-1 rounded ${
                           pick.result === 'win' ? 'bg-emerald-500/20 text-emerald-400' :
                           pick.result === 'loss' ? 'bg-red-500/20 text-red-400' :
-                          'bg-white/10 text-white/50'
+                          'bg-fg/10 text-fg/50'
                         }`}>
                           {pick.result.toUpperCase()}
                         </span>
@@ -1032,11 +1034,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const renderMessages = () => (
     <>
       {loading && messages.length === 0 && (
-        <div className="text-center text-white/40 py-8">Loading...</div>
+        <div className="text-center text-fg/40 py-8">Loading...</div>
       )}
 
       {!loading && messages.length === 0 && (
-        <div className="text-center text-white/40 py-8">
+        <div className="text-center text-fg/40 py-8">
           <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p>No messages yet</p>
           <p className="text-sm">Start the conversation!</p>
@@ -1047,7 +1049,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
         <div key={date}>
           {/* Date separator */}
           <div className="flex items-center justify-center my-4">
-            <span className="px-3 py-1 bg-white/5 rounded-full text-xs text-white/40">
+            <span className="px-3 py-1 bg-fg/5 rounded-full text-xs text-fg/50">
               {date}
             </span>
           </div>
@@ -1091,8 +1093,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full pl-2 flex items-center"
                     style={{ opacity: messageSwipeOffset / 80 }}
                   >
-                    <div className={`p-2 rounded-full ${messageSwipeOffset > 50 ? 'bg-nfl-blue' : 'bg-white/10'}`}>
-                      <CornerUpLeft className="w-4 h-4 text-white" />
+                    <div className={`p-2 rounded-full ${messageSwipeOffset > 50 ? 'bg-nfl-blue' : 'bg-fg/10'}`}>
+                      <CornerUpLeft className="w-4 h-4 text-fg" />
                     </div>
                   </div>
                 )}
@@ -1109,25 +1111,25 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
                 <div className="flex-1 min-w-0">
                   {showName && (
-                    <p className="text-xs mb-1 ml-1 flex items-center gap-2">
-                      <span className={`font-medium ${isOwn ? 'text-emerald-400' : 'text-white/70'}`}>
+                    <p className="text-sm mb-1 ml-1 flex items-center gap-2">
+                      <span className={`font-medium ${isOwn ? 'text-emerald-600' : 'text-fg/70'}`}>
                         {displayName}
-                        {isOwn && <span className="text-white/40 font-normal ml-1">(you)</span>}
+                        {isOwn && <span className="text-fg/40 font-normal ml-1">(you)</span>}
                       </span>
                       {isMessageFromCommissioner && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 rounded text-yellow-500 text-[10px] font-medium">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 rounded text-yellow-600 text-[10px] font-medium">
                           <Crown className="w-3 h-3" />
                           Commish
                         </span>
                       )}
-                      <span className="text-white/30">{formatTime(message.created_at || message.createdAt)}</span>
+                      <span className="text-fg/50 text-xs">{formatTime(message.created_at || message.createdAt)}</span>
                     </p>
                   )}
                   
                   {/* Reply context */}
                   {message.replyTo && (
-                    <div className="ml-1 mb-1 pl-2 border-l-2 border-white/20 text-xs text-white/40">
-                      <span className="font-medium text-white/50">{message.replyTo.displayName}</span>
+                    <div className="ml-1 mb-1 pl-2 border-l-2 border-fg/20 text-xs text-fg/40">
+                      <span className="font-medium text-fg/50">{message.replyTo.displayName}</span>
                       <p className="truncate italic">
                         {/* Check if the original message was deleted by finding it in messages */}
                         {messages.find(m => m.id === message.replyTo.id)?.deletedAt
@@ -1140,8 +1142,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
                   {/* Deleted message placeholder */}
                   {message.deletedAt ? (
-                    <div className="inline-block px-3 py-2 rounded-2xl rounded-tl-md bg-white/5 border border-white/10">
-                      <p className="text-sm text-white/40 italic">
+                    <div className="inline-block px-3 py-2 rounded-2xl rounded-tl-md bg-fg/5 border border-fg/10">
+                      <p className="text-sm text-fg/40 italic">
                         {message.deletedBy === 'commissioner' 
                           ? '🛡️ Message removed by commissioner'
                           : 'This message was deleted'
@@ -1168,10 +1170,10 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       {/* Text content with bubble - only show if there's actual text (not just [GIF]) */}
                       {message.message && message.message !== '[GIF]' && (
                         <div
-                          className={`inline-block px-3 py-2 rounded-2xl rounded-tl-md cursor-pointer active:scale-[0.98] transition-all hover:ring-1 hover:ring-white/20 ${
+                          className={`inline-block px-3 py-2 rounded-2xl rounded-tl-md cursor-pointer active:scale-[0.98] transition-all hover:ring-1 hover:ring-fg/20 ${
                             isOwn
-                              ? 'bg-emerald-600/20 border border-emerald-500/30 text-white hover:bg-emerald-600/30'
-                              : 'bg-white/10 text-white hover:bg-white/15'
+                              ? 'bg-emerald-600/20 border border-emerald-500/30 text-fg hover:bg-emerald-600/30'
+                              : 'bg-fg/10 text-fg hover:bg-fg/15'
                           }`}
                           onClick={(e) => handleMessageTap(e, message)}
                         >
@@ -1201,19 +1203,19 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                           onMouseUp={handleReactionLongPressEnd}
                           onMouseLeave={handleReactionLongPressEnd}
                           className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all active:scale-95 ${
-                            users.includes(user?.id) 
-                              ? 'bg-nfl-blue/30 border border-nfl-blue/50' 
-                              : 'bg-white/10 hover:bg-white/20 border border-transparent'
+                            users.includes(user?.id)
+                              ? 'bg-nfl-blue/30 border border-nfl-blue/50'
+                              : 'bg-fg/10 hover:bg-fg/20 border border-transparent'
                           }`}
                         >
-                          <span>{emoji}</span>
-                          <span className="text-white/60 min-w-[1ch]">{users.length}</span>
+                          <span className="text-base leading-none">{emoji}</span>
+                          <span className="text-fg/60 min-w-[1ch]">{users.length}</span>
                         </button>
                       ))}
                       {/* Add reaction button */}
                       <button
                         onClick={(e) => handleMessageTap(e, message)}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 text-white/40 text-sm transition-colors"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-fg/5 hover:bg-fg/10 text-fg/40 text-sm transition-colors"
                       >
                         +
                       </button>
@@ -1228,11 +1230,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
       {/* Typing indicator */}
       {currentTyping.length > 0 && (
-        <div className="flex items-center gap-2 text-white/50 text-sm pl-10 mt-4">
+        <div className="flex items-center gap-2 text-fg/50 text-sm pl-10 mt-4">
           <div className="flex gap-1">
-            <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <span className="w-2 h-2 bg-fg/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-2 h-2 bg-fg/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-2 h-2 bg-fg/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
           </div>
           <span>
             {currentTyping.length === 1 
@@ -1253,16 +1255,16 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
       <div className="hidden lg:block">
         {/* Collapsed state - slim bar */}
         <div 
-          className={`fixed top-16 right-0 bottom-0 w-14 bg-canvas border-l border-white/10 flex flex-col items-center py-4 transition-all duration-300 z-40 ${
+          className={`fixed top-16 right-0 bottom-0 w-14 bg-canvas border-l border-fg/10 flex flex-col items-center py-4 transition-all duration-300 z-40 ${
             isDesktopCollapsed ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
           <button
             onClick={() => setIsDesktopCollapsed(false)}
-            className="relative p-3 rounded-xl bg-elevated hover:bg-white/10 transition-colors group"
+            className="relative p-3 rounded-xl bg-elevated hover:bg-fg/10 transition-colors group"
             title="Open Chat"
           >
-            <MessageCircle className="w-6 h-6 text-white/70 group-hover:text-white transition-colors" />
+            <MessageCircle className="w-6 h-6 text-fg/70 group-hover:text-fg transition-colors" />
             {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                 {unreadCount > 99 ? '99+' : unreadCount}
@@ -1273,7 +1275,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           {/* Online indicator */}
           <div className="mt-3 flex flex-col items-center gap-1">
             <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-            <span className="text-[10px] text-white/40">{currentOnline.length}</span>
+            <span className="text-[10px] text-fg/40">{currentOnline.length}</span>
           </div>
           
           {/* Typing indicator */}
@@ -1290,7 +1292,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
         {/* Expanded state - full chat */}
         <div 
-          className={`fixed top-16 right-0 bottom-0 w-96 xl:w-[420px] bg-canvas border-l border-white/10 flex flex-col transition-all duration-300 z-40 ${
+          className={`fixed top-16 right-0 bottom-0 w-96 xl:w-[420px] bg-canvas border-l border-fg/10 flex flex-col transition-all duration-300 z-40 ${
             isDesktopCollapsed ? 'translate-x-full' : 'translate-x-0'
           }`}
         >
@@ -1300,9 +1302,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           )}
 
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-elevated border-b border-white/10">
+          <div className="flex items-center justify-between px-4 py-3 bg-elevated border-b border-fg/10">
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-white">League Chat</h3>
+              <h3 className="font-semibold text-fg">League Chat</h3>
               {currentTyping.length > 0 ? (
                 <p className="text-xs text-nfl-blue flex items-center gap-1.5">
                   <span className="flex gap-0.5">
@@ -1318,7 +1320,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   </span>
                 </p>
               ) : (
-                <p className="text-xs text-white/50 flex items-center gap-1">
+                <p className="text-xs text-fg/50 flex items-center gap-1">
                   <Users className="w-3 h-3" />
                   {currentOnline.length} online
                   {connected ? '' : ' • Reconnecting...'}
@@ -1327,10 +1329,10 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             </div>
             <button
               onClick={() => setIsDesktopCollapsed(true)}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              className="p-2 hover:bg-fg/10 rounded-lg transition-colors"
               title="Collapse Chat"
             >
-              <PanelRightClose className="w-5 h-5 text-white/60" />
+              <PanelRightClose className="w-5 h-5 text-fg/60" />
             </button>
           </div>
 
@@ -1344,35 +1346,35 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           </div>
 
           {/* Input */}
-          <div className="border-t border-white/10 bg-elevated/50 relative">
+          <div className="border-t border-fg/10 bg-elevated/50 relative">
             {/* Reply preview */}
             {replyingTo && (
               <div className="px-3 pt-2 flex items-center gap-2">
-                <div className="flex-1 min-w-0 pl-2 border-l-2 border-emerald-500 bg-white/5 rounded-r py-1 pr-2">
+                <div className="flex-1 min-w-0 pl-2 border-l-2 border-emerald-500 bg-fg/5 rounded-r py-1 pr-2">
                   <p className="text-xs text-emerald-400 font-medium truncate">
                     Replying to {replyingTo.display_name || replyingTo.displayName}
                   </p>
-                  <p className="text-xs text-white/50 truncate">{replyingTo.message}</p>
+                  <p className="text-xs text-fg/50 truncate">{replyingTo.message}</p>
                 </div>
-                <button onClick={() => setReplyingTo(null)} className="flex-shrink-0 p-1 hover:bg-white/10 rounded">
-                  <X className="w-3 h-3 text-white/40" />
+                <button onClick={() => setReplyingTo(null)} className="flex-shrink-0 p-1 hover:bg-fg/10 rounded">
+                  <X className="w-3 h-3 text-fg/40" />
                 </button>
               </div>
             )}
             
             {/* Mentions dropdown */}
             {showMentions && filteredMembers.length > 0 && (
-              <div className="absolute bottom-full left-3 right-3 mb-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl z-10">
+              <div className="absolute bottom-full left-3 right-3 mb-2 bg-elevated border border-fg/10 rounded-xl overflow-hidden shadow-xl z-10">
                 {filteredMembers.map((member, idx) => (
                   <button
                     key={member.userId || member.user_id}
                     onClick={() => insertMention(member)}
                     className={`w-full px-3 py-2 flex items-center gap-2 text-left text-sm transition-colors ${
-                      idx === mentionIndex ? 'bg-emerald-600/30 border-l-2 border-emerald-500' : 'hover:bg-white/5'
+                      idx === mentionIndex ? 'bg-emerald-600/30 border-l-2 border-emerald-500' : 'hover:bg-fg/5'
                     }`}
                   >
                     <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} size="xs" />
-                    <span className="text-white">{member.displayName || member.display_name}</span>
+                    <span className="text-fg">{member.displayName || member.display_name}</span>
                   </button>
                 ))}
               </div>
@@ -1380,15 +1382,15 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             
             {/* Emoji picker */}
             {showEmojiPicker && (
-              <div className="absolute bottom-full left-3 mb-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
+              <div className="absolute bottom-full left-3 mb-2 bg-elevated border border-fg/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
                 {/* Category tabs */}
-                <div className="flex border-b border-white/10 overflow-x-auto hide-scrollbar">
+                <div className="flex border-b border-fg/10 overflow-x-auto hide-scrollbar">
                   {Object.keys(EMOJI_CATEGORIES).map(cat => (
                     <button
                       key={cat}
                       onClick={() => setEmojiCategory(cat)}
                       className={`px-3 py-2 text-xs capitalize whitespace-nowrap transition-colors ${
-                        emojiCategory === cat ? 'text-nfl-blue border-b-2 border-nfl-blue' : 'text-white/50 hover:text-white/70'
+                        emojiCategory === cat ? 'text-nfl-blue border-b-2 border-nfl-blue' : 'text-fg/50 hover:text-fg/70'
                       }`}
                     >
                       {cat}
@@ -1402,7 +1404,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       <button
                         key={idx}
                         onClick={() => insertEmoji(emoji)}
-                        className="p-1.5 text-xl hover:bg-white/10 rounded transition-colors"
+                        className="p-1.5 text-xl hover:bg-fg/10 rounded transition-colors"
                       >
                         {emoji}
                       </button>
@@ -1414,26 +1416,26 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             
             {/* GIF picker */}
             {showGifPicker && (
-              <div className="absolute bottom-full left-3 mb-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
+              <div className="absolute bottom-full left-3 mb-2 bg-elevated border border-fg/10 rounded-xl overflow-hidden shadow-xl z-10 w-80">
                 {/* Search */}
-                <div className="p-2 border-b border-white/10">
+                <div className="p-2 border-b border-fg/10">
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg/40" />
                     <input
                       type="text"
                       value={gifSearchQuery}
                       onChange={(e) => handleGifSearch(e.target.value)}
                       placeholder="Search GIFs..."
-                      className="w-full pl-9 pr-3 py-2 bg-white/10 border border-white/10 rounded-lg text-sm text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
+                      className="w-full pl-9 pr-3 py-2 bg-fg/10 border border-fg/10 rounded-lg text-sm text-fg placeholder-fg/40 focus:outline-none focus:border-nfl-blue/50"
                     />
                   </div>
                 </div>
                 {/* GIF grid */}
                 <div className="p-2 h-56 overflow-y-auto">
                   {gifsLoading ? (
-                    <div className="text-center text-white/40 py-8">Loading...</div>
+                    <div className="text-center text-fg/40 py-8">Loading...</div>
                   ) : gifs.length === 0 ? (
-                    <div className="text-center text-white/40 py-8">No GIFs found</div>
+                    <div className="text-center text-fg/40 py-8">No GIFs found</div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
                       {gifs.map((gif) => (
@@ -1458,8 +1460,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     </div>
                   )}
                 </div>
-                <div className="px-2 py-1 border-t border-white/10 text-center">
-                  <span className="text-[10px] text-white/30">Powered by Tenor</span>
+                <div className="px-2 py-1 border-t border-fg/10 text-center">
+                  <span className="text-[10px] text-fg/40">Powered by Tenor</span>
                 </div>
               </div>
             )}
@@ -1472,7 +1474,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   setShowEmojiPicker(!showEmojiPicker);
                   setShowGifPicker(false);
                 }}
-                className={`p-2.5 rounded-xl transition-colors flex items-center justify-center ${showEmojiPicker ? 'bg-nfl-blue text-white' : 'text-white/50 hover:bg-white/10'}`}
+                className={`p-2.5 rounded-xl transition-colors flex items-center justify-center ${showEmojiPicker ? 'bg-nfl-blue text-white' : 'text-fg/50 hover:bg-fg/10'}`}
               >
                 <Smile className="w-5 h-5" />
               </button>
@@ -1482,7 +1484,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   setShowGifPicker(!showGifPicker);
                   setShowEmojiPicker(false);
                 }}
-                className={`p-2.5 rounded-xl transition-colors flex items-center justify-center ${showGifPicker ? 'bg-nfl-blue text-white' : 'text-white/50 hover:bg-white/10'}`}
+                className={`p-2.5 rounded-xl transition-colors flex items-center justify-center ${showGifPicker ? 'bg-nfl-blue text-white' : 'text-fg/50 hover:bg-fg/10'}`}
               >
                 <span className="text-xs font-bold">GIF</span>
               </button>
@@ -1531,7 +1533,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 onFocus={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
                 placeholder={replyingTo ? "Type your reply..." : "Type a message... Use @ to mention"}
                 rows={1}
-                className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50 text-sm resize-none overflow-hidden"
+                className="flex-1 bg-fg/10 border border-fg/10 rounded-xl px-4 py-2 text-fg placeholder-fg/40 focus:outline-none focus:border-nfl-blue/50 text-sm resize-none overflow-hidden"
                 style={{ lineHeight: '1.5rem', maxHeight: '120px' }}
               />
               <button
@@ -1561,12 +1563,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           )}
           
           {/* Safe area background */}
-          <div className={`bg-canvas border-t transition-colors duration-300 ${
-            hasNewMessage ? 'border-nfl-blue/50' : 'border-white/10'
+          <div className={`bg-elevated border-t shadow-[0_-2px_10px_rgba(0,0,0,0.06)] transition-colors duration-300 ${
+            hasNewMessage ? 'border-nfl-blue/50' : 'border-fg/15'
           }`}>
             <button
               onClick={openSheet}
-              className="w-full px-4 py-3 flex items-center gap-3 active:bg-white/5 transition-colors"
+              className="w-full px-4 py-3 flex items-center gap-3 active:bg-fg/5 transition-colors"
             >
               {/* Left: Avatar or Icon */}
               <div className="relative flex-shrink-0">
@@ -1593,7 +1595,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               <div className="flex-1 min-w-0 text-left">
                 {currentTyping.length > 0 ? (
                   <>
-                    <p className="text-white font-medium text-sm">League Chat</p>
+                    <p className="text-fg font-medium text-sm">League Chat</p>
                     <p className="text-nfl-blue text-sm flex items-center gap-1.5">
                       <span className="flex gap-0.5">
                         <span className="w-1.5 h-1.5 bg-nfl-blue rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -1610,13 +1612,13 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   </>
                 ) : messages.length > 0 ? (
                   <>
-                    <p className="text-white font-medium text-sm truncate">
+                    <p className="text-fg font-medium text-sm truncate">
                       {messages[messages.length - 1]?.display_name || messages[messages.length - 1]?.displayName || 'User'}
                       {(messages[messages.length - 1]?.user_id || messages[messages.length - 1]?.userId) === commissionerId && (
                         <span className="ml-1.5 text-yellow-400 text-xs">👑</span>
                       )}
                     </p>
-                    <p className="text-white/50 text-sm truncate">
+                    <p className="text-fg/50 text-sm truncate">
                       {messages[messages.length - 1]?.gif 
                         ? 'Sent a GIF 🎞️' 
                         : messages[messages.length - 1]?.message === '[GIF]'
@@ -1627,8 +1629,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   </>
                 ) : (
                   <>
-                    <p className="text-white font-medium text-sm">League Chat</p>
-                    <p className="text-white/40 text-sm">Tap to start chatting</p>
+                    <p className="text-fg font-medium text-sm">League Chat</p>
+                    <p className="text-fg/40 text-sm">Tap to start chatting</p>
                   </>
                 )}
               </div>
@@ -1636,11 +1638,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               {/* Right: Time + Arrow */}
               <div className="flex-shrink-0 flex items-center gap-2">
                 {messages.length > 0 && (
-                  <span className="text-white/30 text-xs">
+                  <span className="text-fg/50 text-xs">
                     {formatTime(messages[messages.length - 1]?.created_at || messages[messages.length - 1]?.createdAt)}
                   </span>
                 )}
-                <ChevronUp className="w-5 h-5 text-white/40" />
+                <ChevronUp className="w-5 h-5 text-fg/50" />
               </div>
             </button>
             
@@ -1648,7 +1650,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             {currentOnline.length > 0 && (
               <div className="px-4 pb-2 flex items-center gap-1.5">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-white/40 text-xs">
+                <span className="text-fg/40 text-xs">
                   {currentOnline.length} online
                 </span>
               </div>
@@ -1703,13 +1705,13 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               >
                 {/* Handle bar */}
                 <div className="flex justify-center pt-3 pb-2">
-                  <div className="w-12 h-1.5 bg-white/30 rounded-full" />
+                  <div className="w-12 h-1.5 bg-fg/30 rounded-full" />
                 </div>
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-fg/10">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white">League Chat</h3>
+                    <h3 className="font-semibold text-fg">League Chat</h3>
                     {currentTyping.length > 0 ? (
                       <p className="text-xs text-nfl-blue flex items-center gap-1.5">
                         <span className="flex gap-0.5">
@@ -1725,7 +1727,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         </span>
                       </p>
                     ) : (
-                      <p className="text-xs text-white/50 flex items-center gap-1">
+                      <p className="text-xs text-fg/50 flex items-center gap-1">
                         <Users className="w-3 h-3" />
                         {currentOnline.length} online
                         {connected ? '' : ' • Reconnecting...'}
@@ -1736,21 +1738,21 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     {/* Size toggle button */}
                     <button
                       onClick={() => setSheetSize(sheetSize === 'full' ? 'half' : 'full')}
-                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                      className="p-2 hover:bg-fg/10 rounded-full transition-colors"
                       title={sheetSize === 'full' ? 'Minimize' : 'Maximize'}
                     >
                       {sheetSize === 'full' ? (
-                        <Minimize2 className="w-5 h-5 text-white/60" />
+                        <Minimize2 className="w-5 h-5 text-fg/60" />
                       ) : (
-                        <Maximize2 className="w-5 h-5 text-white/60" />
+                        <Maximize2 className="w-5 h-5 text-fg/60" />
                       )}
                     </button>
                     {/* Close button */}
                     <button
                       onClick={closeSheet}
-                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                      className="p-2 hover:bg-fg/10 rounded-full transition-colors"
                     >
-                      <X className="w-5 h-5 text-white/60" />
+                      <X className="w-5 h-5 text-fg/60" />
                     </button>
                   </div>
                 </div>
@@ -1767,35 +1769,35 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               </div>
 
               {/* Input area - always shown, simplified in half mode */}
-              <div className="border-t border-white/10 bg-elevated/50">
+              <div className="border-t border-fg/10 bg-elevated/50">
                 {/* Reply preview - only in full mode */}
                 {sheetSize === 'full' && replyingTo && (
                   <div className="px-3 pt-2 flex items-center gap-2">
-                    <div className="flex-1 min-w-0 pl-3 border-l-2 border-emerald-500 bg-white/5 rounded-r py-1.5 pr-2">
+                    <div className="flex-1 min-w-0 pl-3 border-l-2 border-emerald-500 bg-fg/5 rounded-r py-1.5 pr-2">
                       <p className="text-xs text-emerald-400 font-medium truncate">
                         Replying to {replyingTo.display_name || replyingTo.displayName}
                       </p>
-                      <p className="text-xs text-white/50 truncate">{replyingTo.message}</p>
+                      <p className="text-xs text-fg/50 truncate">{replyingTo.message}</p>
                     </div>
-                    <button onClick={() => setReplyingTo(null)} className="flex-shrink-0 p-1 hover:bg-white/10 rounded">
-                      <X className="w-4 h-4 text-white/40" />
+                    <button onClick={() => setReplyingTo(null)} className="flex-shrink-0 p-1 hover:bg-fg/10 rounded">
+                      <X className="w-4 h-4 text-fg/40" />
                     </button>
                   </div>
                 )}
                 
                 {/* Mentions dropdown - only in full mode */}
                 {sheetSize === 'full' && showMentions && filteredMembers.length > 0 && (
-                  <div className="mx-3 mt-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                  <div className="mx-3 mt-2 bg-elevated border border-fg/10 rounded-xl overflow-hidden shadow-xl">
                     {filteredMembers.map((member, idx) => (
                       <button
                         key={member.userId || member.user_id}
                         onClick={() => insertMention(member)}
                         className={`w-full px-3 py-2 flex items-center gap-2 text-left transition-colors ${
-                          idx === mentionIndex ? 'bg-emerald-600/30 border-l-2 border-emerald-500' : 'hover:bg-white/5'
+                          idx === mentionIndex ? 'bg-emerald-600/30 border-l-2 border-emerald-500' : 'hover:bg-fg/5'
                         }`}
                       >
                         <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} size="xs" />
-                        <span className="text-sm text-white">{member.displayName || member.display_name}</span>
+                        <span className="text-sm text-fg">{member.displayName || member.display_name}</span>
                       </button>
                     ))}
                   </div>
@@ -1803,15 +1805,15 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 
                 {/* Emoji picker - only in full mode */}
                 {sheetSize === 'full' && showEmojiPicker && (
-                  <div className="mx-3 mt-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                  <div className="mx-3 mt-2 bg-elevated border border-fg/10 rounded-xl overflow-hidden shadow-xl">
                     {/* Category tabs */}
-                    <div className="flex border-b border-white/10 overflow-x-auto hide-scrollbar">
+                    <div className="flex border-b border-fg/10 overflow-x-auto hide-scrollbar">
                       {Object.keys(EMOJI_CATEGORIES).map(cat => (
                         <button
                           key={cat}
                           onClick={() => setEmojiCategory(cat)}
                           className={`px-3 py-2 text-xs capitalize whitespace-nowrap transition-colors ${
-                            emojiCategory === cat ? 'text-nfl-blue border-b-2 border-nfl-blue' : 'text-white/50'
+                            emojiCategory === cat ? 'text-nfl-blue border-b-2 border-nfl-blue' : 'text-fg/50'
                           }`}
                         >
                           {cat}
@@ -1825,7 +1827,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                           <button
                             key={idx}
                             onClick={() => insertEmoji(emoji)}
-                            className="p-1.5 text-xl hover:bg-white/10 rounded transition-colors"
+                            className="p-1.5 text-xl hover:bg-fg/10 rounded transition-colors"
                           >
                             {emoji}
                           </button>
@@ -1837,17 +1839,17 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 
                 {/* GIF picker - only in full mode */}
                 {sheetSize === 'full' && showGifPicker && (
-                  <div className="mx-3 mt-2 bg-elevated border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                  <div className="mx-3 mt-2 bg-elevated border border-fg/10 rounded-xl overflow-hidden shadow-xl">
                     {/* Search */}
-                    <div className="p-2 border-b border-white/10">
+                    <div className="p-2 border-b border-fg/10">
                       <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg/40" />
                         <input
                           type="text"
                           value={gifSearchQuery}
                           onChange={(e) => handleGifSearch(e.target.value)}
                           placeholder="Search GIFs..."
-                          className="w-full pl-9 pr-3 py-2 bg-white/10 border border-white/10 rounded-lg text-[16px] text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50"
+                          className="w-full pl-9 pr-3 py-2 bg-fg/10 border border-fg/10 rounded-lg text-[16px] text-fg placeholder-fg/40 focus:outline-none focus:border-nfl-blue/50"
                           style={{ fontSize: '16px' }}
                         />
                       </div>
@@ -1855,9 +1857,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     {/* GIF grid */}
                     <div className="p-2 h-56 overflow-y-auto">
                       {gifsLoading ? (
-                        <div className="text-center text-white/40 py-8">Loading...</div>
+                        <div className="text-center text-fg/40 py-8">Loading...</div>
                       ) : gifs.length === 0 ? (
-                        <div className="text-center text-white/40 py-8">No GIFs found</div>
+                        <div className="text-center text-fg/40 py-8">No GIFs found</div>
                       ) : (
                         <div className="grid grid-cols-2 gap-2">
                           {gifs.map((gif) => (
@@ -1882,8 +1884,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         </div>
                       )}
                     </div>
-                    <div className="px-2 py-1 border-t border-white/10 text-center">
-                      <span className="text-[10px] text-white/30">Powered by Tenor</span>
+                    <div className="px-2 py-1 border-t border-fg/10 text-center">
+                      <span className="text-[10px] text-fg/40">Powered by Tenor</span>
                     </div>
                   </div>
                 )}
@@ -1898,7 +1900,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         setShowEmojiPicker(true);
                         setShowGifPicker(false);
                       }}
-                      className="p-2 rounded-xl bg-white/10 text-white/60 hover:bg-white/20 transition-colors"
+                      className="p-2 rounded-xl bg-fg/10 text-fg/60 hover:bg-fg/20 transition-colors"
                     >
                       <Smile className="w-5 h-5" />
                     </button>
@@ -1912,7 +1914,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         setShowGifPicker(true);
                         setShowEmojiPicker(false);
                       }}
-                      className="p-2 rounded-xl bg-white/10 text-white/60 hover:bg-white/20 transition-colors"
+                      className="p-2 rounded-xl bg-fg/10 text-fg/60 hover:bg-fg/20 transition-colors"
                     >
                       <span className="text-xs font-bold">GIF</span>
                     </button>
@@ -1925,7 +1927,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         setShowEmojiPicker(!showEmojiPicker);
                         setShowGifPicker(false);
                       }}
-                      className={`p-2.5 rounded-xl transition-colors ${showEmojiPicker ? 'bg-nfl-blue text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                      className={`p-2.5 rounded-xl transition-colors ${showEmojiPicker ? 'bg-nfl-blue text-white' : 'bg-fg/10 text-fg/60 hover:bg-fg/20'}`}
                     >
                       <Smile className="w-5 h-5" />
                     </button>
@@ -1938,7 +1940,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         setShowGifPicker(!showGifPicker);
                         setShowEmojiPicker(false);
                       }}
-                      className={`p-2.5 rounded-xl transition-colors ${showGifPicker ? 'bg-nfl-blue text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                      className={`p-2.5 rounded-xl transition-colors ${showGifPicker ? 'bg-nfl-blue text-white' : 'bg-fg/10 text-fg/60 hover:bg-fg/20'}`}
                     >
                       <span className="text-xs font-bold">GIF</span>
                     </button>
@@ -1994,7 +1996,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     }}
                     placeholder={sheetSize === 'half' ? "Type a message..." : (replyingTo ? "Type your reply..." : "Type a message... @ to mention")}
                     rows={1}
-                    className="flex-1 bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue/50 resize-none overflow-hidden"
+                    className="flex-1 bg-fg/10 border border-fg/10 rounded-xl px-3 py-2 text-fg placeholder-fg/40 focus:outline-none focus:border-nfl-blue/50 resize-none overflow-hidden"
                     style={{ fontSize: '16px', lineHeight: '1.5rem', touchAction: 'manipulation', maxHeight: '100px' }}
                   />
                   
@@ -2020,12 +2022,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     onClick={e => e.stopPropagation()}
                   >
                     {/* Quick reactions */}
-                    <div className="flex justify-center gap-2 p-4 border-b border-white/10">
+                    <div className="flex justify-center gap-2 p-4 border-b border-fg/10">
                       {QUICK_REACTIONS.map(emoji => (
                         <button
                           key={emoji}
                           onClick={() => handleReact(selectedMessage, emoji)}
-                          className="p-2 text-2xl hover:bg-white/10 rounded-full transition-colors active:scale-90"
+                          className="p-2 text-2xl hover:bg-fg/10 rounded-full transition-colors active:scale-90"
                         >
                           {emoji}
                         </button>
@@ -2038,9 +2040,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       {!selectedMessage?.deletedAt && (
                         <button
                           onClick={() => handleReply(selectedMessage)}
-                          className="w-full px-4 py-3 flex items-center gap-3 text-white hover:bg-white/5 rounded-xl transition-colors"
+                          className="w-full px-4 py-3 flex items-center gap-3 text-fg hover:bg-fg/5 rounded-xl transition-colors"
                         >
-                          <Reply className="w-5 h-5 text-white/60" />
+                          <Reply className="w-5 h-5 text-fg/60" />
                           <span>Reply</span>
                         </button>
                       )}
@@ -2049,7 +2051,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       {!selectedMessage?.deletedAt && (selectedMessage?.user_id || selectedMessage?.userId) === user?.id && (
                         <button
                           onClick={() => handleDelete(selectedMessage)}
-                          className="w-full px-4 py-3 flex items-center gap-3 text-red-400 hover:bg-white/5 rounded-xl transition-colors"
+                          className="w-full px-4 py-3 flex items-center gap-3 text-red-400 hover:bg-fg/5 rounded-xl transition-colors"
                         >
                           <Trash2 className="w-5 h-5" />
                           <span>Delete</span>
@@ -2062,7 +2064,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                           {user?.id === commissionerId && (
                             <button
                               onClick={() => handleModerate(selectedMessage)}
-                              className="w-full px-4 py-3 flex items-center gap-3 text-yellow-400 hover:bg-white/5 rounded-xl transition-colors"
+                              className="w-full px-4 py-3 flex items-center gap-3 text-yellow-400 hover:bg-fg/5 rounded-xl transition-colors"
                             >
                               <ShieldX className="w-5 h-5" />
                               <span>Remove as Commish</span>
@@ -2070,7 +2072,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                           )}
                           <button
                             onClick={() => handleReport(selectedMessage)}
-                            className="w-full px-4 py-3 flex items-center gap-3 text-red-400 hover:bg-white/5 rounded-xl transition-colors"
+                            className="w-full px-4 py-3 flex items-center gap-3 text-red-400 hover:bg-fg/5 rounded-xl transition-colors"
                           >
                             <AlertCircle className="w-5 h-5" />
                             <span>Report</span>
@@ -2080,10 +2082,10 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     </div>
                     
                     {/* Cancel */}
-                    <div className="p-2 border-t border-white/10">
+                    <div className="p-2 border-t border-fg/10">
                       <button
                         onClick={() => { setShowMessageMenu(false); setSelectedMessage(null); }}
-                        className="w-full px-4 py-3 text-white/60 hover:bg-white/5 rounded-xl transition-colors"
+                        className="w-full px-4 py-3 text-fg/60 hover:bg-fg/5 rounded-xl transition-colors"
                       >
                         Cancel
                       </button>
@@ -2102,21 +2104,21 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     className="bg-elevated rounded-2xl overflow-hidden shadow-xl animate-slide-up mx-4 max-w-xs w-full"
                     onClick={e => e.stopPropagation()}
                   >
-                    <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                    <div className="px-4 py-3 border-b border-fg/10 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">{reactionDetail.emoji}</span>
-                        <span className="text-white font-medium">{reactionDetail.users.length}</span>
+                        <span className="text-fg font-medium">{reactionDetail.users.length}</span>
                       </div>
                       <button 
                         onClick={() => setReactionDetail(null)}
-                        className="p-1 hover:bg-white/10 rounded-full"
+                        className="p-1 hover:bg-fg/10 rounded-full"
                       >
-                        <X className="w-4 h-4 text-white/50" />
+                        <X className="w-4 h-4 text-fg/50" />
                       </button>
                     </div>
                     <div className="p-2 max-h-60 overflow-y-auto">
                       {reactionDetail.users.map((name, idx) => (
-                        <div key={idx} className="px-3 py-2 text-white text-sm">
+                        <div key={idx} className="px-3 py-2 text-fg text-sm">
                           {name}
                         </div>
                       ))}
@@ -2136,7 +2138,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           onClick={() => { setShowMessageMenu(false); setSelectedMessage(null); }}
         >
           <div 
-            className="absolute bg-elevated rounded-xl shadow-2xl border border-white/10 overflow-hidden w-56 animate-scale-in"
+            className="absolute bg-elevated rounded-xl shadow-2xl border border-fg/10 overflow-hidden w-56 animate-scale-in"
             style={{ 
               top: Math.min(menuPosition.y, window.innerHeight - 200),
               left: Math.min(Math.max(menuPosition.x, 16), window.innerWidth - 240),
@@ -2144,12 +2146,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             onClick={e => e.stopPropagation()}
           >
             {/* Quick reactions */}
-            <div className="flex justify-center gap-1 p-3 border-b border-white/10">
+            <div className="flex justify-center gap-1 p-3 border-b border-fg/10">
               {QUICK_REACTIONS.map(emoji => (
                 <button
                   key={emoji}
                   onClick={() => handleReact(selectedMessage, emoji)}
-                  className="p-1.5 text-lg hover:bg-white/10 rounded-full transition-colors active:scale-90"
+                  className="p-1.5 text-lg hover:bg-fg/10 rounded-full transition-colors active:scale-90"
                 >
                   {emoji}
                 </button>
@@ -2162,9 +2164,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               {!selectedMessage?.deletedAt && (
                 <button
                   onClick={() => handleReply(selectedMessage)}
-                  className="w-full px-3 py-2 flex items-center gap-3 text-white text-sm hover:bg-white/5 rounded-lg transition-colors"
+                  className="w-full px-3 py-2 flex items-center gap-3 text-fg text-sm hover:bg-fg/5 rounded-lg transition-colors"
                 >
-                  <Reply className="w-4 h-4 text-white/60" />
+                  <Reply className="w-4 h-4 text-fg/60" />
                   <span>Reply</span>
                 </button>
               )}
@@ -2173,7 +2175,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               {!selectedMessage?.deletedAt && (selectedMessage?.user_id || selectedMessage?.userId) === user?.id && (
                 <button
                   onClick={() => handleDelete(selectedMessage)}
-                  className="w-full px-3 py-2 flex items-center gap-3 text-red-400 text-sm hover:bg-white/5 rounded-lg transition-colors"
+                  className="w-full px-3 py-2 flex items-center gap-3 text-red-400 text-sm hover:bg-fg/5 rounded-lg transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Delete</span>
@@ -2186,7 +2188,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   {user?.id === commissionerId && (
                     <button
                       onClick={() => handleModerate(selectedMessage)}
-                      className="w-full px-3 py-2 flex items-center gap-3 text-yellow-400 text-sm hover:bg-white/5 rounded-lg transition-colors"
+                      className="w-full px-3 py-2 flex items-center gap-3 text-yellow-400 text-sm hover:bg-fg/5 rounded-lg transition-colors"
                     >
                       <ShieldX className="w-4 h-4" />
                       <span>Remove as Commish</span>
@@ -2194,7 +2196,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   )}
                   <button
                     onClick={() => handleReport(selectedMessage)}
-                    className="w-full px-3 py-2 flex items-center gap-3 text-red-400 text-sm hover:bg-white/5 rounded-lg transition-colors"
+                    className="w-full px-3 py-2 flex items-center gap-3 text-red-400 text-sm hover:bg-fg/5 rounded-lg transition-colors"
                   >
                     <AlertCircle className="w-4 h-4" />
                     <span>Report</span>
@@ -2213,24 +2215,24 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           onClick={() => setReactionDetail(null)}
         >
           <div 
-            className="bg-elevated rounded-xl overflow-hidden shadow-xl border border-white/10 max-w-xs w-full mx-4"
+            className="bg-elevated rounded-xl overflow-hidden shadow-xl border border-fg/10 max-w-xs w-full mx-4"
             onClick={e => e.stopPropagation()}
           >
-            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-fg/10 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">{reactionDetail.emoji}</span>
-                <span className="text-white font-medium">{reactionDetail.users.length}</span>
+                <span className="text-fg font-medium">{reactionDetail.users.length}</span>
               </div>
               <button 
                 onClick={() => setReactionDetail(null)}
-                className="p-1 hover:bg-white/10 rounded-full"
+                className="p-1 hover:bg-fg/10 rounded-full"
               >
-                <X className="w-4 h-4 text-white/50" />
+                <X className="w-4 h-4 text-fg/50" />
               </button>
             </div>
             <div className="p-2 max-h-60 overflow-y-auto">
               {reactionDetail.users.map((name, idx) => (
-                <div key={idx} className="px-3 py-2 text-white text-sm">
+                <div key={idx} className="px-3 py-2 text-fg text-sm">
                   {name}
                 </div>
               ))}

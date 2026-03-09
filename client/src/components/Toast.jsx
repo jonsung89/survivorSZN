@@ -54,7 +54,7 @@ function Toast({ message, type, onClose }) {
       <span className="flex-1">{message}</span>
       <button 
         onClick={onClose}
-        className="p-1 hover:bg-white/20 rounded transition-colors"
+        className="p-1 hover:bg-fg/20 rounded transition-colors"
       >
         <X className="w-4 h-4" />
       </button>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trophy } from 'lucide-react';
+import BrandLogo from './BrandLogo';
 
 export default function SplashScreen({ onComplete }) {
   const [phase, setPhase] = useState('animate'); // 'animate' | 'fadeout' | 'done'
@@ -29,20 +29,18 @@ export default function SplashScreen({ onComplete }) {
     >
       <div className="flex flex-col items-center gap-5">
         {/* Trophy icon */}
-        <div className="splash-icon w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-2xl">
-          <Trophy className="w-10 h-10 text-white" />
-        </div>
+        <BrandLogo size="xl" className="splash-icon shadow-2xl" />
 
         {/* App name */}
-        <h1 className="splash-title font-display font-black text-4xl sm:text-5xl text-white tracking-tight">
-          SURVIVOR<span className="text-amber-500">SZN</span>
+        <h1 className="splash-title font-display font-black text-4xl sm:text-5xl text-fg tracking-tight">
+          SURVIVOR<span className="text-violet-400">SZN</span>
         </h1>
 
         {/* Tagline */}
         <p className="flex items-center gap-2 text-base sm:text-lg tracking-wide">
-          <span className="splash-word text-white/50">Outlast.</span>
-          <span className="splash-word text-white/50">Survive.</span>
-          <span className="splash-word font-semibold text-white/80">Win.</span>
+          <span className="splash-word text-fg/50">Outlast.</span>
+          <span className="splash-word text-fg/50">Survive.</span>
+          <span className="splash-word font-semibold text-fg/80">Win.</span>
         </p>
       </div>
     </div>

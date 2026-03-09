@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './components/Toast';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -165,8 +166,8 @@ function AppRoutes() {
       <Route path="*" element={
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
-            <h1 className="text-6xl font-display font-bold text-white mb-4">404</h1>
-            <p className="text-white/60 mb-6">Page not found</p>
+            <h1 className="text-6xl font-display font-bold text-fg mb-4">404</h1>
+            <p className="text-fg/60 mb-6">Page not found</p>
             <a href="/dashboard" className="btn-primary">Go Home</a>
           </div>
         </div>
@@ -186,16 +187,18 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <ToastProvider>
-        <AuthProvider>
-          <SocketProvider>
-            {showSplash && !splashDone && (
-              <SplashScreen onComplete={handleSplashComplete} />
-            )}
-            <AppRoutes />
-          </SocketProvider>
-        </AuthProvider>
-      </ToastProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <SocketProvider>
+              {showSplash && !splashDone && (
+                <SplashScreen onComplete={handleSplashComplete} />
+              )}
+              <AppRoutes />
+            </SocketProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

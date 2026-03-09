@@ -164,7 +164,7 @@ export default function NotificationPanel() {
       case 'league_invite':
         return <Trophy className="w-4 h-4 text-amber-400" />;
       default:
-        return <Bell className="w-4 h-4 text-white/50" />;
+        return <Bell className="w-4 h-4 text-fg/50" />;
     }
   };
 
@@ -173,9 +173,9 @@ export default function NotificationPanel() {
       {/* Bell Button */}
       <button
         onClick={handleOpen}
-        className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
+        className="relative p-2 rounded-lg hover:bg-fg/10 transition-colors"
       >
-        <Bell className="w-5 h-5 text-white/70" />
+        <Bell className="w-5 h-5 text-fg/70" />
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -185,10 +185,10 @@ export default function NotificationPanel() {
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute top-12 right-0 w-80 sm:w-96 max-h-[70vh] bg-elevated border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in z-50">
+        <div className="absolute top-12 right-0 w-80 sm:w-96 max-h-[70vh] bg-elevated border border-fg/10 rounded-xl shadow-2xl overflow-hidden animate-in z-50">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-            <h3 className="font-semibold text-white">Notifications</h3>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-fg/10">
+            <h3 className="font-semibold text-fg">Notifications</h3>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
                 <button
@@ -201,9 +201,9 @@ export default function NotificationPanel() {
               )}
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-1 hover:bg-white/10 rounded-lg"
+                className="p-1 hover:bg-fg/10 rounded-lg"
               >
-                <X className="w-4 h-4 text-white/50" />
+                <X className="w-4 h-4 text-fg/50" />
               </button>
             </div>
           </div>
@@ -212,10 +212,10 @@ export default function NotificationPanel() {
           <div className="overflow-y-auto max-h-[calc(70vh-60px)]">
             {loading && notifications.length === 0 ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 text-white/50 animate-spin" />
+                <Loader2 className="w-6 h-6 text-fg/50 animate-spin" />
               </div>
             ) : notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-white/40">
+              <div className="flex flex-col items-center justify-center py-12 text-fg/40">
                 <Bell className="w-10 h-10 mb-3 opacity-50" />
                 <p className="text-sm">No notifications yet</p>
                 <p className="text-xs mt-1">You'll see mentions here</p>
@@ -226,9 +226,9 @@ export default function NotificationPanel() {
                   <div
                     key={notification.id}
                     onClick={() => handleNotificationClick(notification)}
-                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-white/5 last:border-b-0 ${
+                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-fg/5 last:border-b-0 ${
                       notification.read 
-                        ? 'bg-transparent hover:bg-white/5' 
+                        ? 'bg-transparent hover:bg-fg/5' 
                         : 'bg-blue-500/10 hover:bg-blue-500/15'
                     }`}
                   >
@@ -240,20 +240,20 @@ export default function NotificationPanel() {
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-medium text-sm text-white truncate">
+                        <span className="font-medium text-sm text-fg truncate">
                           {notification.from_user_name || notification.fromUserName || 'Someone'}
                         </span>
-                        <span className="text-xs text-white/40">
+                        <span className="text-xs text-fg/40">
                           {formatTime(notification.created_at || notification.createdAt)}
                         </span>
                       </div>
-                      <p className="text-xs text-white/60 mb-1">
+                      <p className="text-xs text-fg/60 mb-1">
                         mentioned you in{' '}
-                        <span className="text-white/80">
+                        <span className="text-fg/80">
                           {notification.league_name || notification.leagueName || 'a league'}
                         </span>
                       </p>
-                      <p className="text-sm text-white/70 truncate">
+                      <p className="text-sm text-fg/70 truncate">
                         "{notification.preview}"
                       </p>
                     </div>
@@ -261,9 +261,9 @@ export default function NotificationPanel() {
                     {/* Actions */}
                     <button
                       onClick={(e) => handleDelete(e, notification.id)}
-                      className="p-1.5 hover:bg-white/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="p-1.5 hover:bg-fg/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <Trash2 className="w-3.5 h-3.5 text-white/40 hover:text-red-400" />
+                      <Trash2 className="w-3.5 h-3.5 text-fg/40 hover:text-red-400" />
                     </button>
                   </div>
                 ))}
@@ -273,7 +273,7 @@ export default function NotificationPanel() {
                   <button
                     onClick={() => fetchNotifications(true)}
                     disabled={loading}
-                    className="w-full py-3 text-sm text-blue-400 hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
+                    className="w-full py-3 text-sm text-blue-400 hover:bg-fg/5 transition-colors flex items-center justify-center gap-2"
                   >
                     {loading ? (
                       <Loader2 className="w-4 h-4 animate-spin" />

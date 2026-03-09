@@ -1,27 +1,32 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Trophy, 
-  Calendar, 
-  LogOut, 
-  Menu, 
+import {
+  Trophy,
+  Calendar,
+  LogOut,
+  Menu,
   X,
   User,
   Home,
   ChevronDown,
   Edit3,
-  Loader2
+  Loader2,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useToast } from './Toast';
+import { useTheme } from '../context/ThemeContext';
 import Avatar from './Avatar';
 import NotificationPanel from './NotificationPanel';
+import BrandLogo from './BrandLogo';
 
 export default function Navbar() {
   const { user, signOut, updateDisplayName } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { isDark, toggleTheme } = useTheme();
   
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -89,17 +94,15 @@ export default function Navbar() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to={user ? "/dashboard" : "/schedule"} className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-lg">
-                <Trophy className="w-5 h-5 text-white" />
-              </div>
+              <BrandLogo size="md" />
               <div className="block">
-                <h1 className="font-display font-bold text-xl text-white tracking-wide">
+                <h1 className="font-display font-bold text-xl text-fg tracking-wide">
                   SurvivorSZN
                 </h1>
-                <p className="text-[10px] text-white/50 -mt-1 tracking-widest flex gap-[3px]">
+                <p className="text-[10px] text-fg/50 -mt-1 tracking-widest flex gap-[3px]">
                   <span className="tagline-word">Outlast.</span>
                   <span className="tagline-word">Survive.</span>
-                  <span className="tagline-word font-semibold text-white/70">Win.</span>
+                  <span className="tagline-word font-semibold text-fg/70">Win.</span>
                 </p>
               </div>
             </Link>
@@ -123,31 +126,40 @@ export default function Navbar() {
             {/* User Menu - Desktop */}
             {user ? (
               <div className="hidden md:flex items-center gap-2" ref={dropdownRef}>
+                {/* Theme toggle */}
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
+                  title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                  {isDark ? <Sun className="w-4 h-4 text-fg/70" /> : <Moon className="w-4 h-4 text-fg/70" />}
+                </button>
+
                 {/* Notifications */}
                 <NotificationPanel />
 
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
                 >
                   <Avatar
                     userId={user?.id}
                     name={user?.displayName || 'Player'}
                     size="sm"
                   />
-                  <span className="text-sm text-white/80">
+                  <span className="text-sm text-fg/80">
                     {user?.displayName || 'Player'}
                   </span>
-                  <ChevronDown className={`w-4 h-4 text-white/50 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-fg/50 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Dropdown Menu */}
                 {dropdownOpen && (
-                  <div className="absolute top-14 right-4 w-48 bg-elevated border border-white/10 rounded-xl shadow-xl overflow-hidden animate-in z-50">
+                  <div className="absolute top-14 right-4 w-48 bg-elevated border border-fg/10 rounded-xl shadow-xl overflow-hidden animate-in z-50">
                     <div className="p-2">
                       <button
                         onClick={openEditModal}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/80 hover:bg-white/10 transition-colors text-left"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-fg/80 hover:bg-fg/10 transition-colors text-left"
                       >
                         <Edit3 className="w-4 h-4" />
                         Edit Profile
@@ -165,9 +177,16 @@ export default function Navbar() {
               </div>
             ) : (
               <div className="hidden md:flex items-center gap-2">
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
+                  title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                  {isDark ? <Sun className="w-4 h-4 text-fg/70" /> : <Moon className="w-4 h-4 text-fg/70" />}
+                </button>
                 <Link
                   to="/login"
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-white font-medium text-sm transition-all shadow-lg shadow-amber-500/20"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-400 hover:to-indigo-500 text-white font-medium text-sm transition-all shadow-lg shadow-violet-500/20"
                 >
                   <User className="w-4 h-4" />
                   Sign In
@@ -180,12 +199,12 @@ export default function Navbar() {
               {user && <NotificationPanel />}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                className="p-2 rounded-lg hover:bg-fg/10 transition-colors"
               >
                 {mobileMenuOpen ? (
-                  <X className="w-6 h-6 text-white" />
+                  <X className="w-6 h-6 text-fg" />
                 ) : (
-                  <Menu className="w-6 h-6 text-white" />
+                  <Menu className="w-6 h-6 text-fg" />
                 )}
               </button>
             </div>
@@ -194,7 +213,7 @@ export default function Navbar() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-white/10 animate-slide-down">
+          <div className="md:hidden border-t border-fg/10 animate-slide-down">
             <div className="px-4 py-4 space-y-2">
               {navLinks.map(({ path, label, icon: Icon }) => (
                 <Link
@@ -203,8 +222,8 @@ export default function Navbar() {
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                     location.pathname === path 
-                      ? 'bg-white/10 text-white' 
-                      : 'text-white/70 hover:bg-white/5'
+                      ? 'bg-fg/10 text-fg' 
+                      : 'text-fg/70 hover:bg-fg/5'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
@@ -212,7 +231,16 @@ export default function Navbar() {
                 </Link>
               ))}
               
-              <div className="border-t border-white/10 pt-4 mt-4">
+              {/* Theme toggle — mobile */}
+              <button
+                onClick={toggleTheme}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-fg/70 hover:bg-fg/5 transition-colors"
+              >
+                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                {isDark ? 'Light Mode' : 'Dark Mode'}
+              </button>
+
+              <div className="border-t border-fg/10 pt-4 mt-4">
                 {user ? (
                   <>
                     <div className="flex items-center gap-3 px-4 py-2">
@@ -222,16 +250,16 @@ export default function Navbar() {
                         size="md"
                       />
                       <div>
-                        <p className="text-white font-medium">
+                        <p className="text-fg font-medium">
                           {user?.displayName || 'Player'}
                         </p>
-                        <p className="text-white/50 text-sm">{user?.phone || user?.email}</p>
+                        <p className="text-fg/50 text-sm">{user?.phone || user?.email}</p>
                       </div>
                     </div>
 
                     <button
                       onClick={openEditModal}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/5 transition-colors mt-2"
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-fg/70 hover:bg-fg/5 transition-colors mt-2"
                     >
                       <Edit3 className="w-5 h-5" />
                       Edit Profile
@@ -249,7 +277,7 @@ export default function Navbar() {
                   <Link
                     to="/login"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center justify-center gap-2 mx-4 px-4 py-3 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-white font-medium transition-all"
+                    className="flex items-center justify-center gap-2 mx-4 px-4 py-3 rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-400 hover:to-indigo-500 text-white font-medium transition-all"
                   >
                     <User className="w-5 h-5" />
                     Sign In to Play
@@ -268,27 +296,27 @@ export default function Navbar() {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setEditModalOpen(false)}
           />
-          <div className="relative bg-elevated border border-white/10 rounded-2xl w-full max-w-md p-6 animate-in">
-            <h2 className="text-xl font-display font-bold text-white mb-4">Edit Profile</h2>
+          <div className="relative bg-elevated border border-fg/10 rounded-2xl w-full max-w-md p-6 animate-in">
+            <h2 className="text-xl font-display font-bold text-fg mb-4">Edit Profile</h2>
             
             <div className="mb-6">
-              <label className="block text-white/60 text-sm mb-2">Display Name</label>
+              <label className="block text-fg/60 text-sm mb-2">Display Name</label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Enter your display name"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue"
+                className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-lg text-fg placeholder-fg/40 focus:outline-none focus:border-nfl-blue"
                 onKeyDown={(e) => e.key === 'Enter' && handleSaveDisplayName()}
                 autoFocus
               />
-              <p className="text-white/40 text-xs mt-2">This is how other players will see you</p>
+              <p className="text-fg/40 text-xs mt-2">This is how other players will see you</p>
             </div>
             
             <div className="flex gap-3">
               <button
                 onClick={() => setEditModalOpen(false)}
-                className="flex-1 px-4 py-3 rounded-lg bg-white/5 text-white/70 hover:bg-white/10 transition-colors"
+                className="flex-1 px-4 py-3 rounded-lg bg-fg/5 text-fg/70 hover:bg-fg/10 transition-colors"
               >
                 Cancel
               </button>

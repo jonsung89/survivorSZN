@@ -86,10 +86,10 @@ export default function JoinByInvite() {
           <div className="w-20 h-20 bg-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <AlertCircle className="w-10 h-10 text-red-400" />
           </div>
-          <h1 className="text-2xl font-display font-bold text-white mb-2">
+          <h1 className="text-2xl font-display font-bold text-fg mb-2">
             Invalid Invite Link
           </h1>
-          <p className="text-white/60 mb-6">
+          <p className="text-fg/60 mb-6">
             {error}
           </p>
           <Link to="/leagues/join" className="btn-primary">
@@ -109,44 +109,44 @@ export default function JoinByInvite() {
             <div className="w-20 h-20 bg-gradient-to-br from-nfl-blue to-nfl-purple rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Trophy className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-2xl font-display font-bold text-white mb-1">
+            <h1 className="text-2xl font-display font-bold text-fg mb-1">
               {league.name}
             </h1>
-            <p className="text-white/60">
+            <p className="text-fg/60">
               You've been invited to join this league
             </p>
           </div>
 
           {/* League Stats */}
           <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-white/5 rounded-xl p-3 text-center">
-              <Users className="w-5 h-5 text-white mx-auto mb-1" />
-              <p className="text-white font-bold">{league.memberCount}</p>
-              <p className="text-white/40 text-xs">Members</p>
+            <div className="bg-fg/5 rounded-xl p-3 text-center">
+              <Users className="w-5 h-5 text-fg mx-auto mb-1" />
+              <p className="text-fg font-bold">{league.memberCount}</p>
+              <p className="text-fg/40 text-xs">Members</p>
             </div>
-            <div className="bg-white/5 rounded-xl p-3 text-center">
+            <div className="bg-fg/5 rounded-xl p-3 text-center">
               <Shield className="w-5 h-5 text-orange-400 mx-auto mb-1" />
-              <p className="text-white font-bold">{league.maxStrikes}</p>
-              <p className="text-white/40 text-xs">Max Strikes</p>
+              <p className="text-fg font-bold">{league.maxStrikes}</p>
+              <p className="text-fg/40 text-xs">Max Strikes</p>
             </div>
-            <div className="bg-white/5 rounded-xl p-3 text-center">
+            <div className="bg-fg/5 rounded-xl p-3 text-center">
               <Calendar className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
-              <p className="text-white font-bold">Week {league.startWeek}</p>
-              <p className="text-white/40 text-xs">Start</p>
+              <p className="text-fg font-bold">Week {league.startWeek}</p>
+              <p className="text-fg/40 text-xs">Start</p>
             </div>
           </div>
 
           {/* Commissioner */}
-          <div className="bg-white/5 rounded-xl p-3 mb-6">
-            <p className="text-white/50 text-xs mb-1">Commissioner</p>
-            <p className="text-white font-medium">{league.commissionerName}</p>
+          <div className="bg-fg/5 rounded-xl p-3 mb-6">
+            <p className="text-fg/50 text-xs mb-1">Commissioner</p>
+            <p className="text-fg font-medium">{league.commissionerName}</p>
           </div>
 
           {/* Join Form */}
           {user ? (
             <form onSubmit={handleJoin}>
               <div className="mb-4">
-                <label className="block text-white/80 text-sm font-medium mb-2">
+                <label className="block text-fg/80 text-sm font-medium mb-2">
                   <Lock className="w-4 h-4 inline mr-2" />
                   League Password
                 </label>
@@ -155,10 +155,10 @@ export default function JoinByInvite() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password to join"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-nfl-blue"
+                  className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-xl text-fg placeholder-fg/30 focus:outline-none focus:border-nfl-blue"
                   autoFocus
                 />
-                <p className="text-white/40 text-xs mt-2">
+                <p className="text-fg/40 text-xs mt-2">
                   Ask the commissioner for the password
                 </p>
               </div>
@@ -180,7 +180,7 @@ export default function JoinByInvite() {
             </form>
           ) : (
             <div className="space-y-3">
-              <p className="text-white/60 text-center text-sm mb-4">
+              <p className="text-fg/60 text-center text-sm mb-4">
                 Sign in or create an account to join this league
               </p>
               <Link
@@ -207,7 +207,7 @@ export default function JoinByInvite() {
 
         {/* Back Link */}
         <div className="text-center">
-          <Link to="/dashboard" className="text-white/50 hover:text-white text-sm">
+          <Link to="/dashboard" className="text-fg/50 hover:text-fg text-sm">
             ← Back to Dashboard
           </Link>
         </div>

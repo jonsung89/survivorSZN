@@ -12,6 +12,7 @@ export default {
   gradientClasses: 'from-blue-600 to-blue-800',
   secondaryGradient: 'from-blue-600/20 to-blue-800/20',
   borderColor: 'border-nba-blue/30',
+  badgeClasses: 'bg-orange-400/15 text-orange-400',
   accentColor: '#1D428A',
 
   // Sport-specific config

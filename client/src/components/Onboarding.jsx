@@ -64,9 +64,9 @@ export default function Onboarding() {
       <div className="w-full max-w-md">
         {/* Progress indicator */}
         <div className="flex justify-center gap-2 mb-8">
-          <div className={`w-2 h-2 rounded-full transition-all ${step >= 1 ? 'bg-nfl-blue w-8' : 'bg-white/20'}`} />
-          <div className={`w-2 h-2 rounded-full transition-all ${step >= 2 ? 'bg-nfl-blue w-8' : 'bg-white/20'}`} />
-          <div className={`w-2 h-2 rounded-full transition-all ${step >= 3 ? 'bg-nfl-blue w-8' : 'bg-white/20'}`} />
+          <div className={`w-2 h-2 rounded-full transition-all ${step >= 1 ? 'bg-nfl-blue w-8' : 'bg-fg/20'}`} />
+          <div className={`w-2 h-2 rounded-full transition-all ${step >= 2 ? 'bg-nfl-blue w-8' : 'bg-fg/20'}`} />
+          <div className={`w-2 h-2 rounded-full transition-all ${step >= 3 ? 'bg-nfl-blue w-8' : 'bg-fg/20'}`} />
         </div>
 
         {step === 1 && (
@@ -76,16 +76,16 @@ export default function Onboarding() {
               <Trophy className="w-10 h-10 text-white" />
             </div>
             
-            <h1 className="text-3xl font-display font-bold text-white mb-2">
+            <h1 className="text-3xl font-display font-bold text-fg mb-2">
               Welcome to Survivor SZN!
             </h1>
-            <p className="text-white/60 mb-8">
+            <p className="text-fg/60 mb-8">
               Let's set up your profile to get started
             </p>
 
             {/* Display Name Input */}
             <div className="glass-card rounded-2xl p-6 text-left mb-6">
-              <label className="block text-white/80 text-sm font-medium mb-2">
+              <label className="block text-fg/80 text-sm font-medium mb-2">
                 <User className="w-4 h-4 inline mr-2" />
                 What should we call you?
               </label>
@@ -97,11 +97,11 @@ export default function Onboarding() {
                   setError('');
                 }}
                 placeholder="Enter your display name"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-nfl-blue text-lg"
+                className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-xl text-fg placeholder-fg/30 focus:outline-none focus:border-nfl-blue text-lg"
                 maxLength={30}
                 autoFocus
               />
-              <p className="text-white/40 text-xs mt-2">
+              <p className="text-fg/40 text-xs mt-2">
                 This is how other players will see you in leagues
               </p>
               {error && (
@@ -133,16 +133,16 @@ export default function Onboarding() {
               <Mail className="w-10 h-10 text-white" />
             </div>
             
-            <h1 className="text-3xl font-display font-bold text-white mb-2">
+            <h1 className="text-3xl font-display font-bold text-fg mb-2">
               Add Your Email
             </h1>
-            <p className="text-white/60 mb-8">
+            <p className="text-fg/60 mb-8">
               Help commissioners identify you and receive updates
             </p>
 
             {/* Email Input */}
             <div className="glass-card rounded-2xl p-6 text-left mb-6">
-              <label className="block text-white/80 text-sm font-medium mb-2">
+              <label className="block text-fg/80 text-sm font-medium mb-2">
                 <Mail className="w-4 h-4 inline mr-2" />
                 Email address (optional)
               </label>
@@ -154,7 +154,7 @@ export default function Onboarding() {
                   setError('');
                 }}
                 placeholder="your@email.com"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-nfl-blue text-lg"
+                className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-xl text-fg placeholder-fg/30 focus:outline-none focus:border-nfl-blue text-lg"
                 autoFocus
               />
               {error && (
@@ -165,7 +165,7 @@ export default function Onboarding() {
             <div className="flex gap-3">
               <button
                 onClick={() => setStep(3)}
-                className="flex-1 py-4 px-4 rounded-xl bg-white/5 text-white/70 hover:bg-white/10 transition-colors"
+                className="flex-1 py-4 px-4 rounded-xl bg-fg/5 text-fg/70 hover:bg-fg/10 transition-colors"
               >
                 Skip
               </button>
@@ -194,10 +194,10 @@ export default function Onboarding() {
               <Check className="w-10 h-10 text-white" />
             </div>
             
-            <h1 className="text-3xl font-display font-bold text-white mb-2">
+            <h1 className="text-3xl font-display font-bold text-fg mb-2">
               You're all set, {displayName}!
             </h1>
-            <p className="text-white/60 mb-8">
+            <p className="text-fg/60 mb-8">
               Here's how Survivor SZN works
             </p>
 
@@ -208,8 +208,8 @@ export default function Onboarding() {
                   <Zap className="w-5 h-5 text-nfl-blue" />
                 </div>
                 <div>
-                  <h3 className="text-white font-semibold">Pick a Winner Each Week</h3>
-                  <p className="text-white/50 text-sm">Choose one NFL team to win. If they win, you survive!</p>
+                  <h3 className="text-fg font-semibold">Pick a Winner Each Week</h3>
+                  <p className="text-fg/50 text-sm">Choose one NFL team to win. If they win, you survive!</p>
                 </div>
               </div>
 
@@ -218,8 +218,8 @@ export default function Onboarding() {
                   <Shield className="w-5 h-5 text-orange-400" />
                 </div>
                 <div>
-                  <h3 className="text-white font-semibold">Use Each Team Only Once</h3>
-                  <p className="text-white/50 text-sm">You can't pick the same team twice all season</p>
+                  <h3 className="text-fg font-semibold">Use Each Team Only Once</h3>
+                  <p className="text-fg/50 text-sm">You can't pick the same team twice all season</p>
                 </div>
               </div>
 
@@ -228,8 +228,8 @@ export default function Onboarding() {
                   <Users className="w-5 h-5 text-purple-400" />
                 </div>
                 <div>
-                  <h3 className="text-white font-semibold">Be the Last One Standing</h3>
-                  <p className="text-white/50 text-sm">Lose and you get a strike. Too many strikes = eliminated!</p>
+                  <h3 className="text-fg font-semibold">Be the Last One Standing</h3>
+                  <p className="text-fg/50 text-sm">Lose and you get a strike. Too many strikes = eliminated!</p>
                 </div>
               </div>
             </div>

@@ -29,3 +29,8 @@ export function getSportGradient(sportId) {
   const module = getSportModule(sportId);
   return module.gradientClasses || 'from-blue-500 to-blue-700';
 }
+
+export function getSportBadgeClasses(sportId) {
+  const module = getSportModule(sportId);
+  return module.badgeClasses || 'bg-blue-400/15 text-blue-400';
+}

@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { leagueAPI, nflAPI } from '../api';
 import { useToast } from '../components/Toast';
+import { getAllSports, getSportModule } from '../sports';
+import BrandLogo from '../components/BrandLogo';
 import nflSport from '../sports/nfl';
 
 export default function CreateLeague() {
@@ -24,7 +26,8 @@ export default function CreateLeague() {
     password: '',
     confirmPassword: '',
     maxStrikes: 1,
-    startWeek: 1
+    startWeek: 1,
+    sportId: 'nfl'
   });
 
   useEffect(() => {
@@ -74,7 +77,7 @@ export default function CreateLeague() {
         password: formData.password,
         maxStrikes: formData.maxStrikes,
         startWeek: formData.startWeek,
-        sportId: 'nfl'
+        sportId: formData.sportId
       });
 
       if (result.success) {
@@ -94,7 +97,7 @@ export default function CreateLeague() {
       {/* Back Link */}
       <Link
         to="/leagues"
-        className="inline-flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-6"
+        className="inline-flex items-center gap-2 text-fg/60 hover:text-fg transition-colors mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Leagues
@@ -102,18 +105,49 @@ export default function CreateLeague() {
 
       {/* Header */}
       <div className="text-center mb-8">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-500/30">
-          <Trophy className="w-8 h-8 text-white" />
+        <div className="mx-auto mb-4 w-fit">
+          <BrandLogo size="lg" />
         </div>
-        <h1 className="text-3xl font-display font-bold text-white">Create a League</h1>
-        <p className="text-white/60 mt-2">Set up your survivor pool and invite friends</p>
+        <h1 className="text-3xl font-display font-bold text-fg">Create a League</h1>
+        <p className="text-fg/60 mt-2">Set up your survivor pool and invite friends</p>
       </div>
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="glass-card rounded-2xl p-8 space-y-6">
+        {/* Sport Selector */}
+        <div>
+          <label className="block text-fg/80 text-sm font-medium mb-2">
+            Sport
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {getAllSports().map(sport => {
+              const isAvailable = sport.gameType === 'survivor';
+              const isSelected = formData.sportId === sport.id;
+              return (
+                <button
+                  key={sport.id}
+                  type="button"
+                  disabled={!isAvailable}
+                  onClick={() => isAvailable && setFormData(prev => ({ ...prev, sportId: sport.id }))}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isSelected
+                      ? 'bg-violet-600/20 text-violet-500 border border-violet-500/40'
+                      : isAvailable
+                      ? 'bg-fg/5 text-fg/60 border border-transparent hover:text-fg/80 hover:bg-fg/10'
+                      : 'bg-fg/[0.03] text-fg/20 border border-transparent cursor-not-allowed'
+                  }`}
+                >
+                  {sport.name}
+                  {!isAvailable && <span className="ml-1.5 text-[10px] uppercase tracking-wide">Soon</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* League Name */}
         <div>
-          <label className="block text-white/80 text-sm font-medium mb-2">
+          <label className="block text-fg/80 text-sm font-medium mb-2">
             League Name
           </label>
           <input
@@ -130,7 +164,7 @@ export default function CreateLeague() {
         {/* Password */}
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="block text-white/80 text-sm font-medium mb-2">
+            <label className="block text-fg/80 text-sm font-medium mb-2">
               <Lock className="w-4 h-4 inline mr-2" />
               League Password
             </label>
@@ -144,7 +178,7 @@ export default function CreateLeague() {
             />
           </div>
           <div>
-            <label className="block text-white/80 text-sm font-medium mb-2">
+            <label className="block text-fg/80 text-sm font-medium mb-2">
               Confirm Password
             </label>
             <input
@@ -157,7 +191,7 @@ export default function CreateLeague() {
             />
           </div>
         </div>
-        <p className="text-white/40 text-xs -mt-4">
+        <p className="text-fg/40 text-xs -mt-4">
           Share this password with people you want to join your league
         </p>
 
@@ -165,7 +199,7 @@ export default function CreateLeague() {
         <div className="grid gap-4 md:grid-cols-2">
           {/* Max Strikes */}
           <div>
-            <label className="block text-white/80 text-sm font-medium mb-2">
+            <label className="block text-fg/80 text-sm font-medium mb-2">
               <AlertTriangle className="w-4 h-4 inline mr-2" />
               Strikes Before Elimination
             </label>
@@ -185,7 +219,7 @@ export default function CreateLeague() {
 
           {/* Start Week */}
           <div>
-            <label className="block text-white/80 text-sm font-medium mb-2">
+            <label className="block text-fg/80 text-sm font-medium mb-2">
               <Calendar className="w-4 h-4 inline mr-2" />
               Starting Week
             </label>
@@ -205,12 +239,12 @@ export default function CreateLeague() {
         </div>
 
         {/* Info Box */}
-        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+        <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-4">
           <div className="flex gap-3">
-            <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-200/80">
-              <p className="font-medium text-blue-300 mb-1">How Survivor Pools Work</p>
-              <ul className="space-y-1 list-disc list-inside text-blue-200/70">
+            <Info className="w-5 h-5 text-violet-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-fg/80 mb-1">How Survivor Pools Work</p>
+              <ul className="space-y-1 list-disc list-inside text-fg/50">
                 <li>Each week, pick one team to win their game</li>
                 <li>You can only use each team once per season</li>
                 <li>If your team loses, you get a strike</li>

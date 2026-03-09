@@ -360,6 +360,8 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
         l.status,
         l.commissioner_id,
         l.sport_id,
+        l.entry_fee,
+        l.prize_pot_override,
         lm.strikes,
         lm.status as member_status,
         COUNT(DISTINCT lm2.id) as member_count,
@@ -450,6 +452,8 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
           isCommissioner: l.commissioner_id === user.id,
           currentPickTeamId: pickMap[l.id] || null,
           sportId: l.sport_id || 'nfl',
+          entryFee: parseFloat(l.entry_fee) || 0,
+          prizePotOverride: l.prize_pot_override ? parseFloat(l.prize_pot_override) : null,
           seasonOver,
           winners: seasonOver ? (winnersMap[l.id] || null) : null
         };

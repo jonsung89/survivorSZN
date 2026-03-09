@@ -120,20 +120,20 @@ export default function Login() {
       <div className="w-full max-w-sm sm:max-w-md">
         {/* Logo */}
         <div className="text-center mb-6 sm:mb-8">
-          <h1 className="text-4xl sm:text-5xl font-display font-black text-white tracking-tight">
-            SURVIVOR<span className="text-nfl-red">SZN</span>
+          <h1 className="text-4xl sm:text-5xl font-display font-black text-fg tracking-tight">
+            SURVIVOR<span className="text-violet-500">SZN</span>
           </h1>
-          <p className="text-white/60 mt-2 text-sm sm:text-base flex items-center justify-center gap-1.5 tracking-wide">
+          <p className="text-fg/60 mt-2 text-sm sm:text-base flex items-center justify-center gap-1.5 tracking-wide">
             <span className="tagline-word">Outlast.</span>
             <span className="tagline-word">Survive.</span>
-            <span className="tagline-word font-semibold text-white/80">Win.</span>
+            <span className="tagline-word font-semibold text-fg/80">Win.</span>
           </p>
         </div>
 
         <div className="glass-card rounded-xl sm:rounded-2xl p-6 sm:p-8">
           {mode === 'select' && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-white text-center mb-6">Sign in to continue</h2>
+              <h2 className="text-xl font-semibold text-fg text-center mb-6">Sign in to continue</h2>
               
               {/* Google Sign In */}
               <button
@@ -158,17 +158,17 @@ export default function Login() {
 
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/10"></div>
+                  <div className="w-full border-t border-fg/10"></div>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-transparent text-white/40">or</span>
+                  <span className="px-4 bg-transparent text-fg/40">or</span>
                 </div>
               </div>
 
               {/* Phone Sign In */}
               <button
                 onClick={() => setMode('phone')}
-                className="w-full flex items-center justify-center gap-3 bg-white/10 text-white font-medium py-3 px-4 rounded-xl hover:bg-white/20 transition-all border border-white/10"
+                className="w-full flex items-center justify-center gap-3 bg-fg/10 text-fg font-medium py-3 px-4 rounded-xl hover:bg-fg/20 transition-all border border-fg/10"
               >
                 <Phone className="w-5 h-5" />
                 Continue with Phone
@@ -182,24 +182,24 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setMode('select')}
-                  className="text-white/50 hover:text-white text-sm mb-4"
+                  className="text-fg/50 hover:text-fg text-sm mb-4"
                 >
                   ← Back
                 </button>
-                <h2 className="text-xl font-semibold text-white mb-2">Enter your phone</h2>
-                <p className="text-white/50 text-sm">We'll send you a verification code</p>
+                <h2 className="text-xl font-semibold text-fg mb-2">Enter your phone</h2>
+                <p className="text-fg/50 text-sm">We'll send you a verification code</p>
               </div>
 
               <div>
-                <label className="block text-white/70 text-sm mb-2">Phone Number</label>
+                <label className="block text-fg/70 text-sm mb-2">Phone Number</label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50">+1</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-fg/50">+1</span>
                   <input
                     type="tel"
                     value={phone}
                     onChange={handlePhoneChange}
                     placeholder="(555) 555-5555"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder-white/30 focus:outline-none focus:border-white/30 transition-colors"
+                    className="w-full bg-fg/5 border border-fg/10 rounded-xl py-3 pl-12 pr-4 text-fg placeholder-fg/30 focus:outline-none focus:border-fg/30 transition-colors"
                     autoFocus
                   />
                 </div>
@@ -228,12 +228,12 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setMode('phone')}
-                  className="text-white/50 hover:text-white text-sm mb-4"
+                  className="text-fg/50 hover:text-fg text-sm mb-4"
                 >
                   ← Back
                 </button>
-                <h2 className="text-xl font-semibold text-white mb-2">Enter code</h2>
-                <p className="text-white/50 text-sm">Sent to +1 {phone}</p>
+                <h2 className="text-xl font-semibold text-fg mb-2">Enter code</h2>
+                <p className="text-fg/50 text-sm">Sent to +1 {phone}</p>
               </div>
 
               <div>
@@ -242,7 +242,7 @@ export default function Login() {
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-4 px-4 text-white text-center text-2xl tracking-[0.5em] placeholder-white/30 focus:outline-none focus:border-white/30 transition-colors"
+                  className="w-full bg-fg/5 border border-fg/10 rounded-xl py-4 px-4 text-fg text-center text-2xl tracking-[0.5em] placeholder-fg/30 focus:outline-none focus:border-fg/30 transition-colors"
                   autoFocus
                 />
               </div>
@@ -265,7 +265,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={handleSendCode}
-                className="w-full text-white/50 hover:text-white text-sm"
+                className="w-full text-fg/50 hover:text-fg text-sm"
               >
                 Didn't receive a code? Resend
               </button>
@@ -276,7 +276,7 @@ export default function Login() {
         {/* Recaptcha container */}
         <div id="recaptcha-container"></div>
 
-        <p className="text-center text-white/30 text-xs mt-6">
+        <p className="text-center text-fg/30 text-xs mt-6">
           By signing in, you agree to our Terms of Service
         </p>
       </div>

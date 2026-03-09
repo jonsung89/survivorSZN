@@ -20,7 +20,7 @@ export default function BoxScore({ playerStats, game }) {
     <div className="space-y-2">
       <button
         onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-        className="text-xs font-semibold text-white/50 uppercase tracking-wide flex items-center gap-1.5 hover:text-white/70 transition-colors w-full"
+        className="text-xs font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5 hover:text-fg/70 transition-colors w-full"
       >
         <BarChart3 className="w-3.5 h-3.5" />
         Box Score
@@ -69,19 +69,19 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
     <div className="space-y-1">
       <div className="flex items-center gap-2 pb-1">
         {teamLogo && <img src={teamLogo} alt={teamLabel} className="w-5 h-5" />}
-        <span className="text-xs font-semibold text-white/80">{teamLabel}</span>
-        {sectionLabel && <span className="text-[10px] text-white/40 uppercase tracking-wide">{sectionLabel}</span>}
+        <span className="text-xs font-semibold text-fg/80">{teamLabel}</span>
+        {sectionLabel && <span className="text-[10px] text-fg/40 uppercase tracking-wide">{sectionLabel}</span>}
       </div>
       <div className="overflow-x-auto -mx-1 px-1 scrollbar-thin">
         <table className="w-full text-[11px] min-w-[480px]">
           <thead>
-            <tr className="text-white/40 border-b border-white/10">
+            <tr className="text-fg/40 border-b border-fg/10">
               <th className="text-left py-1.5 pr-2 font-medium sticky left-0 bg-inset z-10 min-w-[110px]">Player</th>
               {columns.map((col, i) => (
                 <th
                   key={i}
                   className={`text-center py-1.5 px-1 font-medium whitespace-nowrap ${
-                    keyColumns.has(i) ? 'text-white/60' : ''
+                    keyColumns.has(i) ? 'text-fg/60' : ''
                   }`}
                 >
                   {col}
@@ -94,21 +94,21 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
               <tr
                 key={i}
                 className={`
-                  ${row.separator ? 'border-t border-white/15' : 'border-b border-white/[0.04]'}
-                  ${!row.separator && i % 2 === 0 ? 'bg-white/[0.02]' : ''}
-                  hover:bg-white/[0.06] transition-colors
+                  ${row.separator ? 'border-t border-fg/15' : 'border-b border-fg/[0.04]'}
+                  ${!row.separator && i % 2 === 0 ? 'bg-fg/[0.02]' : ''}
+                  hover:bg-fg/[0.06] transition-colors
                 `}
               >
                 {row.separator ? (
-                  <td colSpan={columns.length + 1} className="py-1.5 text-[10px] text-white/40 uppercase font-semibold tracking-wide">
+                  <td colSpan={columns.length + 1} className="py-1.5 text-[10px] text-fg/40 uppercase font-semibold tracking-wide">
                     {row.separator}
                   </td>
                 ) : (
                   <>
                     <td className="py-1.5 pr-2 sticky left-0 bg-inset z-10">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-white/30 w-5 text-right text-[10px] font-mono">{row.position}</span>
-                        <span className="text-white/90 font-medium truncate max-w-[100px]" title={row.name}>
+                        <span className="text-fg/30 w-5 text-right text-[10px] font-mono">{row.position}</span>
+                        <span className="text-fg/90 font-medium truncate max-w-[100px]" title={row.name}>
                           {row.shortName || row.name}
                         </span>
                       </div>
@@ -118,10 +118,10 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
                         key={j}
                         className={`text-center py-1.5 px-1 whitespace-nowrap font-mono text-[11px] ${
                           keyColumns.has(j)
-                            ? 'text-white font-semibold'
+                            ? 'text-fg font-semibold'
                             : dimColumns.has(j)
-                              ? 'text-white/40'
-                              : 'text-white/70'
+                              ? 'text-fg/40'
+                              : 'text-fg/70'
                         }`}
                       >
                         {stat}
@@ -134,15 +134,15 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
 
             {/* Team totals row */}
             {totals && (
-              <tr className="border-t border-white/15 bg-white/[0.04]">
+              <tr className="border-t border-fg/15 bg-fg/[0.04]">
                 <td className="py-1.5 pr-2 sticky left-0 bg-inset z-10">
-                  <span className="text-white/50 font-semibold text-[10px] uppercase tracking-wide pl-6">Totals</span>
+                  <span className="text-fg/50 font-semibold text-[10px] uppercase tracking-wide pl-6">Totals</span>
                 </td>
                 {totals.map((val, j) => (
                   <td
                     key={j}
                     className={`text-center py-1.5 px-1 whitespace-nowrap font-mono text-[11px] font-semibold ${
-                      keyColumns.has(j) ? 'text-white' : 'text-white/60'
+                      keyColumns.has(j) ? 'text-fg' : 'text-fg/60'
                     }`}
                   >
                     {val}
@@ -351,7 +351,7 @@ function FootballBoxScore({ data, game }) {
 
         return (
           <div key={groupName} className="space-y-3">
-            <div className="text-[10px] text-white/40 uppercase font-semibold tracking-wider">
+            <div className="text-[10px] text-fg/40 uppercase font-semibold tracking-wider">
               {GROUP_LABELS[groupName] || groupName}
             </div>
             {orderedTeams.map((teamData, ti) => {

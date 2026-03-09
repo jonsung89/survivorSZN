@@ -12,6 +12,7 @@ export default {
   gradientClasses: 'from-orange-600 to-orange-800',
   secondaryGradient: 'from-orange-600/20 to-orange-800/20',
   borderColor: 'border-ncaab-orange/30',
+  badgeClasses: 'bg-amber-400/15 text-amber-400',
   accentColor: '#FF6600',
 
   // Sport-specific config

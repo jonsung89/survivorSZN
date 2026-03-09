@@ -732,7 +732,7 @@ export default function LeagueDetail() {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-display text-xl sm:text-3xl font-bold text-white truncate">{league.name}</h1>
+              <h1 className="font-display text-xl sm:text-3xl font-bold text-fg truncate">{league.name}</h1>
               {isCommissioner && (
                 <span className="badge badge-active text-xs flex items-center gap-1">
                   <Crown className="w-3 h-3" />
@@ -740,7 +740,7 @@ export default function LeagueDetail() {
                 </span>
               )}
             </div>
-            <p className="text-white/60 text-sm sm:text-base">
+            <p className="text-fg/60 text-sm sm:text-base">
               {league.members?.length || 0} members • {league.maxStrikes} strike{league.maxStrikes !== 1 ? 's' : ''} max
             </p>
           </div>
@@ -798,12 +798,12 @@ export default function LeagueDetail() {
         return (
           <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-yellow-600/10 animate-in" style={{ animationDelay: '25ms' }}>
             <div className="flex items-center gap-3 mb-2">
-              <Trophy className="w-6 h-6 text-amber-400" />
-              <h2 className="text-lg font-semibold text-white">Season Complete</h2>
+              <Trophy className="w-6 h-6 text-amber-500" />
+              <h2 className="text-lg font-semibold text-fg">Season Complete</h2>
             </div>
             {winners ? (
               <div className="mt-2">
-                <p className="text-white/60 text-sm mb-2">
+                <p className="text-fg/60 text-sm mb-2">
                   {winners.length === 1 ? 'Winner' : `${winners.length} Winners`}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -812,8 +812,8 @@ export default function LeagueDetail() {
                       key={w.userId}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${
                         w.userId === user?.id
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-white/10 text-white/70'
+                          ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30'
+                          : 'bg-fg/10 text-fg/70'
                       }`}
                     >
                       <Trophy className="w-3.5 h-3.5" />
@@ -824,7 +824,7 @@ export default function LeagueDetail() {
                 </div>
               </div>
             ) : (
-              <p className="text-white/50 text-sm">No survivors — everyone was eliminated!</p>
+              <p className="text-fg/50 text-sm">No survivors — everyone was eliminated!</p>
             )}
           </div>
         );
@@ -839,8 +839,8 @@ export default function LeagueDetail() {
                 <DollarSign className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="text-white/60 text-sm">Prize Pot{isCommissioner && league.prizePotOverride ? ' (Manual)' : ''}</p>
-                <p className="text-2xl sm:text-3xl font-bold text-white">
+                <p className="text-fg/60 text-sm">Prize Pot{isCommissioner && league.prizePotOverride ? ' (Manual)' : ''}</p>
+                <p className="text-2xl sm:text-3xl font-bold text-fg">
                   ${(league.prizePotOverride || (league.entryFee * (league.members?.length || 0))).toLocaleString()}
                 </p>
               </div>
@@ -849,33 +849,33 @@ export default function LeagueDetail() {
             <div className="flex flex-wrap gap-4 sm:gap-6">
               {league.entryFee > 0 && (
                 <div className="text-center">
-                  <p className="text-white/60 text-xs sm:text-sm">Entry Fee</p>
-                  <p className="text-lg sm:text-xl font-semibold text-white">${league.entryFee}</p>
+                  <p className="text-fg/60 text-xs sm:text-sm">Entry Fee</p>
+                  <p className="text-lg sm:text-xl font-semibold text-fg">${league.entryFee}</p>
                 </div>
               )}
               {isCommissioner && (
                 <div className="text-center">
-                  <p className="text-white/60 text-xs sm:text-sm">Paid</p>
-                  <p className="text-lg sm:text-xl font-semibold text-green-400">
+                  <p className="text-fg/60 text-xs sm:text-sm">Paid</p>
+                  <p className="text-lg sm:text-xl font-semibold text-green-500">
                     {league.members?.filter(m => m.hasPaid).length || 0}/{league.members?.length || 0}
                   </p>
                 </div>
               )}
               <div className="text-center">
-                <p className="text-white/60 text-xs sm:text-sm">Alive</p>
-                <p className="text-lg sm:text-xl font-semibold text-green-400">
+                <p className="text-fg/60 text-xs sm:text-sm">Alive</p>
+                <p className="text-lg sm:text-xl font-semibold text-green-500">
                   {league.members?.filter(m => m.status === 'active').length || 0}
                 </p>
               </div>
               <div className="text-center">
-                <p className="text-white/60 text-xs sm:text-sm">Eliminated</p>
-                <p className="text-lg sm:text-xl font-semibold text-red-400">
+                <p className="text-fg/60 text-xs sm:text-sm">Eliminated</p>
+                <p className="text-lg sm:text-xl font-semibold text-red-500">
                   {league.members?.filter(m => m.status === 'eliminated').length || 0}
                 </p>
               </div>
               <div className="text-center">
-                <p className="text-white/60 text-xs sm:text-sm">Weeks Left</p>
-                <p className="text-lg sm:text-xl font-semibold text-white">
+                <p className="text-fg/60 text-xs sm:text-sm">Weeks Left</p>
+                <p className="text-lg sm:text-xl font-semibold text-fg">
                   {currentWeek <= 18 
                     ? `${Math.max(0, 18 - currentWeek + 1)}+4`
                     : Math.max(0, 23 - currentWeek + 1)
@@ -885,8 +885,8 @@ export default function LeagueDetail() {
             </div>
           </div>
           
-          <div className="mt-4 pt-4 border-t border-white/10">
-            <p className="text-white/50 text-sm">
+          <div className="mt-4 pt-4 border-t border-fg/10">
+            <p className="text-fg/50 text-sm">
               💰 Pot splits evenly among all survivors at season end, or winner-takes-all if one remains.
             </p>
           </div>
@@ -901,8 +901,8 @@ export default function LeagueDetail() {
               <Trophy className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-white font-semibold">{matchupAvailability.weekLabel} Options</h3>
-              <p className="text-white/50 text-sm">Who can pick which team</p>
+              <h3 className="text-fg font-semibold">{matchupAvailability.weekLabel} Options</h3>
+              <p className="text-fg/50 text-sm">Who can pick which team</p>
             </div>
           </div>
           
@@ -948,7 +948,7 @@ export default function LeagueDetail() {
                     ) : null;
                   })}
                 </div>
-                <span className="text-emerald-400 text-sm font-semibold">
+                <span className="text-emerald-500 text-sm font-semibold">
                   Both Available ({matchupAvailability.groups.bothAvailable.length})
                 </span>
               </div>
@@ -958,12 +958,12 @@ export default function LeagueDetail() {
                     {matchupAvailability.groups.bothAvailable.map(member => (
                       <span 
                         key={member.id || member.userId}
-                        className="inline-flex items-center gap-1.5 text-xs text-white/80"
+                        className="inline-flex items-center gap-1.5 text-xs text-fg/80"
                       >
                         <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
                         <span className="truncate">{member.displayName}</span>
                         {member.strikes > 0 && (
-                          <span className="text-red-400 flex-shrink-0 text-[10px]">
+                          <span className="text-red-500 flex-shrink-0 text-[10px]">
                             {'✕'.repeat(member.strikes)}
                           </span>
                         )}
@@ -971,7 +971,7 @@ export default function LeagueDetail() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-white/50 text-sm">No one</p>
+                  <p className="text-fg/50 text-sm">No one</p>
                 )}
               </div>
             </div>
@@ -1007,7 +1007,7 @@ export default function LeagueDetail() {
                     {team.logo && (
                       <img src={team.logo} alt={team.name} className="w-10 h-10 object-contain drop-shadow-lg" />
                     )}
-                    <span className="text-sm font-semibold text-white drop-shadow-sm">
+                    <span className="text-sm font-semibold text-fg drop-shadow-sm">
                       {team.name} Only ({members.length})
                     </span>
                   </div>
@@ -1017,12 +1017,12 @@ export default function LeagueDetail() {
                         {members.map(member => (
                           <span 
                             key={member.id || member.userId}
-                            className="inline-flex items-center gap-1.5 text-xs text-white/80"
+                            className="inline-flex items-center gap-1.5 text-xs text-fg/80"
                           >
                             <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
                             <span className="truncate">{member.displayName}</span>
                             {member.strikes > 0 && (
-                              <span className="text-red-400 flex-shrink-0 text-[10px]">
+                              <span className="text-red-500 flex-shrink-0 text-[10px]">
                                 {'✕'.repeat(member.strikes)}
                               </span>
                             )}
@@ -1030,7 +1030,7 @@ export default function LeagueDetail() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-white/50 text-sm">No one</p>
+                      <p className="text-fg/50 text-sm">No one</p>
                     )}
                   </div>
                 </div>
@@ -1050,9 +1050,9 @@ export default function LeagueDetail() {
               </div>
               <div className="relative flex flex-col items-start gap-1 mb-2">
                 <div className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-red-400" />
+                  <AlertTriangle className="w-6 h-6 text-red-500" />
                 </div>
-                <span className="text-red-400 text-sm font-semibold">
+                <span className="text-red-500 text-sm font-semibold">
                   No Options ({matchupAvailability.groups.noOptions.length})
                 </span>
               </div>
@@ -1062,12 +1062,12 @@ export default function LeagueDetail() {
                     {matchupAvailability.groups.noOptions.map(member => (
                       <span 
                         key={member.id || member.userId}
-                        className="inline-flex items-center gap-1.5 text-xs text-white/80"
+                        className="inline-flex items-center gap-1.5 text-xs text-fg/80"
                       >
                         <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
                         <span className="truncate">{member.displayName}</span>
                         {member.strikes > 0 && (
-                          <span className="text-red-400 flex-shrink-0 text-[10px]">
+                          <span className="text-red-500 flex-shrink-0 text-[10px]">
                             {'✕'.repeat(member.strikes)}
                           </span>
                         )}
@@ -1075,7 +1075,7 @@ export default function LeagueDetail() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-white/50 text-sm">No one</p>
+                  <p className="text-fg/50 text-sm">No one</p>
                 )}
               </div>
             </div>
@@ -1089,9 +1089,9 @@ export default function LeagueDetail() {
           <button
             onClick={() => handleWeekChange(Math.max(league.startWeek, selectedWeek - 1))}
             disabled={selectedWeek <= league.startWeek}
-            className="p-2 sm:p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
+            className="p-2 sm:p-2 hover:bg-fg/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
           >
-            <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6 text-fg" />
           </button>
 
           <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-1 sm:py-2 px-2 sm:px-4 scrollbar-hide">
@@ -1107,14 +1107,14 @@ export default function LeagueDetail() {
                     selectedWeek === week
                       ? 'bg-nfl-blue text-white shadow-lg'
                       : week === currentWeek
-                      ? 'bg-white/10 text-white border border-emerald-500/50'
-                      : 'bg-white/5 text-white/60 hover:bg-white/10'
+                      ? 'bg-fg/10 text-fg border border-emerald-500/50'
+                      : 'bg-fg/5 text-fg/60 hover:bg-fg/10'
                   }`}
                   title={weekFullLabel}
                 >
                   <span className="hidden sm:inline">{week <= 18 ? 'Week ' : ''}</span>{weekLabel}
                   {week === currentWeek && selectedWeek !== week && (
-                    <span className="ml-1 text-xs text-emerald-400">●</span>
+                    <span className="ml-1 text-xs text-emerald-500">●</span>
                   )}
                 </button>
               );
@@ -1124,9 +1124,9 @@ export default function LeagueDetail() {
           <button
             onClick={() => handleWeekChange(Math.min(23, selectedWeek + 1))}
             disabled={selectedWeek >= 23}
-            className="p-2 sm:p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
+            className="p-2 sm:p-2 hover:bg-fg/10 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0"
           >
-            <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-fg" />
           </button>
         </div>
       </div>
@@ -1136,7 +1136,7 @@ export default function LeagueDetail() {
         {(loadingStandings || loadedWeek !== selectedWeek) ? (
           // Loading state
           <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 text-white/40 animate-spin" />
+            <Loader2 className="w-8 h-8 text-fg/40 animate-spin" />
           </div>
         ) : (() => {
           // Find current user's pick for selected week
@@ -1164,15 +1164,15 @@ export default function LeagueDetail() {
               <div className="flex flex-col items-center justify-center h-full">
                 {isEliminated ? (
                   <>
-                    <X className="w-10 h-10 text-red-400 mb-3" />
-                    <p className="text-white font-medium">Eliminated</p>
-                    <p className="text-white/50 text-sm mt-1">You're out of the competition</p>
+                    <X className="w-10 h-10 text-red-500 mb-3" />
+                    <p className="text-fg font-medium">Eliminated</p>
+                    <p className="text-fg/50 text-sm mt-1">You're out of the competition</p>
                   </>
                 ) : isMatchupsTBD ? (
                   <>
-                    <Lock className="w-10 h-10 text-white/30 mb-3" />
-                    <p className="text-white/50 font-medium">{getWeekLabel(selectedWeek)} matchups are TBD</p>
-                    <p className="text-white/40 text-sm mt-1">
+                    <Lock className="w-10 h-10 text-fg/30 mb-3" />
+                    <p className="text-fg/50 font-medium">{getWeekLabel(selectedWeek)} matchups are TBD</p>
+                    <p className="text-fg/40 text-sm mt-1">
                       {selectedWeek === 19 && 'Matchups set after Week 18'}
                       {selectedWeek === 20 && 'Matchups set after Wild Card'}
                       {selectedWeek === 21 && 'Matchups set after Divisional'}
@@ -1181,13 +1181,13 @@ export default function LeagueDetail() {
                   </>
                 ) : isPastWeek ? (
                   <>
-                    <AlertCircle className="w-10 h-10 text-white/30 mb-3" />
-                    <p className="text-white/50 font-medium">No pick made for {getWeekLabel(selectedWeek)}</p>
+                    <AlertCircle className="w-10 h-10 text-fg/30 mb-3" />
+                    <p className="text-fg/50 font-medium">No pick made for {getWeekLabel(selectedWeek)}</p>
                   </>
                 ) : (
                   <>
                     <AlertCircle className="w-10 h-10 text-yellow-400 mb-3" />
-                    <p className="text-white font-medium">No pick for {getWeekLabel(selectedWeek)}</p>
+                    <p className="text-fg font-medium">No pick for {getWeekLabel(selectedWeek)}</p>
                     {canMakePick && (
                       <Link
                         to={`/league/${leagueId}/pick?week=${selectedWeek}`}
@@ -1206,7 +1206,7 @@ export default function LeagueDetail() {
           if (displayPicks.length === 0) {
             return (
               <div className="flex items-center justify-center h-full">
-                <p className="text-white/50">No pick data for {getWeekLabel(selectedWeek)}</p>
+                <p className="text-fg/50">No pick data for {getWeekLabel(selectedWeek)}</p>
               </div>
             );
           }
@@ -1224,11 +1224,11 @@ export default function LeagueDetail() {
           return (
             <>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-white/60">Your {getWeekLabel(selectedWeek)} Pick{displayPicks.length > 1 ? 's' : ''}</h3>
+                <h3 className="text-sm font-medium text-fg/60">Your {getWeekLabel(selectedWeek)} Pick{displayPicks.length > 1 ? 's' : ''}</h3>
                 {canEdit && (
                   <Link
                     to={`/league/${leagueId}/pick?week=${selectedWeek}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white/80 text-sm font-medium transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-fg/10 hover:bg-fg/20 rounded-lg text-fg/80 text-sm font-medium transition-colors"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                     Edit Pick
@@ -1244,12 +1244,12 @@ export default function LeagueDetail() {
                 if (!gameStatus) {
                   // Still loading
                   return (
-                    <div key={idx} className="bg-white/5 rounded-xl p-4">
+                    <div key={idx} className="bg-fg/5 rounded-xl p-4">
                       <div className="flex items-center gap-3">
                         {team?.logo && <img src={team.logo} alt={team.name} className="w-12 h-12" />}
                         <div>
-                          <p className="text-white font-semibold text-lg">{team?.city} {team?.name}</p>
-                          <p className="text-white/40 text-sm">Loading game info...</p>
+                          <p className="text-fg font-semibold text-lg">{team?.city} {team?.name}</p>
+                          <p className="text-fg/40 text-sm">Loading game info...</p>
                         </div>
                       </div>
                     </div>
@@ -1259,12 +1259,12 @@ export default function LeagueDetail() {
                 if (gameStatus.noGame) {
                   // Team not playing this week (e.g., non-playoff team during playoffs)
                   return (
-                    <div key={idx} className="bg-white/5 rounded-xl p-4">
+                    <div key={idx} className="bg-fg/5 rounded-xl p-4">
                       <div className="flex items-center gap-3">
                         {team?.logo && <img src={team.logo} alt={team.name} className="w-12 h-12 opacity-50" />}
                         <div>
-                          <p className="text-white/50 font-semibold text-lg">{team?.city} {team?.name}</p>
-                          <p className="text-white/40 text-sm">Not playing this week</p>
+                          <p className="text-fg/50 font-semibold text-lg">{team?.city} {team?.name}</p>
+                          <p className="text-fg/40 text-sm">Not playing this week</p>
                         </div>
                       </div>
                     </div>
@@ -1306,7 +1306,7 @@ export default function LeagueDetail() {
                 };
                 
                 return (
-                  <div key={idx} className="rounded-xl overflow-hidden bg-gradient-to-r from-elevated via-canvas to-elevated border border-white/10">
+                  <div key={idx} className="rounded-xl overflow-hidden bg-gradient-to-r from-elevated via-canvas to-elevated border border-fg/10">
                     {/* ESPN-style horizontal layout */}
                     <div className="flex items-center">
                       {/* Left team (your pick) */}
@@ -1340,20 +1340,20 @@ export default function LeagueDetail() {
                         <div className="flex flex-col">
                           {(isLive || isFinal) ? (
                             <span className={`text-4xl font-bold ${
-                              isWinning ? 'text-white' : 'text-white/50'
+                              isWinning ? 'text-fg' : 'text-fg/50'
                             }`}>
                               {gameStatus.team.score}
                             </span>
                           ) : null}
-                          <span className="text-white font-semibold text-sm">{team?.abbreviation}</span>
+                          <span className="text-fg font-semibold text-sm">{team?.abbreviation}</span>
                           {gameStatus.team.record && (
-                            <span className="text-white/40 text-xs">{gameStatus.team.record}</span>
+                            <span className="text-fg/40 text-xs">{gameStatus.team.record}</span>
                           )}
                         </div>
                         
                         {/* Winner arrow */}
                         {isFinal && isWinning && (
-                          <ChevronLeft className="w-5 h-5 text-emerald-400 ml-auto" />
+                          <ChevronLeft className="w-5 h-5 text-emerald-500 ml-auto" />
                         )}
                       </div>
                       
@@ -1361,25 +1361,25 @@ export default function LeagueDetail() {
                       <div className="flex-shrink-0 px-4 py-6 text-center min-w-[100px]">
                         {isScheduled && (
                           <div>
-                            <p className="text-white/60 text-xs">{formatGameTime()}</p>
+                            <p className="text-fg/60 text-xs">{formatGameTime()}</p>
                             {getCountdown() && (
-                              <p className="text-emerald-400 text-lg font-bold mt-1">{getCountdown()}</p>
+                              <p className="text-emerald-500 text-lg font-bold mt-1">{getCountdown()}</p>
                             )}
                           </div>
                         )}
                         {isLive && (
                           <div>
-                            <div className="flex items-center justify-center gap-1.5 text-red-400">
+                            <div className="flex items-center justify-center gap-1.5 text-red-500">
                               <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                               <span className="text-xs font-bold uppercase">{gameStatus.period}Q</span>
                             </div>
-                            <p className="text-white text-lg font-bold">{gameStatus.clock}</p>
+                            <p className="text-fg text-lg font-bold">{gameStatus.clock}</p>
                           </div>
                         )}
                         {isFinal && (
                           <div>
-                            <p className="text-white/50 text-sm font-medium">Final</p>
-                            <p className={`text-xs font-bold mt-1 ${isWinning ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <p className="text-fg/50 text-sm font-medium">Final</p>
+                            <p className={`text-xs font-bold mt-1 ${isWinning ? 'text-emerald-500' : 'text-red-500'}`}>
                               {isWinning ? 'WIN' : 'LOSS'}
                             </p>
                           </div>
@@ -1396,21 +1396,21 @@ export default function LeagueDetail() {
                           }`}>
                             {/* Winner arrow */}
                             {isFinal && oppWinning && (
-                              <ChevronRight className="w-5 h-5 text-white/40 mr-auto" />
+                              <ChevronRight className="w-5 h-5 text-fg/40 mr-auto" />
                             )}
                             
                             {/* Score & Info */}
                             <div className="flex flex-col items-end">
                               {(isLive || isFinal) ? (
                                 <span className={`text-4xl font-bold ${
-                                  oppWinning ? 'text-white' : 'text-white/50'
+                                  oppWinning ? 'text-fg' : 'text-fg/50'
                                 }`}>
                                   {gameStatus.opponent.score}
                                 </span>
                               ) : null}
-                              <span className="text-white/70 font-semibold text-sm">{oppTeamData?.abbreviation || gameStatus.opponent.abbreviation}</span>
+                              <span className="text-fg/70 font-semibold text-sm">{oppTeamData?.abbreviation || gameStatus.opponent.abbreviation}</span>
                               {gameStatus.opponent.record && (
-                                <span className="text-white/40 text-xs">{gameStatus.opponent.record}</span>
+                                <span className="text-fg/40 text-xs">{gameStatus.opponent.record}</span>
                               )}
                             </div>
                             
@@ -1427,9 +1427,9 @@ export default function LeagueDetail() {
                     
                     {/* Live game details - expandable section */}
                     {isLive && gameStatus.situation && (
-                      <div className="px-4 pb-3 border-t border-white/5">
+                      <div className="px-4 pb-3 border-t border-fg/5">
                         <div className={`flex items-center justify-center gap-2 text-xs pt-2 ${
-                          gameStatus.situation.isRedZone ? 'text-red-400' : 'text-white/50'
+                          gameStatus.situation.isRedZone ? 'text-red-500' : 'text-fg/50'
                         }`}>
                           <span>
                             {gameStatus.situation.possession && `${gameStatus.situation.possession} ball`}
@@ -1450,12 +1450,12 @@ export default function LeagueDetail() {
 
       {/* Standings Table */}
       <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden" style={{ animationDelay: '100ms' }}>
-        <div className="p-3 sm:p-4 border-b border-white/10 flex items-center justify-between">
-          <h2 className="font-display text-lg sm:text-xl font-semibold text-white flex items-center gap-2">
+        <div className="p-3 sm:p-4 border-b border-fg/10 flex items-center justify-between">
+          <h2 className="font-display text-lg sm:text-xl font-semibold text-fg flex items-center gap-2">
             <Users className="w-4 h-4 sm:w-5 sm:h-5" />
             Standings
           </h2>
-          <span className="text-white/40 text-xs sm:text-sm">
+          <span className="text-fg/40 text-xs sm:text-sm">
             After {getWeekLabel(loadedWeek || selectedWeek)}{seasonOver && (loadedWeek || selectedWeek) >= currentWeek ? ' (Final)' : ''}
           </span>
         </div>
@@ -1465,7 +1465,7 @@ export default function LeagueDetail() {
           const isLoadingWeek = loadingStandings || loadedWeek !== selectedWeek;
           return (<>
         {/* Mobile Card View */}
-        <div className="sm:hidden divide-y divide-white/5">
+        <div className="sm:hidden divide-y divide-fg/5">
           {sortedStandings.map((member, index) => {
             const displayWeek = loadedWeek || selectedWeek;
             const weekData = member.picks?.[displayWeek];
@@ -1488,7 +1488,7 @@ export default function LeagueDetail() {
             return (
               <div
                 key={member.memberId}
-                className={`p-3 ${member.isMe ? 'bg-nfl-blue/10' : ''} ${effectiveStatus === 'eliminated' ? 'opacity-50' : ''}`}
+                className={`p-3 ${member.isMe ? 'bg-nfl-blue/[0.04]' : ''} ${effectiveStatus === 'eliminated' ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -1499,12 +1499,12 @@ export default function LeagueDetail() {
                       isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
                     />
                     <div>
-                      <p className="text-white font-medium text-sm flex items-center gap-1">
+                      <p className="text-fg font-medium text-sm flex items-center gap-1">
                         {member.displayName}
                         {member.isMe && <span className="text-xs text-nfl-blue">(You)</span>}
                       </p>
                       {member.email && (
-                        <p className="text-white/40 text-xs truncate max-w-[150px]">{member.email}</p>
+                        <p className="text-fg/40 text-xs truncate max-w-[150px]">{member.email}</p>
                       )}
                     </div>
                   </div>
@@ -1513,7 +1513,7 @@ export default function LeagueDetail() {
                   ) : (
                     <span className={`badge text-xs ${
                       isFinalView && effectiveStatus === 'active'
-                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        ? 'bg-amber-500/20 text-amber-600 border-amber-500/30'
                         : effectiveStatus === 'active' ? 'badge-active' : 'badge-eliminated'
                     }`}>
                       {isFinalView && effectiveStatus === 'active' ? 'Winner' : effectiveStatus}
@@ -1532,7 +1532,7 @@ export default function LeagueDetail() {
                       <>
                         <div className="flex gap-1">
                           {Array.from({ length: league.maxStrikes }).map((_, i) => (
-                            <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < effectiveStrikes ? 'bg-red-500' : 'bg-white/20'}`} />
+                            <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < effectiveStrikes ? 'bg-red-500' : 'bg-fg/20'}`} />
                           ))}
                         </div>
 
@@ -1540,7 +1540,7 @@ export default function LeagueDetail() {
                           <div className="flex items-center gap-2 ml-2">
                             {displayPicks.map((pick, idx) => {
                               if (pick.visible === false) {
-                                return <EyeOff key={idx} className="w-4 h-4 text-white/30" />;
+                                return <EyeOff key={idx} className="w-4 h-4 text-fg/30" />;
                               }
                               const team = NFL_TEAMS[String(pick.teamId)];
                               const result = getPickResult(pick, pick.teamId);
@@ -1553,9 +1553,9 @@ export default function LeagueDetail() {
                                       <span className="text-[8px] text-white font-bold">{team?.abbreviation}</span>
                                     </div>
                                   )}
-                                  {!isDoublePick && <span className="text-white/70 text-xs">{team?.name}</span>}
+                                  {!isDoublePick && <span className="text-fg/70 text-xs">{team?.name}</span>}
                                   {result && result !== 'pending' && (
-                                    <span className={`text-xs font-bold ${result === 'win' ? 'text-green-400' : 'text-red-400'}`}>
+                                    <span className={`text-xs font-bold ${result === 'win' ? 'text-green-500' : 'text-red-500'}`}>
                                       {result === 'win' ? 'W' : 'L'}
                                     </span>
                                   )}
@@ -1565,8 +1565,8 @@ export default function LeagueDetail() {
                           </div>
                         ) : selectedWeek <= currentWeek && selectedWeek >= league.startWeek ? (
                           effectiveStatus === 'eliminated'
-                            ? <span className="text-white/20 text-xs ml-2">—</span>
-                            : <span className="text-white/30 text-xs ml-2">No pick</span>
+                            ? <span className="text-fg/20 text-xs ml-2">—</span>
+                            : <span className="text-fg/30 text-xs ml-2">No pick</span>
                         ) : null}
                       </>
                     )}
@@ -1575,9 +1575,9 @@ export default function LeagueDetail() {
                   {isCommissioner && (
                     <button
                       onClick={() => setStrikeDialog({ member, action: null, week: selectedWeek })}
-                      className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                      className="p-1.5 hover:bg-fg/10 rounded transition-colors"
                     >
-                      <Edit3 className="w-4 h-4 text-white/50" />
+                      <Edit3 className="w-4 h-4 text-fg/50" />
                     </button>
                   )}
                 </div>
@@ -1590,21 +1590,21 @@ export default function LeagueDetail() {
         <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/10">
-                <th className="text-left px-4 py-3 text-white/60 text-sm font-medium">Player</th>
-                <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">Strikes</th>
-                <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">Status</th>
+              <tr className="border-b border-fg/10">
+                <th className="text-left px-4 py-3 text-fg/60 text-sm font-medium">Player</th>
+                <th className="text-center px-4 py-3 text-fg/60 text-sm font-medium">Strikes</th>
+                <th className="text-center px-4 py-3 text-fg/60 text-sm font-medium">Status</th>
                 {isCommissioner && league.entryFee > 0 && (
-                  <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">Paid</th>
+                  <th className="text-center px-4 py-3 text-fg/60 text-sm font-medium">Paid</th>
                 )}
-                <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">
+                <th className="text-center px-4 py-3 text-fg/60 text-sm font-medium">
                   {getWeekLabel(selectedWeek)} Pick{(league.doublePickWeeks || []).includes(selectedWeek) ? 's' : ''}
                   {(league.doublePickWeeks || []).includes(selectedWeek) && (
                     <span className="text-orange-400 ml-1 text-xs">×2</span>
                   )}
                 </th>
                 {isCommissioner && (
-                  <th className="text-center px-4 py-3 text-white/60 text-sm font-medium">Edit</th>
+                  <th className="text-center px-4 py-3 text-fg/60 text-sm font-medium">Edit</th>
                 )}
               </tr>
             </thead>
@@ -1631,8 +1631,8 @@ export default function LeagueDetail() {
                 return (
                   <tr
                     key={member.memberId}
-                    className={`border-b border-white/5 transition-colors h-[85px] ${
-                      member.isMe ? 'bg-nfl-blue/10' : 'hover:bg-white/5'
+                    className={`border-b border-fg/5 transition-colors h-[85px] ${
+                      member.isMe ? 'bg-nfl-blue/[0.04]' : 'hover:bg-fg/5'
                     } ${effectiveStatus === 'eliminated' ? 'opacity-50' : ''}`}
                   >
                     <td className="px-4 py-4">
@@ -1644,14 +1644,14 @@ export default function LeagueDetail() {
                           isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
                         />
                         <div>
-                          <p className="text-white font-medium flex items-center gap-2">
+                          <p className="text-fg font-medium flex items-center gap-2">
                             {member.displayName}
                             {member.isMe && (
                               <span className="text-xs text-nfl-blue">(You)</span>
                             )}
                           </p>
                           {member.email && (
-                            <p className="text-white/40 text-xs">{member.email}</p>
+                            <p className="text-fg/40 text-xs">{member.email}</p>
                           )}
                         </div>
                       </div>
@@ -1667,7 +1667,7 @@ export default function LeagueDetail() {
                               className={`w-3 h-3 rounded-full ${
                                 i < effectiveStrikes
                                   ? 'bg-red-500'
-                                  : 'bg-white/20'
+                                  : 'bg-fg/20'
                               }`}
                             />
                           ))}
@@ -1680,7 +1680,7 @@ export default function LeagueDetail() {
                       ) : (
                         <span className={`badge ${
                           isFinalView && effectiveStatus === 'active'
-                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                            ? 'bg-amber-500/20 text-amber-600 border-amber-500/30'
                             : effectiveStatus === 'active'
                               ? 'badge-active'
                               : 'badge-eliminated'
@@ -1699,8 +1699,8 @@ export default function LeagueDetail() {
                           disabled={togglingPayment === member.memberId}
                           className={`px-2 py-1 rounded text-xs font-medium transition-all ${
                             member.hasPaid
-                              ? 'bg-green-500/20 text-green-400'
-                              : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                              ? 'bg-green-500/20 text-green-500'
+                              : 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
                           }`}
                         >
                           {togglingPayment === member.memberId ? (
@@ -1728,8 +1728,8 @@ export default function LeagueDetail() {
                                 if (pick.visible === false) {
                                   return (
                                     <div key={idx} className="flex flex-col items-center">
-                                      <EyeOff className="w-7 h-7 text-white/40" />
-                                      <span className="text-white/40 text-xs mt-1">???</span>
+                                      <EyeOff className="w-7 h-7 text-fg/40" />
+                                      <span className="text-fg/40 text-xs mt-1">???</span>
                                     </div>
                                   );
                                 }
@@ -1741,17 +1741,17 @@ export default function LeagueDetail() {
                                       <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />
                                     ) : (
                                       <div 
-                                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                        className="w-8 h-8 rounded-full flex items-center justify-center text-fg text-xs font-bold"
                                         style={{ backgroundColor: team?.color || '#666' }}
                                       >
                                         {team?.abbreviation}
                                       </div>
                                     )}
                                     <div className="flex items-center gap-1 mt-1">
-                                      <span className="text-white/70 text-xs">{team?.abbreviation}</span>
+                                      <span className="text-fg/70 text-xs">{team?.abbreviation}</span>
                                       {result && result !== 'pending' && (
                                         <span className={`text-xs font-bold ${
-                                          result === 'win' ? 'text-green-400' : 'text-red-400'
+                                          result === 'win' ? 'text-green-500' : 'text-red-500'
                                         }`}>
                                           {result === 'win' ? 'W' : 'L'}
                                         </span>
@@ -1768,8 +1768,8 @@ export default function LeagueDetail() {
                                 if (pick.visible === false) {
                                   return (
                                     <div key={idx} className="flex flex-col items-center">
-                                      <EyeOff className="w-7 h-7 text-white/40" />
-                                      <span className="text-white/40 text-xs mt-1">???</span>
+                                      <EyeOff className="w-7 h-7 text-fg/40" />
+                                      <span className="text-fg/40 text-xs mt-1">???</span>
                                     </div>
                                   );
                                 }
@@ -1781,17 +1781,17 @@ export default function LeagueDetail() {
                                       <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />
                                     ) : (
                                       <div 
-                                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                        className="w-8 h-8 rounded-full flex items-center justify-center text-fg text-xs font-bold"
                                         style={{ backgroundColor: team?.color || '#666' }}
                                       >
                                         {team?.abbreviation}
                                       </div>
                                     )}
                                     <div className="flex items-center gap-1 mt-1">
-                                      <span className="text-white/70 text-xs">{team?.abbreviation}</span>
+                                      <span className="text-fg/70 text-xs">{team?.abbreviation}</span>
                                       {result && result !== 'pending' && (
                                         <span className={`text-xs font-bold ${
-                                          result === 'win' ? 'text-green-400' : 'text-red-400'
+                                          result === 'win' ? 'text-green-500' : 'text-red-500'
                                         }`}>
                                           {result === 'win' ? 'W' : 'L'}
                                         </span>
@@ -1804,10 +1804,10 @@ export default function LeagueDetail() {
                           )
                         ) : selectedWeek >= league.startWeek ? (
                           effectiveStatus === 'eliminated'
-                            ? <span className="text-white/20 text-sm">—</span>
-                            : <span className="text-white/40 text-sm">No pick{isDoublePick ? 's' : ''}</span>
+                            ? <span className="text-fg/20 text-sm">—</span>
+                            : <span className="text-fg/40 text-sm">No pick{isDoublePick ? 's' : ''}</span>
                         ) : (
-                          <span className="text-white/30 text-sm">—</span>
+                          <span className="text-fg/30 text-sm">—</span>
                         )}
                       </div>
                     </td>
@@ -1819,15 +1819,15 @@ export default function LeagueDetail() {
                             className="p-1.5 hover:bg-emerald-500/20 rounded-lg transition-colors group"
                             title="Set pick"
                           >
-                            <CalendarCheck className="w-4 h-4 text-emerald-400/70 group-hover:text-emerald-400" />
+                            <CalendarCheck className="w-4 h-4 text-emerald-500/70 group-hover:text-emerald-500" />
                           </button>
                           <button
                             onClick={() => setStrikeDialog({ member, action: null, week: selectedWeek })}
                             disabled={modifyingStrike === member.memberId}
-                            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-30 group"
+                            className="p-1.5 hover:bg-fg/10 rounded-lg transition-colors disabled:opacity-30 group"
                             title="Modify strikes"
                           >
-                            <Pencil className="w-4 h-4 text-white/50 group-hover:text-white" />
+                            <Pencil className="w-4 h-4 text-fg/50 group-hover:text-fg" />
                           </button>
                         </div>
                       </td>
@@ -1843,16 +1843,16 @@ export default function LeagueDetail() {
 
         {standings.length === 0 && (
           <div className="p-12 text-center">
-            <Users className="w-12 h-12 text-white/20 mx-auto mb-4" />
-            <p className="text-white/60">No members yet</p>
+            <Users className="w-12 h-12 text-fg/20 mx-auto mb-4" />
+            <p className="text-fg/60">No members yet</p>
           </div>
         )}
       </div>
 
       {/* My Picks History */}
       <div className="glass-card rounded-2xl mt-6 overflow-hidden" style={{ animationDelay: '200ms' }}>
-        <div className="p-4 border-b border-white/10">
-          <h2 className="font-display text-xl font-semibold text-white flex items-center gap-2">
+        <div className="p-4 border-b border-fg/10">
+          <h2 className="font-display text-xl font-semibold text-fg flex items-center gap-2">
             <Eye className="w-5 h-5" />
             My Picks History
           </h2>
@@ -1912,11 +1912,11 @@ export default function LeagueDetail() {
               });
               const isComplete = weekPicks.length === requiredPicks;
               
-              let bgClass = 'bg-white/5 border border-white/10';
+              let bgClass = 'bg-fg/5 border border-fg/10';
               const isPastWeek = week < currentWeek || (week === currentWeek && seasonOver);
               if (isElimBeforeThisWeek && weekPicks.length === 0 && isPastWeek) {
                 // Already eliminated — gray/muted card
-                bgClass = 'bg-white/[0.02] border border-white/5';
+                bgClass = 'bg-fg/[0.02] border border-fg/5';
               } else if (weekPicks.length > 0) {
                 if (hasLoss) {
                   bgClass = 'bg-red-500/20 border border-red-500/30';
@@ -1929,7 +1929,7 @@ export default function LeagueDetail() {
                 // Missed pick while still active = strike
                 bgClass = 'bg-red-500/20 border border-red-500/30';
               } else if (week < league.startWeek) {
-                bgClass = 'bg-white/[0.02] border border-white/5';
+                bgClass = 'bg-fg/[0.02] border border-fg/5';
               }
               
               return (
@@ -1937,7 +1937,7 @@ export default function LeagueDetail() {
                   key={week}
                   className={`flex-shrink-0 flex flex-col items-center p-3 rounded-xl w-24 h-28 snap-start ${bgClass} ${isCurrent ? 'ring-2 ring-emerald-500' : ''}`}
                 >
-                  <span className="text-xs text-white/50 mb-2 text-center whitespace-nowrap">
+                  <span className="text-xs text-fg/50 mb-2 text-center whitespace-nowrap">
                     {getWeekFullLabel(week)}
                     {isDoublePick && <span className="text-orange-400 ml-1">×2</span>}
                   </span>
@@ -1959,7 +1959,7 @@ export default function LeagueDetail() {
                                 />
                               ) : (
                                 <div 
-                                  className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                  className="w-10 h-10 rounded-full flex items-center justify-center text-fg text-xs font-bold"
                                   style={{ backgroundColor: team?.color || '#666' }}
                                 >
                                   {team?.abbreviation || pick.teamId}
@@ -1968,7 +1968,7 @@ export default function LeagueDetail() {
                               {/* Show individual W/L for double picks */}
                               {isDoublePick && result && result !== 'pending' && (
                                 <span className={`text-xs font-bold ${
-                                  result === 'win' ? 'text-green-400' : 'text-red-400'
+                                  result === 'win' ? 'text-green-500' : 'text-red-500'
                                 }`}>
                                   {result === 'win' ? 'W' : 'L'}
                                 </span>
@@ -1978,7 +1978,7 @@ export default function LeagueDetail() {
                         })}
                         {/* Show placeholder for missing second pick */}
                         {isDoublePick && weekPicks.length < 2 && (
-                          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/30 text-lg">
+                          <div className="w-10 h-10 rounded-full bg-fg/10 flex items-center justify-center text-fg/30 text-lg">
                             ?
                           </div>
                         )}
@@ -1988,7 +1988,7 @@ export default function LeagueDetail() {
                       {!isDoublePick && (
                         !hasPending ? (
                           <span className={`text-xs font-medium ${
-                            hasLoss ? 'text-red-400' : 'text-green-400'
+                            hasLoss ? 'text-red-500' : 'text-green-500'
                           }`}>
                             {hasWin ? 'WIN' : 'LOSS'}
                           </span>
@@ -2005,41 +2005,41 @@ export default function LeagueDetail() {
                       isElimBeforeThisWeek ? (
                         // Already eliminated before this week — gray/muted
                         <>
-                          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
-                            <span className="text-white/15 text-lg">—</span>
+                          <div className="w-10 h-10 rounded-full bg-fg/5 flex items-center justify-center">
+                            <span className="text-fg/15 text-lg">—</span>
                           </div>
-                          <span className="text-xs font-medium text-white/20">OUT</span>
+                          <span className="text-xs font-medium text-fg/20">OUT</span>
                         </>
                       ) : (
                         // Still active but missed — red
                         <>
                           <div className="flex items-center gap-1 mb-1">
                             <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-                              <X className="w-5 h-5 text-red-400" />
+                              <X className="w-5 h-5 text-red-500" />
                             </div>
                             {isDoublePick && (
                               <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-                                <X className="w-5 h-5 text-red-400" />
+                                <X className="w-5 h-5 text-red-500" />
                               </div>
                             )}
                           </div>
-                          <span className="text-xs font-medium text-red-400">MISS</span>
+                          <span className="text-xs font-medium text-red-500">MISS</span>
                         </>
                       )
                     ) : (
                       <div className="flex items-center gap-1">
-                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/30 text-lg">
+                        <div className="w-10 h-10 rounded-full bg-fg/10 flex items-center justify-center text-fg/30 text-lg">
                           ?
                         </div>
                         {isDoublePick && (
-                          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/30 text-lg">
+                          <div className="w-10 h-10 rounded-full bg-fg/10 flex items-center justify-center text-fg/30 text-lg">
                             ?
                           </div>
                         )}
                       </div>
                     )
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/20">
+                    <div className="w-10 h-10 rounded-full bg-fg/5 flex items-center justify-center text-fg/20">
                       —
                     </div>
                   )}
@@ -2056,21 +2056,21 @@ export default function LeagueDetail() {
         <div className="modal-overlay" onClick={() => setShowSettings(false)}>
           <div className="modal-content animate-in max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+              <h2 className="text-xl font-semibold text-fg flex items-center gap-2">
                 <Settings className="w-5 h-5" />
                 League Settings
               </h2>
               <button
                 onClick={() => setShowSettings(false)}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-fg/10 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5 text-white/60" />
+                <X className="w-5 h-5 text-fg/60" />
               </button>
             </div>
 
             <div className="space-y-6">
               <div>
-                <label className="block text-white/80 text-sm font-medium mb-2">
+                <label className="block text-fg/80 text-sm font-medium mb-2">
                   Max Strikes Before Elimination
                 </label>
                 <div className="flex items-center gap-3">
@@ -2081,14 +2081,14 @@ export default function LeagueDetail() {
                       className={`w-12 h-12 rounded-xl font-semibold transition-all ${
                         settings.maxStrikes === num
                           ? 'bg-nfl-blue text-white'
-                          : 'bg-white/10 text-white/60 hover:bg-white/15'
+                          : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
                       }`}
                     >
                       {num}
                     </button>
                   ))}
                 </div>
-                <p className="text-white/40 text-xs mt-2">
+                <p className="text-fg/40 text-xs mt-2">
                   Players are eliminated after reaching this many strikes
                 </p>
               </div>
@@ -2096,7 +2096,7 @@ export default function LeagueDetail() {
               {/* Double Pick Weeks */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-white/80 text-sm font-medium">
+                  <label className="block text-fg/80 text-sm font-medium">
                     Double Pick Weeks
                   </label>
                   <div className="flex gap-2">
@@ -2105,7 +2105,7 @@ export default function LeagueDetail() {
                       className={`px-2 py-1 text-xs rounded-lg transition-all ${
                         settings.doublePickWeeks.length === 0
                           ? 'bg-nfl-blue text-white'
-                          : 'bg-white/10 text-white/60 hover:bg-white/15'
+                          : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
                       }`}
                     >
                       None
@@ -2118,7 +2118,7 @@ export default function LeagueDetail() {
                       className={`px-2 py-1 text-xs rounded-lg transition-all ${
                         settings.doublePickWeeks.length === Array.from({ length: 23 - league.startWeek + 1 }, (_, i) => league.startWeek + i).filter(w => w !== 22).length
                           ? 'bg-nfl-blue text-white'
-                          : 'bg-white/10 text-white/60 hover:bg-white/15'
+                          : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
                       }`}
                     >
                       All Weeks
@@ -2138,17 +2138,17 @@ export default function LeagueDetail() {
                       }}
                       className={`w-10 h-10 rounded-lg font-medium text-sm transition-all ${
                         (settings.doublePickWeeks || []).includes(weekNum)
-                          ? 'bg-orange-500 text-white'
+                          ? 'bg-orange-500 text-fg'
                           : weekNum > 18
-                          ? 'bg-purple-500/20 text-white/60 hover:bg-purple-500/30'
-                          : 'bg-white/10 text-white/60 hover:bg-white/15'
+                          ? 'bg-purple-500/20 text-fg/60 hover:bg-purple-500/30'
+                          : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
                       } ${(settings.doublePickWeeks || []).includes(weekNum) ? '' : ''}`}
                     >
                       {weekNum}
                     </button>
                   ))}
                 </div>
-                <p className="text-white/40 text-xs mt-2">
+                <p className="text-fg/40 text-xs mt-2">
                   {settings.doublePickWeeks?.length > 0 
                     ? `Members must pick 2 teams in week${settings.doublePickWeeks.length > 1 ? 's' : ''} ${settings.doublePickWeeks.join(', ')}. Each loss = 1 strike.`
                     : 'Select weeks where members must pick 2 teams instead of 1'
@@ -2158,11 +2158,11 @@ export default function LeagueDetail() {
 
               {/* Entry Fee */}
               <div>
-                <label className="block text-white/80 text-sm font-medium mb-2">
+                <label className="block text-fg/80 text-sm font-medium mb-2">
                   Entry Fee per Member
                 </label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fg/40" />
                   <input
                     type="number"
                     min="0"
@@ -2170,21 +2170,21 @@ export default function LeagueDetail() {
                     value={settings.entryFee || ''}
                     onChange={(e) => setSettings({ ...settings, entryFee: parseFloat(e.target.value) || 0 })}
                     placeholder="0"
-                    className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue"
+                    className="w-full pl-10 pr-4 py-3 bg-fg/5 border border-fg/10 rounded-xl text-fg placeholder-fg/40 focus:outline-none focus:border-nfl-blue"
                   />
                 </div>
-                <p className="text-white/40 text-xs mt-2">
+                <p className="text-fg/40 text-xs mt-2">
                   Calculated pot: ${((settings.entryFee || 0) * (league.members?.length || 0)).toLocaleString()}
                 </p>
               </div>
 
               {/* Manual Pot Override */}
               <div>
-                <label className="block text-white/80 text-sm font-medium mb-2">
+                <label className="block text-fg/80 text-sm font-medium mb-2">
                   Manual Prize Pot Override
                 </label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fg/40" />
                   <input
                     type="number"
                     min="0"
@@ -2192,10 +2192,10 @@ export default function LeagueDetail() {
                     value={settings.prizePotOverride || ''}
                     onChange={(e) => setSettings({ ...settings, prizePotOverride: e.target.value ? parseFloat(e.target.value) : null })}
                     placeholder="Leave empty to use calculated"
-                    className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-nfl-blue"
+                    className="w-full pl-10 pr-4 py-3 bg-fg/5 border border-fg/10 rounded-xl text-fg placeholder-fg/40 focus:outline-none focus:border-nfl-blue"
                   />
                 </div>
-                <p className="text-white/40 text-xs mt-2">
+                <p className="text-fg/40 text-xs mt-2">
                   {settings.prizePotOverride 
                     ? `Using manual pot: $${settings.prizePotOverride.toLocaleString()}`
                     : 'Leave empty to calculate from entry fee × members'
@@ -2206,14 +2206,14 @@ export default function LeagueDetail() {
               {/* Payment Status - Members List */}
               {(settings.entryFee > 0 || settings.prizePotOverride) && (
                 <div>
-                  <label className="block text-white/80 text-sm font-medium mb-2">
+                  <label className="block text-fg/80 text-sm font-medium mb-2">
                     Payment Status
                   </label>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {league.members?.map(member => (
                       <div 
                         key={member.id}
-                        className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
+                        className="flex items-center justify-between p-3 bg-fg/5 rounded-lg"
                       >
                         <div className="flex items-center gap-2">
                           <Avatar 
@@ -2223,9 +2223,9 @@ export default function LeagueDetail() {
                             isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
                           />
                           <div>
-                            <span className="text-white text-sm">{member.displayName}</span>
+                            <span className="text-fg text-sm">{member.displayName}</span>
                             {member.email && (
-                              <p className="text-white/40 text-xs">{member.email}</p>
+                              <p className="text-fg/40 text-xs">{member.email}</p>
                             )}
                           </div>
                         </div>
@@ -2234,8 +2234,8 @@ export default function LeagueDetail() {
                           disabled={togglingPayment === member.id}
                           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
                             member.hasPaid
-                              ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                              : 'bg-white/10 text-white/60 hover:bg-white/15'
+                              ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
+                              : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
                           }`}
                         >
                           {togglingPayment === member.id ? (
@@ -2290,14 +2290,14 @@ export default function LeagueDetail() {
         <div className="modal-overlay" onClick={() => setStrikeDialog(null)}>
           <div className="modal-content animate-in max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/10">
-                <Edit3 className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-fg/10">
+                <Edit3 className="w-6 h-6 text-fg" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-white">
+                <h2 className="text-xl font-semibold text-fg">
                   Modify Strikes
                 </h2>
-                <p className="text-white/60 text-sm">
+                <p className="text-fg/60 text-sm">
                   {strikeDialog.member.displayName} • {strikeDialog.member.strikes}/{league.maxStrikes} strikes
                 </p>
               </div>
@@ -2312,7 +2312,7 @@ export default function LeagueDetail() {
                     className={`w-6 h-6 rounded-full transition-all ${
                       i < strikeDialog.member.strikes
                         ? 'bg-red-500'
-                        : 'bg-white/20'
+                        : 'bg-fg/20'
                     }`}
                   />
                 ))}
@@ -2326,11 +2326,11 @@ export default function LeagueDetail() {
                   className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
                     strikeDialog.action === 'remove'
                       ? 'border-green-500 bg-green-500/20'
-                      : 'border-white/10 hover:border-white/30 disabled:opacity-30 disabled:hover:border-white/10'
+                      : 'border-fg/10 hover:border-fg/30 disabled:opacity-30 disabled:hover:border-fg/10'
                   }`}
                 >
-                  <Minus className="w-6 h-6 text-green-400" />
-                  <span className="text-sm font-medium text-white">Remove Strike</span>
+                  <Minus className="w-6 h-6 text-green-500" />
+                  <span className="text-sm font-medium text-fg">Remove Strike</span>
                 </button>
                 <button
                   onClick={() => setStrikeDialog({ ...strikeDialog, action: 'add' })}
@@ -2338,11 +2338,11 @@ export default function LeagueDetail() {
                   className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
                     strikeDialog.action === 'add'
                       ? 'border-red-500 bg-red-500/20'
-                      : 'border-white/10 hover:border-white/30 disabled:opacity-30 disabled:hover:border-white/10'
+                      : 'border-fg/10 hover:border-fg/30 disabled:opacity-30 disabled:hover:border-fg/10'
                   }`}
                 >
-                  <Plus className="w-6 h-6 text-red-400" />
-                  <span className="text-sm font-medium text-white">Add Strike</span>
+                  <Plus className="w-6 h-6 text-red-500" />
+                  <span className="text-sm font-medium text-fg">Add Strike</span>
                 </button>
               </div>
 
@@ -2350,7 +2350,7 @@ export default function LeagueDetail() {
                 <>
                   {/* Week Selector */}
                   <div>
-                    <label className="block text-white/80 text-sm font-medium mb-2">
+                    <label className="block text-fg/80 text-sm font-medium mb-2">
                       For Week
                     </label>
                     <div className="flex flex-wrap gap-2">
@@ -2361,7 +2361,7 @@ export default function LeagueDetail() {
                           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                             strikeDialog.week === week
                               ? 'bg-nfl-blue text-white'
-                              : 'bg-white/10 text-white/60 hover:bg-white/20'
+                              : 'bg-fg/10 text-fg/60 hover:bg-fg/20'
                           }`}
                         >
                           {getShortWeekLabel(week)}
@@ -2380,14 +2380,14 @@ export default function LeagueDetail() {
                   </div>
 
                   <div>
-                    <label className="block text-white/80 text-sm font-medium mb-2">
+                    <label className="block text-fg/80 text-sm font-medium mb-2">
                       Reason (visible to all members)
                     </label>
                     <textarea
                       value={strikeReason}
                       onChange={(e) => setStrikeReason(e.target.value)}
                       placeholder="e.g., Missed pick deadline, Commissioner adjustment..."
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-nfl-blue resize-none"
+                      className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-xl text-fg placeholder-fg/30 focus:outline-none focus:border-nfl-blue resize-none"
                       rows={2}
                     />
                   </div>
@@ -2409,7 +2409,7 @@ export default function LeagueDetail() {
                       ? 'bg-red-500 hover:bg-red-600 text-white'
                       : strikeDialog.action === 'remove'
                       ? 'bg-green-500 hover:bg-green-600 text-white'
-                      : 'bg-white/10 text-white/50'
+                      : 'bg-fg/10 text-fg/50'
                   }`}
                 >
                   {modifyingStrike ? (
@@ -2442,13 +2442,13 @@ export default function LeagueDetail() {
           <div className="modal-content animate-in max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-emerald-500/20">
-                <CalendarCheck className="w-6 h-6 text-emerald-400" />
+                <CalendarCheck className="w-6 h-6 text-emerald-500" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-white">
+                <h2 className="text-xl font-semibold text-fg">
                   Set Pick{isDoublePick ? 's' : ''}
                 </h2>
-                <p className="text-white/60 text-sm">
+                <p className="text-fg/60 text-sm">
                   {pickDialog.member.displayName} • {getWeekLabel(pickDialog.week)}
                   {isDoublePick && <span className="text-orange-400 ml-2">(Double Pick Week)</span>}
                 </p>
@@ -2458,7 +2458,7 @@ export default function LeagueDetail() {
             <div className="space-y-4">
               {/* Week Selector */}
               <div>
-                <label className="block text-white/80 text-sm font-medium mb-2">
+                <label className="block text-fg/80 text-sm font-medium mb-2">
                   Select Week
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -2477,7 +2477,7 @@ export default function LeagueDetail() {
                             ? 'bg-nfl-blue text-white'
                             : weekIsDouble
                             ? 'bg-orange-500/20 text-orange-300 hover:bg-orange-500/30'
-                            : 'bg-white/10 text-white/60 hover:bg-white/20'
+                            : 'bg-fg/10 text-fg/60 hover:bg-fg/20'
                         }`}
                         title={getWeekLabel(week)}
                       >
@@ -2490,20 +2490,20 @@ export default function LeagueDetail() {
               </div>
 
               {/* Current Pick(s) Display */}
-              <div className="bg-white/5 rounded-lg p-3">
-                <span className="text-white/50 text-xs">Current Pick{isDoublePick ? 's' : ''}:</span>
+              <div className="bg-fg/5 rounded-lg p-3">
+                <span className="text-fg/50 text-xs">Current Pick{isDoublePick ? 's' : ''}:</span>
                 {currentWeekPicks.length > 0 ? (
                   <div className="flex flex-wrap gap-2 mt-1">
                     {currentWeekPicks.map((pick, idx) => {
                       const team = NFL_TEAMS[String(pick.teamId)];
                       const result = getPickResult(pick, pick.teamId);
                       return (
-                        <div key={idx} className="flex items-center gap-2 bg-white/5 rounded-lg px-2 py-1">
+                        <div key={idx} className="flex items-center gap-2 bg-fg/5 rounded-lg px-2 py-1">
                           {team?.logo && <img src={team.logo} alt={team.name} className="w-5 h-5" />}
-                          <span className="text-white text-sm">{team?.name || pick.teamId}</span>
+                          <span className="text-fg text-sm">{team?.name || pick.teamId}</span>
                           {result && result !== 'pending' && (
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
-                              result === 'win' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                              result === 'win' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
                             }`}>
                               {result.toUpperCase()}
                             </span>
@@ -2520,10 +2520,10 @@ export default function LeagueDetail() {
                         {NFL_TEAMS[String(currentPick.teamId)]?.logo && (
                           <img src={NFL_TEAMS[String(currentPick.teamId)].logo} alt="" className="w-5 h-5" />
                         )}
-                        <span className="text-white text-sm">{NFL_TEAMS[String(currentPick.teamId)]?.name}</span>
+                        <span className="text-fg text-sm">{NFL_TEAMS[String(currentPick.teamId)]?.name}</span>
                         {result && result !== 'pending' && (
                           <span className={`text-xs px-1.5 py-0.5 rounded ${
-                            result === 'win' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                            result === 'win' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
                           }`}>
                             {result.toUpperCase()}
                           </span>
@@ -2532,7 +2532,7 @@ export default function LeagueDetail() {
                     );
                   })()
                 ) : (
-                  <p className="text-white/40 text-sm mt-1">No pick for {getWeekLabel(pickDialog.week)}</p>
+                  <p className="text-fg/40 text-sm mt-1">No pick for {getWeekLabel(pickDialog.week)}</p>
                 )}
               </div>
 
@@ -2547,10 +2547,10 @@ export default function LeagueDetail() {
                         <div key={teamId} className="flex items-center gap-2 bg-emerald-500/20 rounded-lg px-2 py-1">
                           <span className="text-emerald-300 text-xs font-bold">#{idx + 1}</span>
                           {team?.logo && <img src={team.logo} alt={team.name} className="w-5 h-5" />}
-                          <span className="text-white text-sm">{team?.name}</span>
+                          <span className="text-fg text-sm">{team?.name}</span>
                           <button
                             onClick={() => setSelectedTeamsForPick(prev => prev.filter(id => id !== teamId))}
-                            className="text-white/50 hover:text-red-400 ml-1"
+                            className="text-fg/50 hover:text-red-500 ml-1"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -2563,7 +2563,7 @@ export default function LeagueDetail() {
 
               {/* Team Selector */}
               <div>
-                <label className="block text-white/80 text-sm font-medium mb-2">
+                <label className="block text-fg/80 text-sm font-medium mb-2">
                   Select {requiredPicks} Team{requiredPicks > 1 ? 's' : ''}
                 </label>
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-[250px] overflow-y-auto p-1">
@@ -2588,10 +2588,10 @@ export default function LeagueDetail() {
                           isSelected
                             ? 'bg-emerald-500 ring-2 ring-emerald-400'
                             : isUsed
-                            ? 'bg-white/5 opacity-30 cursor-not-allowed'
+                            ? 'bg-fg/5 opacity-30 cursor-not-allowed'
                             : canSelect
-                            ? 'bg-white/5 hover:bg-white/10'
-                            : 'bg-white/5 opacity-50'
+                            ? 'bg-fg/5 hover:bg-fg/10'
+                            : 'bg-fg/5 opacity-50'
                         }`}
                         title={isUsed ? `Already used by ${pickDialog.member.displayName}` : team.name}
                       >
@@ -2605,14 +2605,14 @@ export default function LeagueDetail() {
                           alt={team.name}
                           className="w-8 h-8 object-contain"
                         />
-                        <span className={`text-[10px] font-medium ${isSelected ? 'text-white' : 'text-white/60'}`}>
+                        <span className={`text-[10px] font-medium ${isSelected ? 'text-fg' : 'text-fg/60'}`}>
                           {team.abbreviation}
                         </span>
                       </button>
                     );
                   })}
                 </div>
-                <p className="text-white/40 text-xs mt-2">
+                <p className="text-fg/40 text-xs mt-2">
                   {isDoublePick 
                     ? `Select 2 different teams. Grayed out teams have already been used.`
                     : `Grayed out teams have already been used by this player.`
@@ -2622,14 +2622,14 @@ export default function LeagueDetail() {
 
               {/* Reason */}
               <div>
-                <label className="block text-white/80 text-sm font-medium mb-2">
+                <label className="block text-fg/80 text-sm font-medium mb-2">
                   Reason (visible to all members)
                 </label>
                 <textarea
                   value={pickReason}
                   onChange={(e) => setPickReason(e.target.value)}
                   placeholder="e.g., Player requested change, Missed deadline..."
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-nfl-blue resize-none"
+                  className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-xl text-fg placeholder-fg/30 focus:outline-none focus:border-nfl-blue resize-none"
                   rows={2}
                 />
               </div>
@@ -2678,30 +2678,30 @@ export default function LeagueDetail() {
         <div className="modal-overlay" onClick={() => setShowActionLog(false)}>
           <div className="modal-content animate-in max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+              <h2 className="text-xl font-semibold text-fg flex items-center gap-2">
                 <History className="w-5 h-5" />
                 Commissioner Actions
               </h2>
               <button
                 onClick={() => setShowActionLog(false)}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-fg/10 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5 text-white/60" />
+                <X className="w-5 h-5 text-fg/60" />
               </button>
             </div>
 
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
               {actionLog.length === 0 ? (
                 <div className="text-center py-8">
-                  <History className="w-10 h-10 text-white/20 mx-auto mb-3" />
-                  <p className="text-white/40">No commissioner actions yet</p>
+                  <History className="w-10 h-10 text-fg/20 mx-auto mb-3" />
+                  <p className="text-fg/40">No commissioner actions yet</p>
                 </div>
               ) : (
                 actionLog.map((log, idx) => {
                   const team = log.teamId ? NFL_TEAMS[String(log.teamId)] : null;
                   
                   return (
-                    <div key={log.id || idx} className="bg-white/5 rounded-xl p-4">
+                    <div key={log.id || idx} className="bg-fg/5 rounded-xl p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2">
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
@@ -2714,17 +2714,17 @@ export default function LeagueDetail() {
                               : 'bg-emerald-500/20'
                           }`}>
                             {log.action === 'strike_added' ? (
-                              <Plus className="w-4 h-4 text-red-400" />
+                              <Plus className="w-4 h-4 text-red-500" />
                             ) : log.action === 'strike_removed' ? (
-                              <Minus className="w-4 h-4 text-green-400" />
+                              <Minus className="w-4 h-4 text-green-500" />
                             ) : log.action === 'settings_changed' ? (
                               <Settings className="w-4 h-4 text-purple-400" />
                             ) : (
-                              <CalendarCheck className="w-4 h-4 text-emerald-400" />
+                              <CalendarCheck className="w-4 h-4 text-emerald-500" />
                             )}
                           </div>
                           <div>
-                            <p className="text-white text-sm font-medium">
+                            <p className="text-fg text-sm font-medium">
                               {log.action === 'strike_added' 
                                 ? 'Strike Added' 
                                 : log.action === 'strike_removed'
@@ -2732,9 +2732,9 @@ export default function LeagueDetail() {
                                 : log.action === 'settings_changed'
                                 ? 'Settings Changed'
                                 : 'Pick Set'}
-                              {log.week && <span className="text-white/50 font-normal"> • Week {log.week}</span>}
+                              {log.week && <span className="text-fg/50 font-normal"> • Week {log.week}</span>}
                             </p>
-                            <p className="text-white/50 text-xs flex items-center gap-1">
+                            <p className="text-fg/50 text-xs flex items-center gap-1">
                               {log.action === 'settings_changed' ? (
                                 <span>{log.reason}</span>
                               ) : (
@@ -2752,12 +2752,12 @@ export default function LeagueDetail() {
                             </p>
                           </div>
                         </div>
-                        <span className="text-white/30 text-xs">
+                        <span className="text-fg/40 text-xs whitespace-nowrap">
                           {new Date(log.timestamp).toLocaleDateString()}
                         </span>
                       </div>
                       {log.reason && log.action !== 'settings_changed' && (
-                        <p className="text-white/60 text-sm mt-2 pl-10">
+                        <p className="text-fg/60 text-sm mt-2 pl-10">
                           "{log.reason}"
                         </p>
                       )}

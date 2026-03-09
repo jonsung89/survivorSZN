@@ -38,7 +38,7 @@ export default function EmailPrompt() {
         {/* Close button */}
         <button
           onClick={dismissEmailPrompt}
-          className="absolute top-4 right-4 text-white/40 hover:text-white/70 transition-colors"
+          className="absolute top-4 right-4 text-fg/40 hover:text-fg/70 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
@@ -49,10 +49,10 @@ export default function EmailPrompt() {
         </div>
 
         {/* Header */}
-        <h2 className="text-xl font-bold text-white text-center mb-2">
+        <h2 className="text-xl font-bold text-fg text-center mb-2">
           Add Your Email
         </h2>
-        <p className="text-white/60 text-sm text-center mb-6">
+        <p className="text-fg/60 text-sm text-center mb-6">
           Help your league commissioners identify you and receive important updates
         </p>
 
@@ -66,7 +66,7 @@ export default function EmailPrompt() {
               setError('');
             }}
             placeholder="your@email.com"
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-nfl-blue mb-3"
+            className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-xl text-fg placeholder-fg/30 focus:outline-none focus:border-nfl-blue mb-3"
             autoFocus
           />
           
@@ -78,7 +78,7 @@ export default function EmailPrompt() {
             <button
               type="button"
               onClick={dismissEmailPrompt}
-              className="flex-1 py-3 px-4 rounded-xl bg-white/5 text-white/70 hover:bg-white/10 transition-colors"
+              className="flex-1 py-3 px-4 rounded-xl bg-fg/5 text-fg/70 hover:bg-fg/10 transition-colors"
             >
               Skip
             </button>

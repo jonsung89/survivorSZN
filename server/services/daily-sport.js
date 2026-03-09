@@ -563,6 +563,8 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
       // Stats where a lower value is better (defensive/error metrics)
       const lowerIsBetterStats = new Set([
         'avgPointsAgainst',
+        'avgGoalsAgainst',
+        'goalsAgainst',
         'turnovers',
         'avgTurnovers',
         'earnedRunAverage',

@@ -9,13 +9,16 @@ import { leagueAPI, picksAPI, nflAPI } from '../api';
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
 import { getSportModule } from '../sports';
+import { useThemedLogo, useThemedColor } from '../utils/logo';
 
 export default function MakePick() {
   const { leagueId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showToast } = useToast();
-  
+  const tl = useThemedLogo();
+  const tc = useThemedColor();
+
   const [loading, setLoading] = useState(true);
   const [loadingWeek, setLoadingWeek] = useState(null); // Track which week is loading
   const [submitting, setSubmitting] = useState(false);
@@ -316,7 +319,7 @@ export default function MakePick() {
             {getWeekLabel(selectedWeek)}
           </span>
           {selectedWeek === currentWeek && (
-            <span className="bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full">Current</span>
+            <span className="bg-green-500/20 text-green-500 text-xs px-2 py-0.5 rounded-full">Current</span>
           )}
           {loadingWeek && (
             <Loader2 className="w-4 h-4 text-fg/50 animate-spin" />
@@ -346,7 +349,7 @@ export default function MakePick() {
               {/* Tip 1: Team info */}
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Lightbulb className="w-4 h-4 text-emerald-400" />
+                  <Lightbulb className="w-4 h-4 text-emerald-500" />
                 </div>
                 <p className="text-fg/80 text-sm leading-relaxed pt-1">
                   Tap any <span className="text-fg font-medium">team logo or name</span> for detailed stats, news, schedule & injuries
@@ -391,7 +394,7 @@ export default function MakePick() {
         }`}>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-3">
-              <div className={`text-sm font-medium ${currentPickLocked ? 'text-red-400' : 'text-amber-400'}`}>
+              <div className={`text-sm font-medium ${currentPickLocked ? 'text-red-500' : 'text-amber-500'}`}>
                 {currentPickLocked ? 'Pick Locked:' : 'Current Pick:'}
               </div>
               {games.map(g => {
@@ -404,14 +407,14 @@ export default function MakePick() {
                     onClick={() => openTeamInfo(team)}
                     className="flex items-center gap-2 hover:bg-fg/10 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
                   >
-                    {team.logo && <img src={team.logo} alt="" className="w-6 h-6 object-contain" />}
+                    {team.logo && <img src={tl(team.logo)} alt="" className="w-6 h-6 object-contain" />}
                     <span className="text-fg font-medium hover:underline">{team.name || team.abbreviation}</span>
-                    {currentPickLocked && <Lock className="w-4 h-4 text-red-400" />}
+                    {currentPickLocked && <Lock className="w-4 h-4 text-red-500" />}
                   </button>
                 );
               })}
             </div>
-            <div className={`text-xs ${currentPickLocked ? 'text-red-400' : 'text-fg/50'}`}>
+            <div className={`text-xs ${currentPickLocked ? 'text-red-500' : 'text-fg/50'}`}>
               {currentPickLocked ? 'Game has started - cannot change' : 'Select a new team to change'}
             </div>
           </div>
@@ -481,7 +484,7 @@ export default function MakePick() {
                   <Check className="w-5 h-5" />
                   <span>{currentPick ? 'Update Pick' : 'Confirm Pick'}</span>
                   {getSelectedTeam()?.logo ? (
-                    <img src={getSelectedTeam().logo} alt="" className="w-6 h-6 object-contain" />
+                    <img src={tl(getSelectedTeam().logo)} alt="" className="w-6 h-6 object-contain" />
                   ) : (
                     <span>{getSelectedTeam()?.abbreviation}</span>
                   )}
@@ -552,7 +555,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
           style={{ background: `linear-gradient(135deg, ${team.color || '#374151'}22, transparent)` }}
         >
           {team.logo ? (
-            <img src={team.logo} alt="" className="w-16 h-16 object-contain" />
+            <img src={tl(team.logo)} alt="" className="w-16 h-16 object-contain" />
           ) : (
             <div 
               className="w-16 h-16 rounded-xl flex items-center justify-center text-white font-bold text-xl"
@@ -710,7 +713,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                       <div className="text-lg font-semibold text-fg">
                         {data?.stats?.offense?.pointsPerGame?.displayValue || '-'}
                         {data?.stats?.rankings?.pointsFor && (
-                          <span className="text-xs text-emerald-400 ml-1">({data.stats.rankings.pointsFor})</span>
+                          <span className="text-xs text-fg/50 ml-1">({data.stats.rankings.pointsFor})</span>
                         )}
                       </div>
                     </div>
@@ -719,7 +722,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                       <div className="text-lg font-semibold text-fg">
                         {data?.stats?.defense?.pointsAllowedPerGame?.displayValue || '-'}
                         {data?.stats?.rankings?.pointsAgainst && (
-                          <span className="text-xs text-emerald-400 ml-1">({data.stats.rankings.pointsAgainst})</span>
+                          <span className="text-xs text-fg/50 ml-1">({data.stats.rankings.pointsAgainst})</span>
                         )}
                       </div>
                     </div>
@@ -742,7 +745,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                                   {p.injury && (
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                       ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
-                                        ? 'bg-red-500/20 text-red-400'
+                                        ? 'bg-red-500/20 text-red-500'
                                         : p.injury.status?.toLowerCase().includes('doubtful')
                                         ? 'bg-orange-500/20 text-orange-400'
                                         : p.injury.status?.toLowerCase().includes('questionable')
@@ -777,7 +780,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                                   {p.injury && (
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                       ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
-                                        ? 'bg-red-500/20 text-red-400'
+                                        ? 'bg-red-500/20 text-red-500'
                                         : p.injury.status?.toLowerCase().includes('doubtful')
                                         ? 'bg-orange-500/20 text-orange-400'
                                         : p.injury.status?.toLowerCase().includes('questionable')
@@ -812,7 +815,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                                   {p.injury && (
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                       ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
-                                        ? 'bg-red-500/20 text-red-400'
+                                        ? 'bg-red-500/20 text-red-500'
                                         : p.injury.status?.toLowerCase().includes('doubtful')
                                         ? 'bg-orange-500/20 text-orange-400'
                                         : p.injury.status?.toLowerCase().includes('questionable')
@@ -847,7 +850,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                                   {p.injury && (
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                       ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
-                                        ? 'bg-red-500/20 text-red-400'
+                                        ? 'bg-red-500/20 text-red-500'
                                         : p.injury.status?.toLowerCase().includes('doubtful')
                                         ? 'bg-orange-500/20 text-orange-400'
                                         : p.injury.status?.toLowerCase().includes('questionable')
@@ -883,7 +886,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                                   {p.injury && (
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                       ['out', 'ir', 'injured reserve'].some(s => p.injury.status?.toLowerCase().includes(s))
-                                        ? 'bg-red-500/20 text-red-400'
+                                        ? 'bg-red-500/20 text-red-500'
                                         : p.injury.status?.toLowerCase().includes('doubtful')
                                         ? 'bg-orange-500/20 text-orange-400'
                                         : p.injury.status?.toLowerCase().includes('questionable')
@@ -916,7 +919,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                             <span className="text-fg">
                               {data.stats.passing.yardsPerGame?.displayValue || '-'}
                               {data.stats.rankings?.passingYPG && (
-                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.passingYPG})</span>
+                                <span className="text-fg/50 text-xs ml-1">({data.stats.rankings.passingYPG})</span>
                               )}
                             </span>
                           </div>
@@ -925,7 +928,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                             <span className="text-fg">
                               {data.stats.passing.touchdownsPerGame?.displayValue || '-'}
                               {data.stats.rankings?.passingTD && (
-                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.passingTD})</span>
+                                <span className="text-fg/50 text-xs ml-1">({data.stats.rankings.passingTD})</span>
                               )}
                             </span>
                           </div>
@@ -942,7 +945,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                             <span className="text-fg">
                               {data.stats.rushing.yardsPerGame?.displayValue || '-'}
                               {data.stats.rankings?.rushingYPG && (
-                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.rushingYPG})</span>
+                                <span className="text-fg/50 text-xs ml-1">({data.stats.rankings.rushingYPG})</span>
                               )}
                             </span>
                           </div>
@@ -951,7 +954,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                             <span className="text-fg">
                               {data.stats.rushing.touchdownsPerGame?.displayValue || '-'}
                               {data.stats.rankings?.rushingTD && (
-                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.rushingTD})</span>
+                                <span className="text-fg/50 text-xs ml-1">({data.stats.rankings.rushingTD})</span>
                               )}
                             </span>
                           </div>
@@ -960,7 +963,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                             <span className="text-fg">
                               {data.stats.rushing.yardsPerCarry?.displayValue || '-'}
                               {data.stats.rankings?.rushingYPC && (
-                                <span className="text-emerald-400 text-xs ml-1">({data.stats.rankings.rushingYPC})</span>
+                                <span className="text-fg/50 text-xs ml-1">({data.stats.rankings.rushingYPC})</span>
                               )}
                             </span>
                           </div>
@@ -993,7 +996,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                         {/* Result or Status */}
                         <div className="w-8 text-center">
                           {game.isCompleted ? (
-                            <div className={`text-sm font-bold ${game.result === 'W' ? 'text-green-400' : 'text-red-400'}`}>
+                            <div className={`text-sm font-bold ${game.result === 'W' ? 'text-green-500' : 'text-red-500'}`}>
                               {game.result}
                             </div>
                           ) : (
@@ -1009,7 +1012,7 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
                         {/* Opponent */}
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           {game.opponent?.logo && (
-                            <img src={game.opponent.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+                            <img src={tl(game.opponent.logo)} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
                           )}
                           <div className="min-w-0">
                             <div className="text-sm text-fg truncate">{game.opponent?.abbreviation || game.opponent?.name}</div>
@@ -1187,7 +1190,7 @@ function ExpandedGameDetails({ away, home, odds, awayInjuries, homeInjuries }) {
       <div className="space-y-1">
         {displayList.map((inj, i) => (
           <div key={i} className="text-sm">
-            <span className={inj.displayStatus === 'Doubtful' ? 'text-yellow-400' : 'text-red-400'}>
+            <span className={inj.displayStatus === 'Doubtful' ? 'text-yellow-400' : 'text-red-500'}>
               {inj.displayStatus}
             </span>
             {' '}<span className="text-fg/70">{inj.player.name}</span>
@@ -1238,19 +1241,25 @@ function ExpandedGameDetails({ away, home, odds, awayInjuries, homeInjuries }) {
       <div>
         <h4 className="text-sm font-medium text-fg/40 uppercase tracking-wide mb-2">Win Probability</h4>
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-fg/60 w-10">{away?.abbreviation}</span>
-            <div className="flex-1 h-2.5 bg-fg/10 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${winProb.away}%` }} />
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-medium text-fg">{away?.abbreviation}</span>
+              <span className="text-xs font-bold text-fg">{winProb.away}%</span>
             </div>
-            <span className="text-sm text-fg/60 w-12 text-right">{winProb.away}%</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-fg/60 w-10">{home?.abbreviation}</span>
-            <div className="flex-1 h-2.5 bg-fg/10 rounded-full overflow-hidden">
-              <div className="h-full bg-green-500 rounded-full" style={{ width: `${winProb.home}%` }} />
+            <div className="flex-1 h-3 rounded-full overflow-hidden flex">
+              <div
+                className="h-full transition-all duration-300"
+                style={{ width: `${winProb.away}%`, backgroundColor: tc(away) }}
+              />
+              <div
+                className="h-full transition-all duration-300"
+                style={{ width: `${winProb.home}%`, backgroundColor: tc(home) }}
+              />
             </div>
-            <span className="text-sm text-fg/60 w-12 text-right">{winProb.home}%</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-bold text-fg">{winProb.home}%</span>
+              <span className="text-xs font-medium text-fg">{home?.abbreviation}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1261,7 +1270,7 @@ function ExpandedGameDetails({ away, home, odds, awayInjuries, homeInjuries }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-fg/5 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-2">
-              {away?.logo && <img src={away.logo} alt="" className="w-6 h-6" />}
+              {away?.logo && <img src={tl(away.logo)} alt="" className="w-6 h-6" />}
               <span className="text-base font-medium text-fg">{away?.abbreviation}</span>
             </div>
             <div className="space-y-1.5 text-sm">
@@ -1275,7 +1284,7 @@ function ExpandedGameDetails({ away, home, odds, awayInjuries, homeInjuries }) {
               </div>
               <div className="flex justify-between">
                 <span className="text-fg/50">Streak</span>
-                <span className={away?.streak?.type === 'W' ? 'text-green-400' : 'text-red-400'}>
+                <span className={away?.streak?.type === 'W' ? 'text-green-500' : 'text-red-500'}>
                   {away?.streak ? `${away.streak.type}${away.streak.count}` : '-'}
                 </span>
               </div>
@@ -1283,7 +1292,7 @@ function ExpandedGameDetails({ away, home, odds, awayInjuries, homeInjuries }) {
           </div>
           <div className="bg-fg/5 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-2">
-              {home?.logo && <img src={home.logo} alt="" className="w-6 h-6" />}
+              {home?.logo && <img src={tl(home.logo)} alt="" className="w-6 h-6" />}
               <span className="text-base font-medium text-fg">{home?.abbreviation}</span>
             </div>
             <div className="space-y-1.5 text-sm">
@@ -1297,7 +1306,7 @@ function ExpandedGameDetails({ away, home, odds, awayInjuries, homeInjuries }) {
               </div>
               <div className="flex justify-between">
                 <span className="text-fg/50">Streak</span>
-                <span className={home?.streak?.type === 'W' ? 'text-green-400' : 'text-red-400'}>
+                <span className={home?.streak?.type === 'W' ? 'text-green-500' : 'text-red-500'}>
                   {home?.streak ? `${home.streak.type}${home.streak.count}` : '-'}
                 </span>
               </div>
@@ -1313,14 +1322,14 @@ function ExpandedGameDetails({ away, home, odds, awayInjuries, homeInjuries }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                {away?.logo && <img src={away.logo} alt="" className="w-5 h-5" />}
+                {away?.logo && <img src={tl(away.logo)} alt="" className="w-5 h-5" />}
                 <span className="text-sm text-fg/50">{away?.abbreviation}</span>
               </div>
               <InjuryList injuries={awayInjuries || []} />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                {home?.logo && <img src={home.logo} alt="" className="w-5 h-5" />}
+                {home?.logo && <img src={tl(home.logo)} alt="" className="w-5 h-5" />}
                 <span className="text-sm text-fg/50">{home?.abbreviation}</span>
               </div>
               <InjuryList injuries={homeInjuries || []} />
@@ -1384,7 +1393,7 @@ function TeamCard({ team, isSelected, onSelect, isHome, onTeamInfo }) {
             className="flex-shrink-0 rounded-lg hover:ring-2 hover:ring-white/20 transition-all"
           >
             {team.logo ? (
-              <img src={team.logo} alt="" className="w-9 h-9 object-contain" />
+              <img src={tl(team.logo)} alt="" className="w-9 h-9 object-contain" />
             ) : (
               <div 
                 className="w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs"
@@ -1405,24 +1414,24 @@ function TeamCard({ team, isSelected, onSelect, isHome, onTeamInfo }) {
                 {team.abbreviation}
               </button>
               <span className={`text-sm ${
-                winPct >= 0.6 ? 'text-green-400' : winPct <= 0.4 ? 'text-red-400' : 'text-fg/50'
+                winPct >= 0.6 ? 'text-green-500' : winPct <= 0.4 ? 'text-red-500' : 'text-fg/50'
               }`}>
                 {team.record}
               </span>
               {team.streak?.count >= 2 && (
-                <span className={`text-sm ${team.streak.type === 'W' ? 'text-green-400' : 'text-red-400'}`}>
+                <span className={`text-sm ${team.streak.type === 'W' ? 'text-green-500' : 'text-red-500'}`}>
                   {team.streak.type}{team.streak.count}
                 </span>
               )}
               {isSelected && <Check className="w-4 h-4 text-green-500 flex-shrink-0" />}
-              {team.isLocked && <Lock className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
-              {team.isCurrentPick && !isSelected && <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />}
+              {team.isLocked && <Lock className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />}
+              {team.isCurrentPick && !isSelected && <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />}
             </div>
             <div className="flex items-center gap-2 text-xs text-fg/50">
               <span>{isHome ? 'H' : 'A'} {isHome ? team.homeRecord : team.awayRecord}</span>
               <span>PPG {ppg || '-'}</span>
               {diff && (
-                <span className={Number(diff) > 0 ? 'text-green-400' : 'text-red-400'}>{diff}</span>
+                <span className={Number(diff) > 0 ? 'text-green-500' : 'text-red-500'}>{diff}</span>
               )}
             </div>
           </div>
@@ -1434,7 +1443,7 @@ function TeamCard({ team, isSelected, onSelect, isHome, onTeamInfo }) {
                 <div 
                   key={i}
                   className={`w-5 h-5 rounded text-[10px] font-bold flex items-center justify-center ${
-                    g.result === 'W' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                    g.result === 'W' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
                   }`}
                 >
                   {g.result}
@@ -1454,7 +1463,7 @@ function TeamCard({ team, isSelected, onSelect, isHome, onTeamInfo }) {
             className="flex-shrink-0 rounded-xl hover:ring-2 hover:ring-white/20 transition-all"
           >
             {team.logo ? (
-              <img src={team.logo} alt="" className="w-12 h-12 object-contain" />
+              <img src={tl(team.logo)} alt="" className="w-12 h-12 object-contain" />
             ) : (
               <div 
                 className="w-12 h-12 rounded flex items-center justify-center text-white font-bold text-sm"
@@ -1477,15 +1486,15 @@ function TeamCard({ team, isSelected, onSelect, isHome, onTeamInfo }) {
             </div>
             <div className="flex items-center gap-2 text-base">
               <span className={`font-medium ${
-                winPct >= 0.6 ? 'text-green-400' : winPct <= 0.4 ? 'text-red-400' : 'text-fg/60'
+                winPct >= 0.6 ? 'text-green-500' : winPct <= 0.4 ? 'text-red-500' : 'text-fg/60'
               }`}>
                 {team.record || '-'}
               </span>
-              {winPct >= 0.6 && <TrendingUp className="w-4 h-4 text-green-400" />}
-              {winPct <= 0.4 && <TrendingDown className="w-4 h-4 text-red-400" />}
+              {winPct >= 0.6 && <TrendingUp className="w-4 h-4 text-green-500" />}
+              {winPct <= 0.4 && <TrendingDown className="w-4 h-4 text-red-500" />}
               {team.streak?.count >= 2 && (
                 <span className={`text-sm font-medium ${
-                  team.streak.type === 'W' ? 'text-green-400' : 'text-red-400'
+                  team.streak.type === 'W' ? 'text-green-500' : 'text-red-500'
                 }`}>
                   {team.streak.type}{team.streak.count}
                 </span>
@@ -1500,7 +1509,7 @@ function TeamCard({ team, isSelected, onSelect, isHome, onTeamInfo }) {
           <span>PPG: <span className="text-fg/70">{ppg || '-'}</span></span>
           <span>Opp: <span className="text-fg/70">{oppPpg || '-'}</span></span>
           {diff && (
-            <span className={`font-medium ${Number(diff) > 0 ? 'text-green-400' : Number(diff) < 0 ? 'text-red-400' : ''}`}>
+            <span className={`font-medium ${Number(diff) > 0 ? 'text-green-500' : Number(diff) < 0 ? 'text-red-500' : ''}`}>
               {diff}
             </span>
           )}
@@ -1519,7 +1528,7 @@ function TeamCard({ team, isSelected, onSelect, isHome, onTeamInfo }) {
                   }`}
                 >
                   <span className={`text-sm font-bold ${
-                    g.result === 'W' ? 'text-green-400' : 'text-red-400'
+                    g.result === 'W' ? 'text-green-500' : 'text-red-500'
                   }`}>
                     {g.result}
                   </span>
@@ -1539,13 +1548,13 @@ function TeamCard({ team, isSelected, onSelect, isHome, onTeamInfo }) {
         {(team.isLocked || (team.isUsed && !team.isCurrentPick) || team.isCurrentPick) && (
           <div className="mt-3 pt-3 border-t border-fg/5 text-base">
             {team.isLocked ? (
-              <span className="text-red-400 flex items-center gap-1">
+              <span className="text-red-500 flex items-center gap-1">
                 <Lock className="w-4 h-4" /> Locked
               </span>
             ) : team.isUsed && !team.isCurrentPick ? (
               <span className="text-yellow-500">Already used</span>
             ) : team.isCurrentPick ? (
-              <span className="text-green-400">✓ Current pick</span>
+              <span className="text-green-500">✓ Current pick</span>
             ) : null}
           </div>
         )}

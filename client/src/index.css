@@ -23,6 +23,10 @@
   /* Foreground — used for text, borders, overlays via Tailwind opacity (text-fg/60, bg-fg/5…) */
   --color-fg: 255 255 255;             /* white in dark mode */
 
+  /* Rank indicator colors (bright enough for dark bg) */
+  --color-rank-good: 52 211 153;       /* emerald-400 — top tier (≤10) */
+  --color-rank-mid: 251 191 36;        /* amber-400 — mid tier (11-22) */
+
   /* Brand */
   --nfl-blue: #013369;
   --nfl-red: #D50A0A;
@@ -41,6 +45,8 @@
   --color-inset: 236 236 241;          /* #ececf1 — inset areas */
   --color-text-primary: 17 17 21;      /* #111115 — body text */
   --color-fg: 17 17 21;               /* near-black foreground */
+  --color-rank-good: 5 150 105;        /* emerald-600 — darker for white bg */
+  --color-rank-mid: 217 119 6;         /* amber-600 — darker for white bg */
 }
 
 * {

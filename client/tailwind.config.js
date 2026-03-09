@@ -16,6 +16,10 @@ export default {
         'inset': 'rgb(var(--color-inset) / <alpha-value>)',
         'fg': 'rgb(var(--color-fg) / <alpha-value>)',
 
+        /* Theme-aware rank indicator colors */
+        'rank-good': 'rgb(var(--color-rank-good) / <alpha-value>)',
+        'rank-mid': 'rgb(var(--color-rank-mid) / <alpha-value>)',
+
         /* Brand / sport colors */
         'nfl-blue': '#013369',
         'nfl-red': '#D50A0A',

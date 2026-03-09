@@ -3,6 +3,7 @@ import { MessageCircle, X, Send, Users, Crown, ChevronLeft, ChevronRight, Chevro
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
+import { useThemedLogo } from '../utils/logo';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Free tier API key
@@ -99,6 +100,7 @@ const NFL_TEAMS = {
 
 export default function ChatWidget({ leagueId, leagueName, commissionerId, members = [], maxStrikes = 1, onCollapsedChange }) {
   const { user, getIdToken } = useAuth();
+  const tl = useThemedLogo();
   const { socket, connected, onlineUsers, typingUsers, sendMessage, startTyping, stopTyping, on, joinLeague, leaveLeague } = useSocket();
   
   const [isOpen, setIsOpen] = useState(false);
@@ -986,7 +988,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           <div className="bg-fg/5 rounded-xl p-4 mb-6">
             <p className="text-sm text-fg/50 mb-2">Status</p>
             <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-              status === 'active' ? 'bg-emerald-500/20 text-emerald-400' :
+              status === 'active' ? 'bg-emerald-500/20 text-emerald-500' :
               status === 'eliminated' ? 'bg-red-500/20 text-red-400' :
               'bg-fg/10 text-fg/60'
             }`}>
@@ -1004,7 +1006,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   return (
                     <div key={idx} className="flex items-center gap-3 bg-fg/5 rounded-lg p-2">
                       {team?.logo && (
-                        <img src={team.logo} alt={team.name} className="w-8 h-8" />
+                        <img src={tl(team.logo)} alt={team.name} className="w-8 h-8" />
                       )}
                       <div className="flex-1">
                         <p className="text-sm text-fg">{team?.name || pick.teamId}</p>
@@ -1012,7 +1014,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       </div>
                       {pick.result && (
                         <span className={`text-xs font-medium px-2 py-1 rounded ${
-                          pick.result === 'win' ? 'bg-emerald-500/20 text-emerald-400' :
+                          pick.result === 'win' ? 'bg-emerald-500/20 text-emerald-500' :
                           pick.result === 'loss' ? 'bg-red-500/20 text-red-400' :
                           'bg-fg/10 text-fg/50'
                         }`}>
@@ -1351,7 +1353,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             {replyingTo && (
               <div className="px-3 pt-2 flex items-center gap-2">
                 <div className="flex-1 min-w-0 pl-2 border-l-2 border-emerald-500 bg-fg/5 rounded-r py-1 pr-2">
-                  <p className="text-xs text-emerald-400 font-medium truncate">
+                  <p className="text-xs text-emerald-500 font-medium truncate">
                     Replying to {replyingTo.display_name || replyingTo.displayName}
                   </p>
                   <p className="text-xs text-fg/50 truncate">{replyingTo.message}</p>
@@ -1774,7 +1776,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 {sheetSize === 'full' && replyingTo && (
                   <div className="px-3 pt-2 flex items-center gap-2">
                     <div className="flex-1 min-w-0 pl-3 border-l-2 border-emerald-500 bg-fg/5 rounded-r py-1.5 pr-2">
-                      <p className="text-xs text-emerald-400 font-medium truncate">
+                      <p className="text-xs text-emerald-500 font-medium truncate">
                         Replying to {replyingTo.display_name || replyingTo.displayName}
                       </p>
                       <p className="text-xs text-fg/50 truncate">{replyingTo.message}</p>

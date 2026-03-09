@@ -16,6 +16,7 @@ import AppIcon from '../components/AppIcon';
 import { BROADCAST_NETWORKS } from '../sports/nfl/constants';
 import { getWeekLabel } from '../sports/nfl/weekUtils';
 import { getSportModule, getSportGradient, getSportBadgeClasses } from '../sports';
+import { useThemedLogo } from '../utils/logo';
 
 // Network broadcast info lookup
 const getBroadcastInfo = (broadcast) => {
@@ -34,6 +35,7 @@ const getBroadcastInfo = (broadcast) => {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const tl = useThemedLogo();
   const [loading, setLoading] = useState(true);
   const [leagues, setLeagues] = useState([]);
   const [pendingPicks, setPendingPicks] = useState([]);
@@ -303,14 +305,14 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                   <div className="flex flex-col items-center">
                     {firstGame.awayTeam?.logo && (
-                      <img src={firstGame.awayTeam.logo} alt={firstGame.awayTeam.abbreviation} className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
+                      <img src={tl(firstGame.awayTeam.logo)} alt={firstGame.awayTeam.abbreviation} className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
                     )}
                     <span className="text-fg font-semibold text-sm">{firstGame.awayTeam?.abbreviation}</span>
                   </div>
                   <span className="text-fg/40 text-base font-medium px-1">@</span>
                   <div className="flex flex-col items-center">
                     {firstGame.homeTeam?.logo && (
-                      <img src={firstGame.homeTeam.logo} alt={firstGame.homeTeam.abbreviation} className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
+                      <img src={tl(firstGame.homeTeam.logo)} alt={firstGame.homeTeam.abbreviation} className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
                     )}
                     <span className="text-fg font-semibold text-sm">{firstGame.homeTeam?.abbreviation}</span>
                   </div>
@@ -467,7 +469,7 @@ export default function Dashboard() {
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          {game.awayTeam?.logo && <img src={game.awayTeam.logo} alt="" className="w-6 h-6" />}
+                          {game.awayTeam?.logo && <img src={tl(game.awayTeam.logo)} alt="" className="w-6 h-6" />}
                           <span className={`text-sm font-semibold ${awayWinning && !isUpcoming ? 'text-fg' : 'text-fg/70'}`}>
                             {game.awayTeam?.abbreviation}
                           </span>
@@ -479,7 +481,7 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          {game.homeTeam?.logo && <img src={game.homeTeam.logo} alt="" className="w-6 h-6" />}
+                          {game.homeTeam?.logo && <img src={tl(game.homeTeam.logo)} alt="" className="w-6 h-6" />}
                           <span className={`text-sm font-semibold ${homeWinning && !isUpcoming ? 'text-fg' : 'text-fg/70'}`}>
                             {game.homeTeam?.abbreviation}
                           </span>
@@ -665,7 +667,7 @@ export default function Dashboard() {
                         const team = sportMod.getTeam(league.currentPickTeamId);
                         return team ? (
                           <>
-                            {team.logo && <img src={team.logo} alt="" className="w-6 h-6 object-contain" />}
+                            {team.logo && <img src={tl(team.logo)} alt="" className="w-6 h-6 object-contain" />}
                             <span className="text-fg/70 text-sm font-medium">{team.abbreviation}</span>
                           </>
                         ) : null;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, TrendingUp, AlertCircle } from 'lucide-react';
 import { scheduleAPI } from '../api';
+import { useThemedLogo } from '../utils/logo';
 
 // Sport display names for the dialog header
 const SPORT_NAMES = {
@@ -16,12 +17,13 @@ const getRankColor = (rank, total) => {
   if (!rank) return 'text-fg/50';
   const n = typeof rank === 'string' ? parseInt(rank) : rank;
   if (isNaN(n)) return 'text-fg/50';
-  if (n <= 10) return 'text-emerald-400';
-  if (n <= 22) return 'text-amber-400';
-  return 'text-red-400';
+  if (n <= 10) return 'text-rank-good';
+  if (n <= 22) return 'text-rank-mid';
+  return 'text-red-500';
 };
 
 export default function StatRankingDialog({ sport, statKey, statLabel, currentTeamIds = [], onClose }) {
+  const tl = useThemedLogo();
   const [rankings, setRankings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -122,7 +124,7 @@ export default function StatRankingDialog({ sport, statKey, statLabel, currentTe
                       </span>
                       <div className="flex items-center gap-2.5 flex-1 min-w-0">
                         {item.team.logo ? (
-                          <img src={item.team.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+                          <img src={tl(item.team.logo)} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
                         ) : (
                           <div
                             className="w-6 h-6 rounded-full flex-shrink-0"

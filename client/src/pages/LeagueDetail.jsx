@@ -15,6 +15,7 @@ import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
 import ChatWidget from '../components/ChatWidget';
 import Avatar from '../components/Avatar';
 import { getSportModule } from '../sports';
+import { useThemedLogo } from '../utils/logo';
 
 export default function LeagueDetail() {
   const { leagueId } = useParams();
@@ -22,7 +23,8 @@ export default function LeagueDetail() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const { onlineUsers } = useSocket();
-  
+  const tl = useThemedLogo();
+
   const [league, setLeague] = useState(null);
   const [standings, setStandings] = useState([]);
   const [currentWeek, setCurrentWeek] = useState(1);
@@ -926,15 +928,15 @@ export default function LeagueDetail() {
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 {matchupAvailability.teamsPlaying[0] && (
                   <img 
-                    src={NFL_TEAMS[matchupAvailability.teamsPlaying[0]]?.logo} 
-                    alt="" 
+                    src={tl(NFL_TEAMS[matchupAvailability.teamsPlaying[0]]?.logo)}
+                    alt=""
                     className="absolute w-20 h-20 object-contain opacity-[0.06] -translate-x-6 -translate-y-6"
                   />
                 )}
                 {matchupAvailability.teamsPlaying[1] && (
                   <img 
-                    src={NFL_TEAMS[matchupAvailability.teamsPlaying[1]]?.logo} 
-                    alt="" 
+                    src={tl(NFL_TEAMS[matchupAvailability.teamsPlaying[1]]?.logo)}
+                    alt=""
                     className="absolute w-20 h-20 object-contain opacity-[0.06] translate-x-6 translate-y-6"
                   />
                 )}
@@ -944,7 +946,7 @@ export default function LeagueDetail() {
                   {matchupAvailability.teamsPlaying.map(teamId => {
                     const team = NFL_TEAMS[teamId];
                     return team?.logo ? (
-                      <img key={teamId} src={team.logo} alt="" className="w-10 h-10 object-contain bg-black/20 rounded-full p-1 drop-shadow-lg" />
+                      <img key={teamId} src={tl(team.logo)} alt="" className="w-10 h-10 object-contain bg-black/20 rounded-full p-1 drop-shadow-lg" />
                     ) : null;
                   })}
                 </div>
@@ -997,15 +999,15 @@ export default function LeagueDetail() {
                   <div 
                     className="absolute inset-0 flex items-center justify-center pointer-events-none"
                   >
-                    <img 
-                      src={team.logo} 
-                      alt="" 
+                    <img
+                      src={tl(team.logo)}
+                      alt=""
                       className="w-28 h-28 object-contain opacity-[0.06]"
                     />
                   </div>
                   <div className="relative flex flex-col items-start gap-1 mb-2">
                     {team.logo && (
-                      <img src={team.logo} alt={team.name} className="w-10 h-10 object-contain drop-shadow-lg" />
+                      <img src={tl(team.logo)} alt={team.name} className="w-10 h-10 object-contain drop-shadow-lg" />
                     )}
                     <span className="text-sm font-semibold text-fg drop-shadow-sm">
                       {team.name} Only ({members.length})
@@ -1246,7 +1248,7 @@ export default function LeagueDetail() {
                   return (
                     <div key={idx} className="bg-fg/5 rounded-xl p-4">
                       <div className="flex items-center gap-3">
-                        {team?.logo && <img src={team.logo} alt={team.name} className="w-12 h-12" />}
+                        {team?.logo && <img src={tl(team.logo)} alt={team.name} className="w-12 h-12" />}
                         <div>
                           <p className="text-fg font-semibold text-lg">{team?.city} {team?.name}</p>
                           <p className="text-fg/40 text-sm">Loading game info...</p>
@@ -1261,7 +1263,7 @@ export default function LeagueDetail() {
                   return (
                     <div key={idx} className="bg-fg/5 rounded-xl p-4">
                       <div className="flex items-center gap-3">
-                        {team?.logo && <img src={team.logo} alt={team.name} className="w-12 h-12 opacity-50" />}
+                        {team?.logo && <img src={tl(team.logo)} alt={team.name} className="w-12 h-12 opacity-50" />}
                         <div>
                           <p className="text-fg/50 font-semibold text-lg">{team?.city} {team?.name}</p>
                           <p className="text-fg/40 text-sm">Not playing this week</p>
@@ -1317,7 +1319,7 @@ export default function LeagueDetail() {
                       }`}>
                         {/* Logo with pick indicator */}
                         <div className="relative flex-shrink-0">
-                          {team?.logo && <img src={team.logo} alt={team.name} className="w-14 h-14" />}
+                          {team?.logo && <img src={tl(team.logo)} alt={team.name} className="w-14 h-14" />}
                           {/* Show win/loss indicator for completed games, checkmark for scheduled/live */}
                           {isFinal ? (
                             isWinning ? (
@@ -1417,7 +1419,7 @@ export default function LeagueDetail() {
                             {/* Logo */}
                             <div className="flex-shrink-0">
                               {gameStatus.opponent.logo && (
-                                <img src={gameStatus.opponent.logo} alt={oppTeamData?.name} className={`w-14 h-14 ${oppWinning ? '' : 'opacity-60'}`} />
+                                <img src={tl(gameStatus.opponent.logo)} alt={oppTeamData?.name} className={`w-14 h-14 ${oppWinning ? '' : 'opacity-60'}`} />
                               )}
                             </div>
                           </div>
@@ -1547,7 +1549,7 @@ export default function LeagueDetail() {
                               return (
                                 <div key={idx} className="flex items-center gap-1">
                                   {team?.logo ? (
-                                    <img src={team.logo} alt={team.name} className="w-5 h-5 object-contain" />
+                                    <img src={tl(team.logo)} alt={team.name} className="w-5 h-5 object-contain" />
                                   ) : (
                                     <div className="w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: team?.color || '#666' }}>
                                       <span className="text-[8px] text-white font-bold">{team?.abbreviation}</span>
@@ -1738,7 +1740,7 @@ export default function LeagueDetail() {
                                 return (
                                   <div key={idx} className="flex flex-col items-center">
                                     {team?.logo ? (
-                                      <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />
+                                      <img src={tl(team.logo)} alt={team.name} className="w-8 h-8 object-contain" />
                                     ) : (
                                       <div 
                                         className="w-8 h-8 rounded-full flex items-center justify-center text-fg text-xs font-bold"
@@ -1778,7 +1780,7 @@ export default function LeagueDetail() {
                                 return (
                                   <div key={idx} className="flex flex-col items-center">
                                     {team?.logo ? (
-                                      <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />
+                                      <img src={tl(team.logo)} alt={team.name} className="w-8 h-8 object-contain" />
                                     ) : (
                                       <div 
                                         className="w-8 h-8 rounded-full flex items-center justify-center text-fg text-xs font-bold"
@@ -1951,8 +1953,8 @@ export default function LeagueDetail() {
                           return (
                             <div key={idx} className="flex flex-col items-center">
                               {team?.logo ? (
-                                <img 
-                                  src={team.logo} 
+                                <img
+                                  src={tl(team.logo)}
                                   alt={team.name}
                                   className="w-10 h-10 object-contain"
                                   title={team.name}
@@ -2499,7 +2501,7 @@ export default function LeagueDetail() {
                       const result = getPickResult(pick, pick.teamId);
                       return (
                         <div key={idx} className="flex items-center gap-2 bg-fg/5 rounded-lg px-2 py-1">
-                          {team?.logo && <img src={team.logo} alt={team.name} className="w-5 h-5" />}
+                          {team?.logo && <img src={tl(team.logo)} alt={team.name} className="w-5 h-5" />}
                           <span className="text-fg text-sm">{team?.name || pick.teamId}</span>
                           {result && result !== 'pending' && (
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
@@ -2518,7 +2520,7 @@ export default function LeagueDetail() {
                     return (
                       <div className="flex items-center gap-2 mt-1">
                         {NFL_TEAMS[String(currentPick.teamId)]?.logo && (
-                          <img src={NFL_TEAMS[String(currentPick.teamId)].logo} alt="" className="w-5 h-5" />
+                          <img src={tl(NFL_TEAMS[String(currentPick.teamId)].logo)} alt="" className="w-5 h-5" />
                         )}
                         <span className="text-fg text-sm">{NFL_TEAMS[String(currentPick.teamId)]?.name}</span>
                         {result && result !== 'pending' && (
@@ -2546,7 +2548,7 @@ export default function LeagueDetail() {
                       return (
                         <div key={teamId} className="flex items-center gap-2 bg-emerald-500/20 rounded-lg px-2 py-1">
                           <span className="text-emerald-300 text-xs font-bold">#{idx + 1}</span>
-                          {team?.logo && <img src={team.logo} alt={team.name} className="w-5 h-5" />}
+                          {team?.logo && <img src={tl(team.logo)} alt={team.name} className="w-5 h-5" />}
                           <span className="text-fg text-sm">{team?.name}</span>
                           <button
                             onClick={() => setSelectedTeamsForPick(prev => prev.filter(id => id !== teamId))}
@@ -2600,8 +2602,8 @@ export default function LeagueDetail() {
                             {selectionIndex + 1}
                           </div>
                         )}
-                        <img 
-                          src={team.logo} 
+                        <img
+                          src={tl(team.logo)}
                           alt={team.name}
                           className="w-8 h-8 object-contain"
                         />
@@ -2743,7 +2745,7 @@ export default function LeagueDetail() {
                                   {log.action === 'pick_set' && team && (
                                     <>
                                       <span>→</span>
-                                      {team.logo && <img src={team.logo} alt={team.name} className="w-4 h-4 inline" />}
+                                      {team.logo && <img src={tl(team.logo)} alt={team.name} className="w-4 h-4 inline" />}
                                       <span>{team.name}</span>
                                     </>
                                   )}

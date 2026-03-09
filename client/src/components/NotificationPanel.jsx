@@ -160,9 +160,9 @@ export default function NotificationPanel() {
       case 'mention':
         return <AtSign className="w-4 h-4 text-blue-400" />;
       case 'reply':
-        return <MessageCircle className="w-4 h-4 text-emerald-400" />;
+        return <MessageCircle className="w-4 h-4 text-emerald-500" />;
       case 'league_invite':
-        return <Trophy className="w-4 h-4 text-amber-400" />;
+        return <Trophy className="w-4 h-4 text-amber-500" />;
       default:
         return <Bell className="w-4 h-4 text-fg/50" />;
     }

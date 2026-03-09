@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X, ExternalLink, Newspaper, BarChart3, Calendar, Loader2
 } from 'lucide-react';
 import { nflAPI, scheduleAPI } from '../api';
+import { useThemedLogo } from '../utils/logo';
 
 /**
  * TeamInfoDialog - A reusable dialog component that displays team information
@@ -16,9 +17,11 @@ import { nflAPI, scheduleAPI } from '../api';
  * - loading: (optional) External loading state
  */
 export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: externalData, loading: externalLoading }) {
+  const tl = useThemedLogo();
   const [activeTab, setActiveTab] = useState('stats');
   const [data, setData] = useState(externalData || null);
   const [loading, setLoading] = useState(externalLoading ?? !externalData);
+  const contentRef = useRef(null);
 
   const isNFL = sport === 'nfl';
 
@@ -26,6 +29,24 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
   useEffect(() => {
     setActiveTab('stats');
   }, [team?.id]);
+
+  // Auto-scroll to latest game when schedule tab is opened
+  useEffect(() => {
+    if (activeTab !== 'schedule' || !data?.schedule?.length) return;
+    // Find the last completed game index
+    const lastCompletedIdx = data.schedule.reduce((acc, game, i) => game.isCompleted ? i : acc, -1);
+    if (lastCompletedIdx < 0) return;
+    // Wait for render, then scroll to that element
+    requestAnimationFrame(() => {
+      const container = contentRef.current;
+      if (!container) return;
+      const items = container.querySelectorAll('[data-schedule-item]');
+      const target = items[lastCompletedIdx];
+      if (target) {
+        target.scrollIntoView({ block: 'center', behavior: 'instant' });
+      }
+    });
+  }, [activeTab, data?.schedule]);
 
   // Fetch data if not provided externally
   useEffect(() => {
@@ -67,9 +88,9 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
     const rank = parseInt(rankStr);
     if (isNaN(rank)) return 'text-fg/50';
 
-    if (rank <= 10) return 'text-emerald-400';
-    if (rank <= 22) return 'text-amber-400';
-    return 'text-red-400';
+    if (rank <= 10) return 'text-rank-good';
+    if (rank <= 22) return 'text-rank-mid';
+    return 'text-red-500';
   };
 
   if (!team) return null;
@@ -112,7 +133,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
     let colorClass = 'bg-gray-500/20 text-gray-400';
 
     if (['out', 'ir', 'injured reserve'].some(s => status.includes(s))) {
-      colorClass = 'bg-red-500/20 text-red-400';
+      colorClass = 'bg-red-500/20 text-red-500';
     } else if (status.includes('doubtful')) {
       colorClass = 'bg-orange-500/20 text-orange-400';
     } else if (status.includes('questionable')) {
@@ -360,6 +381,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
           return (
             <div
               key={i}
+              data-schedule-item
               className={`flex items-center gap-2 sm:gap-3 py-2.5 px-3 rounded-lg ${
                 game.isCompleted
                   ? game.result === 'W'
@@ -382,7 +404,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
               {/* Opponent Logo */}
               <div className="flex-shrink-0">
                 {opponentLogo ? (
-                  <img src={opponentLogo} alt={opponentAbbr} className="w-8 h-8 object-contain" />
+                  <img src={tl(opponentLogo)} alt={opponentAbbr} className="w-8 h-8 object-contain" />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-sm font-bold">
                     {opponentAbbr?.charAt(0) || '?'}
@@ -417,7 +439,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                   <>
                     <div className="sm:hidden">
                       <div className="flex items-center justify-end gap-1.5">
-                        <span className={`text-base font-bold ${game.result === 'W' ? 'text-green-400' : 'text-red-400'}`}>
+                        <span className={`text-base font-bold ${game.result === 'W' ? 'text-green-500' : 'text-red-500'}`}>
                           {game.result}
                         </span>
                         <span className="text-base text-fg font-semibold">{game.teamScore}-{game.oppScore}</span>
@@ -425,7 +447,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                       {game.teamRecord && <div className="text-sm text-fg/40 mt-0.5">{game.teamRecord}</div>}
                     </div>
                     <div className="hidden sm:flex items-center justify-end gap-2">
-                      <span className={`text-base font-bold ${game.result === 'W' ? 'text-green-400' : 'text-red-400'}`}>
+                      <span className={`text-base font-bold ${game.result === 'W' ? 'text-green-500' : 'text-red-500'}`}>
                         {game.result}
                       </span>
                       <span className="text-base text-fg font-semibold">{game.teamScore}-{game.oppScore}</span>
@@ -475,6 +497,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
           return (
             <div
               key={i}
+              data-schedule-item
               className={`flex items-center gap-2 sm:gap-3 py-2.5 px-3 rounded-lg ${
                 game.isCompleted
                   ? game.result === 'W'
@@ -501,7 +524,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
               {/* Opponent Logo */}
               <div className="flex-shrink-0">
                 {opponentLogo ? (
-                  <img src={opponentLogo} alt={opponentAbbr} className="w-8 h-8 object-contain" />
+                  <img src={tl(opponentLogo)} alt={opponentAbbr} className="w-8 h-8 object-contain" />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-sm font-bold">
                     {opponentAbbr?.charAt(0) || '?'}
@@ -511,11 +534,22 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
 
               {/* Opponent Name */}
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-fg truncate">
-                  {game.opponent?.abbreviation || game.opponent?.name || '?'}
+                <div className="sm:hidden">
+                  <div className="text-xs text-fg/50 leading-tight">
+                    {game.opponent?.name?.split(' ').slice(0, -1).join(' ') || ''}
+                  </div>
+                  <div className="text-base font-medium text-fg leading-tight">
+                    {game.opponent?.name?.split(' ').pop() || game.opponent?.abbreviation || '?'}
+                    {game.opponent?.record && (
+                      <span className="text-sm text-fg/40 font-normal ml-1.5">({game.opponent.record})</span>
+                    )}
+                  </div>
                 </div>
+                <span className="text-base font-medium text-fg hidden sm:inline">
+                  {game.opponent?.name || game.opponent?.abbreviation || '?'}
+                </span>
                 {game.opponent?.record && (
-                  <div className="text-xs text-fg/40">{game.opponent.record}</div>
+                  <span className="text-sm text-fg/40 ml-1.5 hidden sm:inline">({game.opponent.record})</span>
                 )}
               </div>
 
@@ -523,16 +557,25 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
               <div className="text-right flex-shrink-0">
                 {game.isCompleted ? (
                   <div className="flex items-center gap-1.5">
-                    <span className={`text-sm font-bold ${
-                      game.result === 'W' ? 'text-green-400' : game.result === 'L' ? 'text-red-400' : 'text-fg/60'
+                    <span className={`text-base font-bold ${
+                      game.result === 'W' ? 'text-green-500' : game.result === 'L' ? 'text-red-500' : 'text-fg/60'
                     }`}>
                       {game.result}
                     </span>
-                    <span className="text-sm text-fg font-semibold">{game.teamScore}-{game.oppScore}</span>
+                    <span className="text-base text-fg font-semibold">{game.teamScore}-{game.oppScore}</span>
                   </div>
                 ) : (
-                  <div className="text-xs text-fg/50">
-                    {new Date(game.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                  <div className="text-sm text-fg/60">
+                    <span className="sm:hidden">
+                      {new Date(game.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                    <span className="hidden sm:inline">
+                      {new Date(game.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </span>
+                    {' '}
+                    <span className="text-fg/40">
+                      {new Date(game.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                    </span>
                   </div>
                 )}
               </div>
@@ -560,7 +603,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
           style={{ background: `linear-gradient(135deg, ${team.color || '#374151'}22, transparent)` }}
         >
           {team.logo ? (
-            <img src={team.logo} alt="" className="w-16 h-16 object-contain" />
+            <img src={tl(team.logo)} alt="" className="w-16 h-16 object-contain" />
           ) : (
             <div
               className="w-16 h-16 rounded-xl flex items-center justify-center text-white font-bold text-xl"
@@ -608,7 +651,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div ref={contentRef} className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-fg/30 animate-spin" />

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, TrendingUp, Users, Target, AlertTriangle, ArrowRight } from 'lucide-react';
 import { nflAPI, scheduleAPI } from '../api';
 import { getSportModule } from '../sports';
@@ -10,6 +10,7 @@ import TeamInfoDialog from '../components/TeamInfoDialog';
 import StatRankingDialog from '../components/StatRankingDialog';
 import BoxScore from '../components/BoxScore';
 import { PLAYOFF_ROUNDS, BROADCAST_NETWORKS } from '../sports/nfl/constants';
+import { useThemedLogo, useThemedColor } from '../utils/logo';
 
 const SPORT_TABS = [
   { id: 'nfl', name: 'NFL', implemented: true, scheduleType: 'weekly' },
@@ -49,12 +50,12 @@ const SEASON_STATS_CONFIG = {
     { key: 'errors', label: 'Errors' },
   ],
   nhl: [
-    { key: 'goals', label: 'Goals' },
-    { key: 'ytdGoals', label: 'Season GF' },
-    { key: 'assists', label: 'Assists' },
-    { key: 'saves', label: 'Saves' },
+    { key: 'avgGoals', label: 'GF/G', rankingsKey: 'goals' },
+    { key: 'avgGoalsAgainst', label: 'GA/G' },
+    { key: 'powerPlayPct', label: 'PP%', rankingsKey: 'powerPlayGoals' },
+    { key: 'penaltyKillPct', label: 'PK%' },
     { key: 'savePct', label: 'SV%' },
-    { key: 'points', label: 'Points' },
+    { key: 'avgShots', label: 'SOG/G', rankingsKey: 'shotsTotal' },
   ],
 };
 
@@ -63,9 +64,9 @@ const getRankColor = (rankStr) => {
   if (!rankStr) return 'text-fg/50';
   const rank = parseInt(rankStr);
   if (isNaN(rank)) return 'text-fg/50';
-  if (rank <= 10) return 'text-emerald-400';
-  if (rank <= 22) return 'text-amber-400';
-  return 'text-red-400';
+  if (rank <= 10) return 'text-rank-good';
+  if (rank <= 22) return 'text-rank-mid';
+  return 'text-red-500';
 };
 
 const TeamRankBadge = ({ team }) => {
@@ -79,10 +80,10 @@ const TeamRankBadge = ({ team }) => {
   if (typeof movement === 'number') {
     if (movement > 0) {
       movementText = `▲${movement}`;
-      movementClass = 'text-emerald-400';
+      movementClass = 'text-rank-good';
     } else if (movement < 0) {
       movementText = `▼${Math.abs(movement)}`;
-      movementClass = 'text-red-400';
+      movementClass = 'text-red-500';
     } else {
       movementText = '—';
       movementClass = 'text-fg/40';
@@ -130,12 +131,23 @@ const parseDivisionLabelFromSummary = (summary) => {
 
 const StandingBadge = ({ label, rank }) => {
   if (!label || !rank) return null;
-  return <span className="text-sm font-medium text-fg/45">{label} #{rank}</span>;
+  return <span className="font-medium text-fg/45">{label} #{rank}</span>;
 };
 
 export default function Schedule() {
   const { user } = useAuth();
-  const [selectedSport, setSelectedSport] = useState('nfl');
+  const tl = useThemedLogo();
+  const tc = useThemedColor();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialUrlParams = useRef({
+    sport: searchParams.get('sport'),
+    week: searchParams.get('week'),
+    date: searchParams.get('date'),
+  });
+  const [selectedSport, setSelectedSport] = useState(() => {
+    const urlSport = initialUrlParams.current.sport;
+    return (urlSport && SPORT_TABS.some(s => s.id === urlSport)) ? urlSport : 'nfl';
+  });
   const [season, setSeason] = useState(2024);
   const [currentWeek, setCurrentWeek] = useState(1);
   const [currentSeasonType, setCurrentSeasonType] = useState(2);
@@ -155,17 +167,32 @@ export default function Schedule() {
   const [teamInfoDialog, setTeamInfoDialog] = useState({ open: false, team: null });
   const [statRankingDialog, setStatRankingDialog] = useState(null);
   const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0]; // YYYY-MM-DD
+    const urlDate = initialUrlParams.current.date;
+    if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) return urlDate;
+    return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   });
   const [dailySchedule, setDailySchedule] = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [leagueRanksByStat, setLeagueRanksByStat] = useState({});
   const [leagueRanksLoaded, setLeagueRanksLoaded] = useState(false);
-  
+  const [sportStatuses, setSportStatuses] = useState({});
+
   const weekTabsRef = useRef(null);
   const weekButtonRefs = useRef({});
   const seasonDropdownRef = useRef(null);
+
+  // Sync selected sport/week/date → URL query params
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set('sport', selectedSport);
+    const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
+    if (sportTab?.scheduleType === 'weekly') {
+      params.set('week', String(selectedWeek));
+    } else {
+      params.set('date', selectedDate);
+    }
+    setSearchParams(params, { replace: true });
+  }, [selectedSport, selectedWeek, selectedDate, setSearchParams]);
 
   const getTeamStandingBadges = (team) => {
     if (!team) return [];
@@ -239,36 +266,89 @@ export default function Schedule() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadSeason = async () => {
+    const loadInitial = async () => {
       try {
-        const result = await nflAPI.getSeason();
+        // Fetch NFL season + all sport statuses in parallel
+        const [nflResult, ...dailyResults] = await Promise.allSettled([
+          nflAPI.getSeason(),
+          scheduleAPI.getSeason('nba'),
+          scheduleAPI.getSeason('mlb'),
+          scheduleAPI.getSeason('nhl'),
+          scheduleAPI.getSeason('ncaab'),
+        ]);
+
         if (cancelled) return;
-        
-        if (result.season) {
+
+        // Compute sport season statuses for tab indicators
+        const statuses = {};
+        const dailySports = ['nba', 'mlb', 'nhl', 'ncaab'];
+
+        if (nflResult.status === 'fulfilled') {
+          const nfl = nflResult.value;
+          if (nfl.displayName === 'Offseason' || nfl.isSeasonOver) {
+            // off-season — no indicator
+          } else if (nfl.seasonType === 1) {
+            statuses.nfl = 'preseason';
+          } else {
+            statuses.nfl = 'active';
+          }
+        }
+        dailySports.forEach((sport, i) => {
+          if (dailyResults[i].status === 'fulfilled') {
+            const st = dailyResults[i].value.seasonType;
+            if (st === 2 || st === 3) statuses[sport] = 'active';
+            else if (st === 1) statuses[sport] = 'preseason';
+          }
+        });
+        setSportStatuses(statuses);
+
+        // Auto-select first in-season sport if no URL param was provided
+        let activeSport = selectedSport;
+        if (!initialUrlParams.current.sport) {
+          const firstActive = SPORT_TABS.find(s => statuses[s.id] === 'active');
+          if (firstActive && firstActive.id !== selectedSport) {
+            activeSport = firstActive.id;
+            setSelectedSport(firstActive.id);
+          }
+        }
+
+        // Process NFL season data
+        const result = nflResult.status === 'fulfilled' ? nflResult.value : null;
+        if (result?.season) {
           const year = result.season;
           const week = result.week;
           const seasonType = result.seasonType || 2;
-          
+
           setSeason(year);
           setCurrentYear(year);
           setCurrentWeek(week);
           setCurrentSeasonType(seasonType);
-          setSelectedWeek(week);
           setSelectedSeasonType(seasonType);
-          
-          // Directly load the schedule for the current week
-          if (seasonType === 2) {
-            await loadSchedule(week, year, 2);
-            // Scroll to current week tab after data loads
-            setTimeout(() => {
-              const key = `2-${week}`;
-              const button = weekButtonRefs.current[key];
-              if (button && weekTabsRef.current) {
-                button.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-              }
-            }, 100);
-          } else if (seasonType === 3) {
-            await loadAllPlayoffRounds(year);
+
+          // Use URL week param on first load if valid, otherwise use current week
+          const urlWeek = initialUrlParams.current.week;
+          let targetWeek = week;
+          if (urlWeek) {
+            const w = parseInt(urlWeek);
+            if (w >= 1 && w <= 18) targetWeek = w;
+            initialUrlParams.current.week = null;
+          }
+          setSelectedWeek(targetWeek);
+
+          // Only load NFL schedule if NFL is the active sport
+          if (activeSport === 'nfl') {
+            if (seasonType === 2) {
+              await loadSchedule(targetWeek, year, 2);
+              setTimeout(() => {
+                const key = `2-${targetWeek}`;
+                const button = weekButtonRefs.current[key];
+                if (button && weekTabsRef.current) {
+                  button.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                }
+              }, 100);
+            } else if (seasonType === 3) {
+              await loadAllPlayoffRounds(year);
+            }
           }
         }
       } catch (error) {
@@ -279,9 +359,9 @@ export default function Schedule() {
         setInitialLoadDone(true);
       }
     };
-    
-    loadSeason();
-    
+
+    loadInitial();
+
     return () => {
       cancelled = true;
     };
@@ -354,7 +434,7 @@ export default function Schedule() {
     const loadLeagueRanks = async () => {
       setLeagueRanksLoaded(false);
       const config = SEASON_STATS_CONFIG[selectedSport] || SEASON_STATS_CONFIG.nfl;
-      let statKeys = [...new Set(config.map((s) => s.key).filter(Boolean))];
+      let statKeys = [...new Set(config.map((s) => s.rankingsKey || s.key).filter(Boolean))];
       // NCAAB has a much larger team pool; only prefetch Opp PPG rank (missing from scoreboard metadata).
       if (selectedSport === 'ncaab') {
         statKeys = statKeys.filter((k) => k === 'avgPointsAgainst');
@@ -525,9 +605,9 @@ export default function Schedule() {
   const getStatusDisplay = (game) => {
     if (isGameLive(game)) {
       return (
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-red-400 bg-red-500/20 px-2 py-1 rounded-full">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-500/20 px-2 py-1 rounded-full">
           <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-          LIVE
+          {game.statusDetail || 'LIVE'}
         </span>
       );
     }
@@ -656,30 +736,30 @@ export default function Schedule() {
         {/* Betting Lines */}
         {odds && (
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5" />
+            <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+              <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Betting Lines
             </h4>
             <div className="grid grid-cols-3 gap-2">
               {odds.spread && (
-                <div className="bg-fg/5 rounded-lg p-2 text-center">
-                  <div className="text-xs text-fg/50">Spread</div>
-                  <div className="text-sm font-semibold text-fg">{odds.spread}</div>
+                <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
+                  <div className="text-xs sm:text-sm text-fg/50">Spread</div>
+                  <div className="text-sm sm:text-base font-semibold text-fg">{odds.spread}</div>
                 </div>
               )}
               {odds.overUnder && (
-                <div className="bg-fg/5 rounded-lg p-2 text-center">
-                  <div className="text-xs text-fg/50">O/U</div>
-                  <div className="text-sm font-semibold text-fg">{odds.overUnder}</div>
+                <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
+                  <div className="text-xs sm:text-sm text-fg/50">O/U</div>
+                  <div className="text-sm sm:text-base font-semibold text-fg">{odds.overUnder}</div>
                 </div>
               )}
               {(odds.homeMoneyLine || odds.awayMoneyLine) && (
-                <div className="bg-fg/5 rounded-lg p-2 text-center">
-                  <div className="text-xs text-fg/50">Moneyline</div>
-                  <div className="text-sm font-semibold text-fg">
+                <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
+                  <div className="text-xs sm:text-sm text-fg/50">Moneyline</div>
+                  <div className="text-sm sm:text-base font-semibold text-fg">
                     {game.awayTeam?.abbreviation} {odds.awayMoneyLine > 0 ? '+' : ''}{odds.awayMoneyLine}
                   </div>
-                  <div className="text-sm font-semibold text-fg">
+                  <div className="text-sm sm:text-base font-semibold text-fg">
                     {game.homeTeam?.abbreviation} {odds.homeMoneyLine > 0 ? '+' : ''}{odds.homeMoneyLine}
                   </div>
                 </div>
@@ -693,33 +773,20 @@ export default function Schedule() {
           const awayPct = Math.round(Number(details.winProbability.awayWinPct) || 50);
           const homePct = Math.round(Number(details.winProbability.homeWinPct) || 50);
 
-          // Pick a color visible on dark backgrounds — use alternateColor if primary is too dark
-          const visibleColor = (team) => {
-            const primary = team?.color || '#6B7280';
-            const hex = primary.replace('#', '');
-            const r = parseInt(hex.substring(0, 2), 16);
-            const g = parseInt(hex.substring(2, 4), 16);
-            const b = parseInt(hex.substring(4, 6), 16);
-            // Relative luminance threshold — below this, the color vanishes on dark bg
-            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            if (luminance < 0.25 && team?.alternateColor) return team.alternateColor;
-            return primary;
-          };
-
-          const awayColor = visibleColor(game.awayTeam);
-          const homeColor = visibleColor(game.homeTeam);
+          const awayColor = tc(game.awayTeam);
+          const homeColor = tc(game.homeTeam);
           return (
             <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5" />
+              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Win Probability
               </h4>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-xs font-medium text-fg">{game.awayTeam?.abbreviation}</span>
-                  <span className="text-xs font-bold text-fg">{awayPct}%</span>
+                  <span className="text-xs sm:text-sm font-medium text-fg">{game.awayTeam?.abbreviation}</span>
+                  <span className="text-xs sm:text-sm font-bold text-fg">{awayPct}%</span>
                 </div>
-                <div className="flex-1 h-3 rounded-full overflow-hidden flex">
+                <div className="flex-1 h-3 sm:h-4 rounded-full overflow-hidden flex">
                   <div
                     className="h-full transition-all duration-300"
                     style={{ width: `${awayPct}%`, backgroundColor: awayColor }}
@@ -730,16 +797,16 @@ export default function Schedule() {
                   />
                 </div>
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-xs font-bold text-fg">{homePct}%</span>
-                  <span className="text-xs font-medium text-fg">{game.homeTeam?.abbreviation}</span>
+                  <span className="text-xs sm:text-sm font-bold text-fg">{homePct}%</span>
+                  <span className="text-xs sm:text-sm font-medium text-fg">{game.homeTeam?.abbreviation}</span>
                 </div>
               </div>
             </div>
           );
         })()}
 
-        {/* Team Season Stats — Sport-specific */}
-        {(() => {
+        {/* Team Season Stats — Sport-specific (hidden during preseason) */}
+        {sportStatuses[selectedSport] !== 'preseason' && (() => {
           const config = SEASON_STATS_CONFIG[selectedSport] || SEASON_STATS_CONFIG.nfl;
 
           // Build stat rows for a team from scoreboard + details data
@@ -749,17 +816,18 @@ export default function Schedule() {
             const streak = details?.seasonAverages?.[side]?.streak || (selectedSport === 'nfl' ? team?.streak : null);
             const lastTen = details?.seasonAverages?.[side]?.lastTen;
 
-            const stats = config.map(({ key, label, source }) => {
-              const leagueRank = leagueRanksByStat[key]?.[String(team?.id)] || null;
+            const stats = config.map(({ key, label, source, rankingsKey }) => {
+              const rKey = rankingsKey || key;
+              const leagueRank = leagueRanksByStat[rKey]?.[String(team?.id)] || null;
               const fallbackRank = leagueRanksLoaded ? scoreboard[key]?.rank || null : null;
               // NFL embeds avgPointsFor/avgPointsAgainst directly on team object
-              if (source === 'game') return { label, value: team?.[key] || '-', rank: leagueRank || fallbackRank, statKey: key };
+              if (source === 'game') return { label, value: team?.[key] || '-', rank: leagueRank || fallbackRank, statKey: rKey };
               // Details-only stats (like opp PPG from boxscore)
-              if (source === 'details') return { label, value: detailStats[key]?.displayValue || '-', rank: leagueRank || fallbackRank, statKey: key };
+              if (source === 'details') return { label, value: detailStats[key]?.displayValue || '-', rank: leagueRank || fallbackRank, statKey: rKey };
               // Default: try scoreboard stats first, then detail stats
               const val = scoreboard[key]?.displayValue || detailStats[key]?.displayValue;
               const rank = leagueRank || fallbackRank;
-              return { label, value: val || '-', rank, statKey: key };
+              return { label, value: val || '-', rank, statKey: rKey };
             });
 
             return { stats, streak, lastTen };
@@ -775,12 +843,12 @@ export default function Schedule() {
           const canClickStat = true;
 
           const TeamSeasonColumn = ({ team, data }) => (
-            <div className="bg-fg/5 rounded-lg p-3">
+            <div className="bg-fg/5 rounded-lg p-3 sm:p-4">
               <div className="flex items-center gap-2 mb-2.5">
-                {team?.logo && <img src={team.logo} alt="" className="w-6 h-6 object-contain" />}
-                <span className="text-sm font-semibold text-fg">{team?.abbreviation}</span>
+                {team?.logo && <img src={tl(team.logo)} alt="" className="w-6 h-6 object-contain" />}
+                <span className="text-sm sm:text-base font-semibold text-fg">{team?.abbreviation}</span>
               </div>
-              <div className="space-y-1.5 text-sm">
+              <div className="space-y-1.5 sm:space-y-2 text-sm sm:text-base">
                 {data.stats.map((stat, i) => (
                   <div
                     key={i}
@@ -795,9 +863,9 @@ export default function Schedule() {
                     } : undefined}
                   >
                     <span className="text-fg/50">{stat.label}</span>
-                    <span className="text-fg font-medium">
+                    <span className={`font-medium ${stat.rank ? getRankColor(stat.rank) : 'text-fg'}`}>
                       {stat.value}
-                      {stat.rank && <span className={`ml-1 text-xs ${getRankColor(stat.rank)}`}>({stat.rank})</span>}
+                      {stat.rank && <span className="ml-1 text-xs sm:text-sm">({stat.rank})</span>}
                     </span>
                   </div>
                 ))}
@@ -810,7 +878,7 @@ export default function Schedule() {
                 {data.streak && (
                   <div className="flex justify-between items-center px-1 -mx-1">
                     <span className="text-fg/50">Streak</span>
-                    <span className={`font-medium ${data.streak.type === 'W' ? 'text-green-400' : 'text-red-400'}`}>
+                    <span className={`font-medium ${data.streak.type === 'W' ? 'text-green-500' : 'text-red-500'}`}>
                       {data.streak.type}{data.streak.count}
                     </span>
                   </div>
@@ -821,8 +889,8 @@ export default function Schedule() {
 
           return (
             <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5" />
+              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Season Averages
               </h4>
               <div className="grid grid-cols-2 gap-3">
@@ -877,7 +945,7 @@ export default function Schedule() {
               <div className="text-xs text-fg/60 space-y-0.5">
                 {displayList.map((inj, i) => (
                   <div key={i}>
-                    <span className={inj.displayStatus === 'Doubtful' ? 'text-yellow-400' : 'text-red-400'}>
+                    <span className={inj.displayStatus === 'Doubtful' ? 'text-yellow-400' : 'text-red-500'}>
                       {inj.displayStatus}
                     </span>
                     {' '}{inj.player.name} <span className="text-fg/40">({inj.player.position})</span>
@@ -904,7 +972,7 @@ export default function Schedule() {
                 {/* Away Team */}
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
-                    {game.awayTeam?.logo && <img src={game.awayTeam.logo} alt="" className="w-4 h-4" />}
+                    {game.awayTeam?.logo && <img src={tl(game.awayTeam.logo)} alt="" className="w-4 h-4" />}
                     <span className="text-xs text-fg/50">{game.awayTeam?.abbreviation}</span>
                   </div>
                   {awayInjuries.length > 0 ? <InjuryList injuries={awayInjuries} /> : (
@@ -914,7 +982,7 @@ export default function Schedule() {
                 {/* Home Team */}
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
-                    {game.homeTeam?.logo && <img src={game.homeTeam.logo} alt="" className="w-4 h-4" />}
+                    {game.homeTeam?.logo && <img src={tl(game.homeTeam.logo)} alt="" className="w-4 h-4" />}
                     <span className="text-xs text-fg/50">{game.homeTeam?.abbreviation}</span>
                   </div>
                   {homeInjuries.length > 0 ? <InjuryList injuries={homeInjuries} /> : (
@@ -1033,8 +1101,8 @@ export default function Schedule() {
         {/* Top Performers by Team */}
         {hasLeaders ? (
           <div className="space-y-3">
-            <h4 className="text-xs font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5" />
+            <h4 className="text-xs sm:text-sm font-semibold text-fg/70 uppercase tracking-wide flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Top Performers
             </h4>
             
@@ -1068,7 +1136,7 @@ export default function Schedule() {
                         <div className="flex-1 min-w-0">
                           <div className="text-[10px] text-fg/40 uppercase">{leader.displayName}</div>
                           <div className="text-xs font-medium text-fg truncate">{leader.player?.name || 'Unknown'}</div>
-                          <div className="text-[11px] text-emerald-400 font-medium leading-tight">{leader.value}</div>
+                          <div className="text-[11px] text-fg/70 font-medium leading-tight">{leader.value}</div>
                         </div>
                       </div>
                     ))}
@@ -1086,16 +1154,16 @@ export default function Schedule() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 pb-1 border-b border-fg/10">
                       {game.awayTeam?.logo && (
-                        <img src={game.awayTeam.logo} alt={game.awayTeam?.abbreviation} className="w-6 h-6" />
+                        <img src={tl(game.awayTeam.logo)} alt={game.awayTeam?.abbreviation} className="w-6 h-6" />
                       )}
-                      <span className="text-sm font-semibold text-fg">{game.awayTeam?.abbreviation}</span>
+                      <span className="text-sm sm:text-base font-semibold text-fg">{game.awayTeam?.abbreviation}</span>
                     </div>
                     <div className="space-y-2">
                       {awayLeaders.map((leader, idx) => (
-                        <div key={idx} className="bg-fg/5 rounded-lg p-2.5 flex items-center gap-3">
+                        <div key={idx} className="bg-fg/5 rounded-lg p-2.5 sm:p-3 flex items-center gap-3">
                           {leader.player?.headshot ? (
-                            <img 
-                              src={leader.player.headshot} 
+                            <img
+                              src={leader.player.headshot}
                               alt={leader.player?.name}
                               className="w-11 h-11 rounded-full object-cover flex-shrink-0"
                             />
@@ -1105,9 +1173,9 @@ export default function Schedule() {
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="text-[10px] text-fg/40 uppercase">{leader.displayName}</div>
-                            <div className="text-sm font-medium text-fg">{leader.player?.name || 'Unknown'}</div>
-                            <div className="text-xs text-emerald-400 font-medium">{leader.value}</div>
+                            <div className="text-[10px] sm:text-xs text-fg/40 uppercase">{leader.displayName}</div>
+                            <div className="text-sm sm:text-base font-medium text-fg">{leader.player?.name || 'Unknown'}</div>
+                            <div className="text-xs sm:text-sm text-fg/70 font-medium">{leader.value}</div>
                           </div>
                         </div>
                       ))}
@@ -1123,16 +1191,16 @@ export default function Schedule() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 pb-1 border-b border-fg/10">
                       {game.homeTeam?.logo && (
-                        <img src={game.homeTeam.logo} alt={game.homeTeam?.abbreviation} className="w-6 h-6" />
+                        <img src={tl(game.homeTeam.logo)} alt={game.homeTeam?.abbreviation} className="w-6 h-6" />
                       )}
-                      <span className="text-sm font-semibold text-fg">{game.homeTeam?.abbreviation}</span>
+                      <span className="text-sm sm:text-base font-semibold text-fg">{game.homeTeam?.abbreviation}</span>
                     </div>
                     <div className="space-y-2">
                       {homeLeaders.map((leader, idx) => (
-                        <div key={idx} className="bg-fg/5 rounded-lg p-2.5 flex items-center gap-3">
+                        <div key={idx} className="bg-fg/5 rounded-lg p-2.5 sm:p-3 flex items-center gap-3">
                           {leader.player?.headshot ? (
-                            <img 
-                              src={leader.player.headshot} 
+                            <img
+                              src={leader.player.headshot}
                               alt={leader.player?.name}
                               className="w-11 h-11 rounded-full object-cover flex-shrink-0"
                             />
@@ -1142,9 +1210,9 @@ export default function Schedule() {
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="text-[10px] text-fg/40 uppercase">{leader.displayName}</div>
-                            <div className="text-sm font-medium text-fg">{leader.player?.name || 'Unknown'}</div>
-                            <div className="text-xs text-emerald-400 font-medium">{leader.value}</div>
+                            <div className="text-[10px] sm:text-xs text-fg/40 uppercase">{leader.displayName}</div>
+                            <div className="text-sm sm:text-base font-medium text-fg">{leader.player?.name || 'Unknown'}</div>
+                            <div className="text-xs sm:text-sm text-fg/70 font-medium">{leader.value}</div>
                           </div>
                         </div>
                       ))}
@@ -1164,12 +1232,12 @@ export default function Schedule() {
         {/* Scoring Summary */}
         {details?.scoringPlays && details.scoringPlays.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-fg/50 uppercase tracking-wide">
+            <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide">
               {selectedSport === 'nhl' ? 'Goals' : 'Scoring Summary'}
             </h4>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {details.scoringPlays.map((play, idx) => (
-                <div key={idx} className="bg-fg/5 rounded-lg p-2 text-xs">
+                <div key={idx} className="bg-fg/5 rounded-lg p-2 sm:p-3 text-xs sm:text-sm">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-fg/50">
                       {play.periodLabel || `Q${play.quarter}`} {play.time}
@@ -1191,7 +1259,7 @@ export default function Schedule() {
         {/* Final Stats Comparison */}
         {hasTeamStats && (
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-fg/50 uppercase tracking-wide">
+            <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide">
               Team Stats
             </h4>
             <div className="space-y-1.5">
@@ -1201,12 +1269,12 @@ export default function Schedule() {
                 if (!awayStat && !homeStat) return null;
 
                 return (
-                  <div key={statKey} className="flex items-center text-sm">
-                    <span className="w-20 text-right font-medium whitespace-nowrap">
+                  <div key={statKey} className="flex items-center text-sm sm:text-base">
+                    <span className="w-20 sm:w-24 text-right font-medium whitespace-nowrap">
                       {renderTeamStatValue(awayStat, 'right')}
                     </span>
                     <div className="flex-1 text-center text-fg/50 px-2">{label}</div>
-                    <span className="w-20 text-left font-medium whitespace-nowrap">
+                    <span className="w-20 sm:w-24 text-left font-medium whitespace-nowrap">
                       {renderTeamStatValue(homeStat, 'left')}
                     </span>
                   </div>
@@ -1257,7 +1325,7 @@ export default function Schedule() {
                 <ClickableTeam team={game.awayTeam}>
                   {game.awayTeam?.logo ? (
                     <img
-                      src={game.awayTeam.logo}
+                      src={tl(game.awayTeam.logo)}
                       alt={game.awayTeam.abbreviation}
                       className="w-7 h-7 object-contain flex-shrink-0"
                     />
@@ -1270,24 +1338,36 @@ export default function Schedule() {
                     </div>
                   )}
                 </ClickableTeam>
-                <ClickableTeam team={game.awayTeam}>
-                  <span className="text-fg font-medium text-sm hover:underline">
-                    {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
-                  </span>
-                </ClickableTeam>
-                {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
                 {isPast || isLive ? (
-                  <span className={`ml-auto font-bold text-base ${
-                    isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-400' : 'text-fg'
-                  }`}>
-                    {getScore(game.awayTeam) ?? 0}
-                  </span>
+                  <>
+                    <ClickableTeam team={game.awayTeam}>
+                      <span className="text-fg font-medium text-base hover:underline">
+                        {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
+                      </span>
+                    </ClickableTeam>
+                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
+                    <span className={`ml-auto font-bold text-base ${
+                      isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-500' : 'text-fg'
+                    }`}>
+                      {getScore(game.awayTeam) ?? 0}
+                    </span>
+                  </>
                 ) : (
-                  <div className="ml-auto flex items-center gap-2 text-sm">
-                    {game.awayTeam?.record && <span className="text-sm font-medium text-fg/45">{game.awayTeam.record}</span>}
-                    {getTeamStandingBadges(game.awayTeam).map((b, i) => (
-                      <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
-                    ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <ClickableTeam team={game.awayTeam}>
+                        <span className="text-fg font-medium text-base hover:underline">
+                          {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
+                        </span>
+                      </ClickableTeam>
+                      {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-fg/45 mt-0.5">
+                      {game.awayTeam?.record && <span className="font-medium">{game.awayTeam.record}</span>}
+                      {getTeamStandingBadges(game.awayTeam).map((b, i) => (
+                        <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1297,7 +1377,7 @@ export default function Schedule() {
                 <ClickableTeam team={game.homeTeam}>
                   {game.homeTeam?.logo ? (
                     <img
-                      src={game.homeTeam.logo}
+                      src={tl(game.homeTeam.logo)}
                       alt={game.homeTeam.abbreviation}
                       className="w-7 h-7 object-contain flex-shrink-0"
                     />
@@ -1310,24 +1390,36 @@ export default function Schedule() {
                     </div>
                   )}
                 </ClickableTeam>
-                <ClickableTeam team={game.homeTeam}>
-                  <span className="text-fg font-medium text-sm hover:underline">
-                    {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
-                  </span>
-                </ClickableTeam>
-                {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
                 {isPast || isLive ? (
-                  <span className={`ml-auto font-bold text-base ${
-                    isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-400' : 'text-fg'
-                  }`}>
-                    {getScore(game.homeTeam) ?? 0}
-                  </span>
+                  <>
+                    <ClickableTeam team={game.homeTeam}>
+                      <span className="text-fg font-medium text-base hover:underline">
+                        {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
+                      </span>
+                    </ClickableTeam>
+                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
+                    <span className={`ml-auto font-bold text-base ${
+                      isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-500' : 'text-fg'
+                    }`}>
+                      {getScore(game.homeTeam) ?? 0}
+                    </span>
+                  </>
                 ) : (
-                  <div className="ml-auto flex items-center gap-2 text-sm">
-                    {game.homeTeam?.record && <span className="text-sm font-medium text-fg/45">{game.homeTeam.record}</span>}
-                    {getTeamStandingBadges(game.homeTeam).map((b, i) => (
-                      <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
-                    ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <ClickableTeam team={game.homeTeam}>
+                        <span className="text-fg font-medium text-base hover:underline">
+                          {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
+                        </span>
+                      </ClickableTeam>
+                      {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-fg/45 mt-0.5">
+                      {game.homeTeam?.record && <span className="font-medium">{game.homeTeam.record}</span>}
+                      {getTeamStandingBadges(game.homeTeam).map((b, i) => (
+                        <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1336,10 +1428,15 @@ export default function Schedule() {
             {/* Game Info Column */}
             <div className="flex-shrink-0 pl-4 border-l border-fg/10 ml-4 flex flex-col justify-center items-end min-w-[70px]">
               {isLive ? (
-                <span className="flex items-center justify-end gap-1.5 text-xs font-semibold text-red-400">
-                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                  LIVE
-                </span>
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="flex items-center justify-end gap-1.5 text-xs font-semibold text-red-500">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                    LIVE
+                  </span>
+                  {game.statusDetail && (
+                    <span className="text-[10px] text-fg/50">{game.statusDetail}</span>
+                  )}
+                </div>
               ) : isPast ? (
                 <span className="text-xs font-medium text-fg/50">Final</span>
               ) : (
@@ -1355,7 +1452,7 @@ export default function Schedule() {
           
           {/* Expanded Content - Mobile */}
           {isExpanded && (
-            isPast ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
+            (isPast || isLive) ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
           )}
         </div>
 
@@ -1384,7 +1481,7 @@ export default function Schedule() {
               <ClickableTeam team={game.awayTeam}>
                 {game.awayTeam?.logo ? (
                   <img
-                    src={game.awayTeam.logo}
+                    src={tl(game.awayTeam.logo)}
                     alt={game.awayTeam.abbreviation}
                     className="w-10 h-10 object-contain"
                   />
@@ -1423,13 +1520,13 @@ export default function Schedule() {
               {isPast || isLive ? (
                 <div className="flex items-center justify-center gap-2">
                   <span className={`text-2xl font-bold ${
-                    isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-400' : 'text-fg'
+                    isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-500' : 'text-fg'
                   }`}>
                     {getScore(game.awayTeam) ?? 0}
                   </span>
                   <span className="text-fg/30">-</span>
                   <span className={`text-2xl font-bold ${
-                    isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-400' : 'text-fg'
+                    isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-500' : 'text-fg'
                   }`}>
                     {getScore(game.homeTeam) ?? 0}
                   </span>
@@ -1463,7 +1560,7 @@ export default function Schedule() {
               <ClickableTeam team={game.homeTeam}>
                 {game.homeTeam?.logo ? (
                   <img
-                    src={game.homeTeam.logo}
+                    src={tl(game.homeTeam.logo)}
                     alt={game.homeTeam.abbreviation}
                     className="w-10 h-10 object-contain"
                   />
@@ -1481,7 +1578,7 @@ export default function Schedule() {
           
           {/* Expanded Content - Desktop */}
           {isExpanded && (
-            isPast ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
+            (isPast || isLive) ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
           )}
         </div>
       </div>
@@ -1502,13 +1599,19 @@ export default function Schedule() {
           <button
             key={sport.id}
             onClick={() => handleSportChange(sport.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${
               selectedSport === sport.id
                 ? 'bg-fg/15 text-fg'
                 : 'bg-fg/5 text-fg/40 hover:text-fg/60'
             }`}
           >
             {sport.name}
+            {sportStatuses[sport.id] === 'active' && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500" />
+            )}
+            {sportStatuses[sport.id] === 'preseason' && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400" />
+            )}
           </button>
         ))}
       </div>

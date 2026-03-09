@@ -130,7 +130,7 @@ export default function JoinByInvite() {
               <p className="text-fg/40 text-xs">Max Strikes</p>
             </div>
             <div className="bg-fg/5 rounded-xl p-3 text-center">
-              <Calendar className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
+              <Calendar className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
               <p className="text-fg font-bold">Week {league.startWeek}</p>
               <p className="text-fg/40 text-xs">Start</p>
             </div>

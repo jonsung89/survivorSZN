@@ -4,7 +4,7 @@ export default {
   id: 'ncaab',
   name: 'NCAAB',
   displayName: 'NCAAB Schedule',
-  gameType: 'schedule',
+  gameType: 'bracket',
   scheduleType: 'daily',
   periodName: 'Date',
 

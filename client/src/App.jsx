@@ -15,6 +15,8 @@ import JoinLeague from './pages/JoinLeague';
 import JoinByInvite from './components/JoinByInvite';
 import LeagueDetail from './pages/LeagueDetail';
 import MakePick from './pages/MakePick';
+import BracketChallenge from './pages/BracketChallenge';
+import BracketFill from './pages/BracketFill';
 import Schedule from './pages/Schedule';
 import Loading from './components/Loading';
 import Onboarding from './components/Onboarding';
@@ -149,6 +151,22 @@ function AppRoutes() {
         <ProtectedRoute>
           <AppLayout>
             <MakePick />
+          </AppLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/league/:leagueId/bracket" element={
+        <ProtectedRoute>
+          <AppLayout>
+            <BracketChallenge />
+          </AppLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/league/:leagueId/bracket/:bracketId" element={
+        <ProtectedRoute>
+          <AppLayout>
+            <BracketFill />
           </AppLayout>
         </ProtectedRoute>
       } />

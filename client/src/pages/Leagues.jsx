@@ -59,6 +59,7 @@ export default function Leagues() {
 
   const renderLeagueCard = (league) => {
     const sportMod = getSportModule(league.sportId || 'nfl');
+    const isBracketLeague = sportMod.gameType === 'bracket';
     const isWinner = league.seasonOver && league.winners?.some(w => w.isMe);
     const isPast = league.seasonOver;
 
@@ -91,8 +92,13 @@ export default function Leagues() {
                 <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 {league.memberCount}
               </span>
-              <span>{league.maxStrikes} strike{league.maxStrikes !== 1 ? 's' : ''}</span>
-              <span className="hidden sm:inline">Week {league.startWeek} start</span>
+              {!isBracketLeague && (
+                <>
+                  <span>{league.maxStrikes} strike{league.maxStrikes !== 1 ? 's' : ''}</span>
+                  <span className="hidden sm:inline">Week {league.startWeek} start</span>
+                </>
+              )}
+              {isBracketLeague && <span>Bracket Challenge</span>}
               {isPast && <span className="text-fg/40">{league.season} Season</span>}
             </div>
           </div>
@@ -100,16 +106,18 @@ export default function Leagues() {
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {/* Status & Strikes */}
             <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 sm:gap-4">
-              <div className="flex items-center gap-1">
-                {Array.from({ length: league.maxStrikes }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${
-                      i < league.strikes ? 'bg-red-500' : 'bg-fg/20'
-                    }`}
-                  />
-                ))}
-              </div>
+              {!isBracketLeague && (
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: league.maxStrikes }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${
+                        i < league.strikes ? 'bg-red-500' : 'bg-fg/20'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
               {isPast ? (
                 isWinner ? (
                   <button

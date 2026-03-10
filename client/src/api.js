@@ -382,6 +382,62 @@ export const sportsAPI = {
   }
 };
 
+// Bracket API
+export const bracketAPI = {
+  createChallenge: async (data) => {
+    const res = await authFetch('/brackets/challenges', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  },
+  getChallenge: async (challengeId) => {
+    const res = await authFetch(`/brackets/challenges/${challengeId}`);
+    return res.json();
+  },
+  getChallengeByLeague: async (leagueId) => {
+    const res = await authFetch(`/brackets/challenges/league/${leagueId}`);
+    return res.json();
+  },
+  updateChallenge: async (challengeId, data) => {
+    const res = await authFetch(`/brackets/challenges/${challengeId}`, { method: 'PUT', body: JSON.stringify(data) });
+    return res.json();
+  },
+  createBracket: async (challengeId, data = {}) => {
+    const res = await authFetch(`/brackets/challenges/${challengeId}/brackets`, { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  },
+  updateBracket: async (bracketId, data) => {
+    const res = await authFetch(`/brackets/${bracketId}`, { method: 'PUT', body: JSON.stringify(data) });
+    return res.json();
+  },
+  submitBracket: async (bracketId) => {
+    const res = await authFetch(`/brackets/${bracketId}/submit`, { method: 'POST' });
+    return res.json();
+  },
+  getBracket: async (bracketId) => {
+    const res = await authFetch(`/brackets/${bracketId}`);
+    return res.json();
+  },
+  getTournamentData: async (season) => {
+    const res = await fetch(`${API_URL}/brackets/tournament/${season}`);
+    return res.json();
+  },
+  getTeamBreakdown: async (season, teamId) => {
+    const res = await fetch(`${API_URL}/brackets/tournament/${season}/team/${teamId}`);
+    return res.json();
+  },
+  getMatchupPrediction: async (season, eventId) => {
+    const res = await fetch(`${API_URL}/brackets/tournament/${season}/matchup/${eventId}`);
+    return res.json();
+  },
+  getLeaderboard: async (challengeId) => {
+    const res = await authFetch(`/brackets/challenges/${challengeId}/leaderboard`);
+    return res.json();
+  },
+  updateResults: async () => {
+    const res = await fetch(`${API_URL}/brackets/update-results`, { method: 'POST' });
+    return res.json();
+  },
+};
+
 export default {
   auth: authAPI,
   league: leagueAPI,
@@ -390,5 +446,6 @@ export default {
   schedule: scheduleAPI,
   user: userAPI,
   notification: notificationAPI,
-  sports: sportsAPI
+  sports: sportsAPI,
+  bracket: bracketAPI
 };

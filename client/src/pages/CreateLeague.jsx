@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
-  Trophy, 
-  Lock, 
-  Calendar, 
+import {
+  Trophy,
+  Lock,
+  Calendar,
   AlertTriangle,
   ArrowLeft,
   Loader2,
   Info
 } from 'lucide-react';
-import { leagueAPI, nflAPI } from '../api';
+import { leagueAPI, nflAPI, bracketAPI } from '../api';
 import { useToast } from '../components/Toast';
 import { getAllSports, getSportModule } from '../sports';
 import BrandLogo from '../components/BrandLogo';
+import BracketSetup from '../components/bracket/BracketSetup';
 import nflSport from '../sports/nfl';
 
 export default function CreateLeague() {
@@ -20,7 +21,7 @@ export default function CreateLeague() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [currentWeek, setCurrentWeek] = useState(1);
-  
+
   const [formData, setFormData] = useState({
     name: '',
     password: '',
@@ -29,6 +30,18 @@ export default function CreateLeague() {
     startWeek: 1,
     sportId: 'nfl'
   });
+
+  const [bracketConfig, setBracketConfig] = useState({
+    maxBracketsPerUser: 1,
+    scoringPreset: 'standard',
+    customScoring: null,
+    tiebreakerType: 'total_score',
+    entryDeadline: '',
+    entryFee: 0,
+  });
+
+  const selectedSport = getSportModule(formData.sportId);
+  const isBracketMode = selectedSport?.gameType === 'bracket';
 
   useEffect(() => {
     const fetchCurrentWeek = async () => {
@@ -75,12 +88,31 @@ export default function CreateLeague() {
       const result = await leagueAPI.create({
         name: formData.name.trim(),
         password: formData.password,
-        maxStrikes: formData.maxStrikes,
-        startWeek: formData.startWeek,
+        maxStrikes: isBracketMode ? 1 : formData.maxStrikes,
+        startWeek: isBracketMode ? 1 : formData.startWeek,
         sportId: formData.sportId
       });
 
       if (result.success) {
+        // If bracket mode, create the bracket challenge
+        if (isBracketMode) {
+          try {
+            await bracketAPI.createChallenge({
+              leagueId: result.league.id,
+              maxBracketsPerUser: bracketConfig.maxBracketsPerUser,
+              scoringPreset: bracketConfig.scoringPreset,
+              customScoring: bracketConfig.customScoring,
+              tiebreakerType: bracketConfig.tiebreakerType,
+              entryDeadline: bracketConfig.entryDeadline || null,
+              entryFee: parseFloat(bracketConfig.entryFee) || 0,
+            });
+          } catch (bracketErr) {
+            console.error('Failed to create bracket challenge:', bracketErr);
+            // League was created but bracket challenge failed — still navigate
+            showToast('League created, but bracket challenge setup had an issue. You can configure it in settings.', 'error');
+          }
+        }
+
         showToast('League created successfully!', 'success');
         navigate(`/league/${result.league.id}`);
       } else {
@@ -109,7 +141,9 @@ export default function CreateLeague() {
           <BrandLogo size="lg" />
         </div>
         <h1 className="text-3xl font-display font-bold text-fg">Create a League</h1>
-        <p className="text-fg/60 mt-2">Set up your survivor pool and invite friends</p>
+        <p className="text-fg/60 mt-2">
+          {isBracketMode ? 'Set up your March Madness bracket challenge' : 'Set up your survivor pool and invite friends'}
+        </p>
       </div>
 
       {/* Form */}
@@ -121,7 +155,7 @@ export default function CreateLeague() {
           </label>
           <div className="flex flex-wrap gap-2">
             {getAllSports().map(sport => {
-              const isAvailable = sport.gameType === 'survivor';
+              const isAvailable = sport.gameType === 'survivor' || sport.gameType === 'bracket';
               const isSelected = formData.sportId === sport.id;
               return (
                 <button
@@ -155,7 +189,7 @@ export default function CreateLeague() {
             name="name"
             value={formData.name}
             onChange={handleChange}
-            placeholder="e.g., Office Survivor Pool 2024"
+            placeholder={isBracketMode ? "e.g., Office Bracket Challenge 2026" : "e.g., Office Survivor Pool 2024"}
             className="input-field"
             maxLength={50}
           />
@@ -195,64 +229,71 @@ export default function CreateLeague() {
           Share this password with people you want to join your league
         </p>
 
-        {/* Settings */}
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Max Strikes */}
-          <div>
-            <label className="block text-fg/80 text-sm font-medium mb-2">
-              <AlertTriangle className="w-4 h-4 inline mr-2" />
-              Strikes Before Elimination
-            </label>
-            <select
-              name="maxStrikes"
-              value={formData.maxStrikes}
-              onChange={handleChange}
-              className="input-field"
-            >
-              {[1, 2, 3, 4, 5].map(n => (
-                <option key={n} value={n}>
-                  {n} strike{n > 1 ? 's' : ''} {n === 1 ? '(Classic)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Bracket-specific settings */}
+        {isBracketMode ? (
+          <BracketSetup config={bracketConfig} onChange={setBracketConfig} />
+        ) : (
+          <>
+            {/* Survivor Settings */}
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Max Strikes */}
+              <div>
+                <label className="block text-fg/80 text-sm font-medium mb-2">
+                  <AlertTriangle className="w-4 h-4 inline mr-2" />
+                  Strikes Before Elimination
+                </label>
+                <select
+                  name="maxStrikes"
+                  value={formData.maxStrikes}
+                  onChange={handleChange}
+                  className="input-field"
+                >
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <option key={n} value={n}>
+                      {n} strike{n > 1 ? 's' : ''} {n === 1 ? '(Classic)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          {/* Start Week */}
-          <div>
-            <label className="block text-fg/80 text-sm font-medium mb-2">
-              <Calendar className="w-4 h-4 inline mr-2" />
-              Starting Week
-            </label>
-            <select
-              name="startWeek"
-              value={formData.startWeek}
-              onChange={handleChange}
-              className="input-field"
-            >
-              {nflSport.getCreationPeriods(currentWeek).map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {value === currentWeek ? `${label} (Current Week)` : label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Info Box */}
-        <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-4">
-          <div className="flex gap-3">
-            <Info className="w-5 h-5 text-violet-400 flex-shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <p className="font-medium text-fg/80 mb-1">How Survivor Pools Work</p>
-              <ul className="space-y-1 list-disc list-inside text-fg/50">
-                <li>Each week, pick one team to win their game</li>
-                <li>You can only use each team once per season</li>
-                <li>If your team loses, you get a strike</li>
-                <li>Too many strikes and you're eliminated!</li>
-              </ul>
+              {/* Start Week */}
+              <div>
+                <label className="block text-fg/80 text-sm font-medium mb-2">
+                  <Calendar className="w-4 h-4 inline mr-2" />
+                  Starting Week
+                </label>
+                <select
+                  name="startWeek"
+                  value={formData.startWeek}
+                  onChange={handleChange}
+                  className="input-field"
+                >
+                  {nflSport.getCreationPeriods(currentWeek).map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {value === currentWeek ? `${label} (Current Week)` : label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
-        </div>
+
+            {/* Info Box */}
+            <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-4">
+              <div className="flex gap-3">
+                <Info className="w-5 h-5 text-violet-400 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-fg/80 mb-1">How Survivor Pools Work</p>
+                  <ul className="space-y-1 list-disc list-inside text-fg/50">
+                    <li>Each week, pick one team to win their game</li>
+                    <li>You can only use each team once per season</li>
+                    <li>If your team loses, you get a strike</li>
+                    <li>Too many strikes and you're eliminated!</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Submit */}
         <button

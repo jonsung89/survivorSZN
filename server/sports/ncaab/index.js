@@ -5,7 +5,7 @@ module.exports = {
   id: 'ncaab',
   name: 'NCAAB',
   displayName: 'NCAAB Schedule',
-  gameType: 'schedule',
+  gameType: 'bracket',
   scheduleType: 'daily',
   provider: new NCAABProvider(),
   constants: { SPORT_CONFIG }

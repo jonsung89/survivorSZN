@@ -713,3 +713,28 @@ body:has(.modal-overlay) {
   background: linear-gradient(90deg, rgba(0,0,0,0.03) 25%, rgba(0,0,0,0.06) 50%, rgba(0,0,0,0.03) 75%);
   background-size: 200% 100%;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   MOBILE BRACKET — Horizontal slide transitions for round navigation
+   ══════════════════════════════════════════════════════════════════ */
+@keyframes bracketSlideInFromRight {
+  from { transform: translateX(100%);  opacity: 0.85; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+@keyframes bracketSlideOutToLeft {
+  from { transform: translateX(0);     opacity: 1; }
+  to   { transform: translateX(-100%); opacity: 0.85; }
+}
+@keyframes bracketSlideInFromLeft {
+  from { transform: translateX(-100%); opacity: 0.85; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+@keyframes bracketSlideOutToRight {
+  from { transform: translateX(0);     opacity: 1; }
+  to   { transform: translateX(100%);  opacity: 0.85; }
+}
+
+.bracket-slide-in-right  { animation: bracketSlideInFromRight  0.25s ease-out forwards; }
+.bracket-slide-out-left  { animation: bracketSlideOutToLeft    0.25s ease-out forwards; }
+.bracket-slide-in-left   { animation: bracketSlideInFromLeft   0.25s ease-out forwards; }
+.bracket-slide-out-right { animation: bracketSlideOutToRight   0.25s ease-out forwards; }

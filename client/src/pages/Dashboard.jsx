@@ -581,6 +581,7 @@ export default function Dashboard() {
 
           const renderLeagueRow = (league, i, isPast) => {
             const sportMod = getSportModule(league.sportId || 'nfl');
+            const isBracketLeague = sportMod.gameType === 'bracket';
             const isWinner = isPast && league.winners?.some(w => w.isMe);
 
             return (
@@ -660,6 +661,10 @@ export default function Dashboard() {
                       ) : (
                         <span className="text-fg/40">Season Complete</span>
                       )
+                    ) : isBracketLeague ? (
+                      <span className="text-violet-400">
+                        {league.memberCount} member{league.memberCount !== 1 ? 's' : ''}
+                      </span>
                     ) : (
                       <>
                         <span className={league.memberStatus === 'active' ? 'text-green-500' : 'text-red-500'}>
@@ -709,6 +714,10 @@ export default function Dashboard() {
                       ) : (
                         <span className="text-fg/40">Season Complete</span>
                       )
+                    ) : isBracketLeague ? (
+                      <span className="text-violet-400">
+                        {league.memberCount} member{league.memberCount !== 1 ? 's' : ''}
+                      </span>
                     ) : (
                       <>
                         <span className={league.memberStatus === 'active' ? 'text-green-500' : 'text-red-500'}>
@@ -720,7 +729,9 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {!isPast && league.memberStatus === 'active' && league.currentPickTeamId ? (
+                  {isBracketLeague ? (
+                    null
+                  ) : !isPast && league.memberStatus === 'active' && league.currentPickTeamId ? (
                     <div className="flex items-center gap-2">
                       {(() => {
                         const team = sportMod.getTeam(league.currentPickTeamId);
@@ -736,15 +747,15 @@ export default function Dashboard() {
                     <span className="text-amber-600 text-sm font-medium">No pick</span>
                   ) : null}
 
-                  {/* Strike dots */}
-                  <div className="flex gap-1">
+                  {/* Strike dots (hide for bracket leagues) */}
+                  {!isBracketLeague && <div className="flex gap-1">
                     {Array.from({ length: league.maxStrikes }).map((_, j) => (
                       <div
                         key={j}
                         className={`w-2 h-2 rounded-full ${j < league.strikes ? 'bg-red-500' : 'bg-fg/20'}`}
                       />
                     ))}
-                  </div>
+                  </div>}
 
                   <ChevronRight className="w-4 h-4 text-fg/30" />
                 </div>

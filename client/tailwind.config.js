@@ -46,6 +46,8 @@ export default {
         'slide-down': 'slideDown 0.3s ease-out',
         'fade-in': 'fadeIn 0.2s ease-out',
         'bounce-subtle': 'bounceSubtle 0.5s ease-out',
+        'champion-glow': 'championGlow 3s ease-in-out infinite',
+        'tab-slide': 'tabSlideIn 0.2s ease-out',
       },
       keyframes: {
         slideUp: {
@@ -63,7 +65,15 @@ export default {
         bounceSubtle: {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-4px)' },
-        }
+        },
+        championGlow: {
+          '0%, 100%': { boxShadow: '0 0 15px rgba(251, 191, 36, 0.1)' },
+          '50%': { boxShadow: '0 0 25px rgba(251, 191, 36, 0.25)' },
+        },
+        tabSlideIn: {
+          '0%': { opacity: '0', transform: 'translateX(8px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
       }
     },
   },

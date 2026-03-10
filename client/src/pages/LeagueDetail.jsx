@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
 import { 
   Trophy, Users, Settings, ChevronLeft, ChevronRight,
   Crown, Plus, Minus, Check, X, Calendar, Loader2,
@@ -57,7 +57,7 @@ export default function LeagueDetail() {
   const isCommissioner = league?.commissionerId === user?.id;
 
   // Load sport module dynamically based on league's sport
-  const sport = useMemo(() => getSportModule(league?.sport_id || 'nfl'), [league?.sport_id]);
+  const sport = useMemo(() => getSportModule(league?.sportId || 'nfl'), [league?.sportId]);
   const NFL_TEAMS = sport.teams;
   const { getWeekLabel, getShortWeekLabel, getWeekFullLabel, espnToAppWeek } = sport;
 
@@ -715,6 +715,11 @@ export default function LeagueDetail() {
     return null;
   }
 
+  // NCAAB bracket leagues redirect to the bracket challenge page
+  if (league.sportId === 'ncaab') {
+    return <Navigate to={`/league/${leagueId}/bracket`} replace />;
+  }
+
   // Generate weeks from league start through end of playoffs (week 23 = Super Bowl)
   // Skip week 22 (Pro Bowl - no survivor picks)
   const weeks = Array.from(
@@ -750,7 +755,15 @@ export default function LeagueDetail() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {needsPickThisWeek() && (
+          {league?.sportId === 'ncaab' ? (
+            <Link
+              to={`/league/${leagueId}/bracket`}
+              className="btn-primary flex items-center gap-2 text-sm sm:text-base py-2.5 sm:py-3 flex-1 sm:flex-none justify-center"
+            >
+              <Trophy className="w-4 h-4 sm:w-5 sm:h-5" />
+              Bracket
+            </Link>
+          ) : needsPickThisWeek() && (
             <Link
               to={`/league/${leagueId}/pick`}
               className="btn-primary flex items-center gap-2 text-sm sm:text-base py-2.5 sm:py-3 flex-1 sm:flex-none justify-center animate-pulse-glow"
@@ -759,7 +772,7 @@ export default function LeagueDetail() {
               Make Pick
             </Link>
           )}
-          
+
           {/* Share button - visible to all members */}
           <ShareLeagueButton onClick={() => setShowShareModal(true)} />
           

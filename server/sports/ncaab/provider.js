@@ -36,6 +36,22 @@ class NCAABProvider extends BaseSportProvider {
     return ncaabService.getLeagueStatRankings(statKey);
   }
 
+  validatePeriod(period, league) {
+    return { valid: true };
+  }
+
+  getPeriodLabel(period) {
+    return `Day ${period}`;
+  }
+
+  getMaxPeriod() {
+    return 365;
+  }
+
+  getValidStartPeriods() {
+    return [{ value: 1, label: 'Tournament Start' }];
+  }
+
   async isSeasonOver(season) {
     const now = new Date();
     const year = now.getFullYear();

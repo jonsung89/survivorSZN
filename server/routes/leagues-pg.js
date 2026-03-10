@@ -525,6 +525,7 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
         isCommissioner: league.commissioner_id === user.id,
         inviteCode: league.invite_code,
         doublePickWeeks: league.double_pick_weeks || [],
+        sportId: league.sport_id || 'nfl',
         entryFee: parseFloat(league.entry_fee) || 0,
         prizePotOverride: league.prize_pot_override ? parseFloat(league.prize_pot_override) : null,
         myStrikes: membership.strikes,

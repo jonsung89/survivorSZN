@@ -107,12 +107,75 @@ async function initDb() {
     await client.query(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS sport_id TEXT NOT NULL DEFAULT 'nfl'`);
     await client.query(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS sport_config JSONB DEFAULT '{}'`);
 
+    // Bracket challenge tables
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bracket_challenges (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        league_id UUID NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+        season INTEGER NOT NULL,
+        max_brackets_per_user INTEGER NOT NULL DEFAULT 1,
+        scoring_preset TEXT NOT NULL DEFAULT 'standard',
+        scoring_system JSONB NOT NULL DEFAULT '[1, 2, 4, 8, 16, 32]',
+        tiebreaker_type TEXT NOT NULL DEFAULT 'total_score',
+        entry_deadline TIMESTAMPTZ,
+        tournament_data JSONB,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(league_id, season)
+      )
+    `);
+
+    // Add entry_fee to bracket_challenges (safe for existing data via default)
+    await client.query(`ALTER TABLE bracket_challenges ADD COLUMN IF NOT EXISTS entry_fee DECIMAL DEFAULT 0`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS brackets (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        challenge_id UUID NOT NULL REFERENCES bracket_challenges(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        bracket_number INTEGER NOT NULL DEFAULT 1,
+        name TEXT,
+        picks JSONB NOT NULL DEFAULT '{}',
+        tiebreaker_value INTEGER,
+        total_score INTEGER NOT NULL DEFAULT 0,
+        is_submitted BOOLEAN NOT NULL DEFAULT false,
+        submitted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(challenge_id, user_id, bracket_number)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bracket_results (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        challenge_id UUID NOT NULL REFERENCES bracket_challenges(id) ON DELETE CASCADE,
+        slot_number INTEGER NOT NULL,
+        espn_event_id TEXT,
+        winning_team_id TEXT,
+        losing_team_id TEXT,
+        winning_score INTEGER,
+        losing_score INTEGER,
+        round INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        completed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(challenge_id, slot_number)
+      )
+    `);
+
     // Create indexes for better performance
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_league_members_user ON league_members(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_league_members_league ON league_members(league_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_picks_league_user ON picks(league_id, user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_leagues_sport ON leagues(sport_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_bracket_challenges_league ON bracket_challenges(league_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_brackets_challenge ON brackets(challenge_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_brackets_user ON brackets(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_brackets_challenge_score ON brackets(challenge_id, total_score DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_bracket_results_challenge ON bracket_results(challenge_id)`);
 
     console.log('✅ Supabase database initialized successfully');
   } catch (error) {

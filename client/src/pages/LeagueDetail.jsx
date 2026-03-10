@@ -731,7 +731,7 @@ export default function LeagueDetail() {
       <div className="flex flex-col gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-3 sm:gap-4 animate-in">
           <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center shadow-lg flex-shrink-0">
-            <AppIcon className="w-7 h-7 sm:w-9 sm:h-9" color="white" />
+            <AppIcon className="w-9 h-9 sm:w-12 sm:h-12" color="white" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">

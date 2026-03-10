@@ -63,7 +63,7 @@ export default function BracketSetup({ config, onChange }) {
           <option value={3}>3 brackets</option>
           <option value={5}>5 brackets</option>
         </select>
-        <p className="text-fg/40 text-xs mt-1">How many brackets each member can submit</p>
+        <p className="text-fg/40 text-xs mt-1">Each bracket counts as one entry. Members pay the entry fee per bracket.</p>
       </div>
 
       {/* Scoring System */}
@@ -156,10 +156,10 @@ export default function BracketSetup({ config, onChange }) {
       <div>
         <label className="block text-fg/80 text-sm font-medium mb-2">
           <DollarSign className="w-4 h-4 inline mr-2" />
-          Entry Fee
+          Entry Fee (per bracket)
         </label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg/40">$</span>
+          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fg/40" />
           <input
             type="number"
             min="0"
@@ -167,10 +167,10 @@ export default function BracketSetup({ config, onChange }) {
             value={config.entryFee || ''}
             onChange={e => handleChange('entryFee', e.target.value)}
             placeholder="0"
-            className="input-field pl-7"
+            className="w-full pl-10 pr-4 py-3 rounded-xl bg-fg/5 border border-fg/10 text-fg placeholder-fg/40 focus:outline-none focus:border-fg/30 transition-all"
           />
         </div>
-        <p className="text-fg/40 text-xs mt-1">Leave at $0 for a free challenge</p>
+        <p className="text-fg/40 text-xs mt-1">Leave at $0 for a free challenge. Each bracket submitted = one entry fee.</p>
       </div>
     </div>
   );

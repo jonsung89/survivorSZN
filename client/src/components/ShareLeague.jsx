@@ -41,7 +41,7 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
       try {
         await navigator.share({
           title: `Join ${league.name} on Survivor SZN`,
-          text: `Join my NFL Survivor pool "${league.name}"! Use invite code: ${inviteCode}`,
+          text: `Join "${league.name}" on Survivor SZN! Use invite code: ${inviteCode}`,
           url: inviteLink
         });
       } catch (err) {

@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign } from 'lucide-react';
+import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil } from 'lucide-react';
 import { bracketAPI, leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
 import BracketLeaderboard from '../components/bracket/BracketLeaderboard';
 import BracketSetup from '../components/bracket/BracketSetup';
+import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
+import { getSportBadgeClasses } from '../sports';
 import { SCORING_PRESETS, countPicks } from '../utils/bracketSlots';
 
 export default function BracketChallenge() {
@@ -23,9 +25,15 @@ export default function BracketChallenge() {
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState('brackets');
   const [showSettings, setShowSettings] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [fieldAnnounced, setFieldAnnounced] = useState(null); // null = loading, true/false
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [togglingPayment, setTogglingPayment] = useState(null);
 
-  const isCommissioner = league?.commissioner_id === user?.id;
+  const isCommissioner = league?.commissionerId === user?.id || league?.commissioner_id === user?.id;
+  const entryFee = parseFloat(challenge?.entry_fee) || 0;
+  const members = league?.members || [];
 
   useEffect(() => {
     loadData();
@@ -82,6 +90,37 @@ export default function BracketChallenge() {
     setCreating(false);
   };
 
+  const handleLeagueNameSave = async () => {
+    setIsEditingName(false);
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed === league?.name) return;
+    const oldName = league?.name;
+    setLeague(prev => ({ ...prev, name: trimmed }));
+    try {
+      await leagueAPI.updateSettings(leagueId, { name: trimmed });
+      showToast('League name updated', 'success');
+    } catch {
+      setLeague(prev => ({ ...prev, name: oldName }));
+      showToast('Failed to rename league', 'error');
+    }
+  };
+
+  const handleTogglePayment = async (member) => {
+    setTogglingPayment(member.id);
+    try {
+      await leagueAPI.togglePayment(leagueId, member.id, !member.hasPaid);
+      setLeague(prev => ({
+        ...prev,
+        members: prev.members.map(m =>
+          m.id === member.id ? { ...m, hasPaid: !m.hasPaid } : m
+        ),
+      }));
+    } catch {
+      showToast('Failed to update payment status', 'error');
+    }
+    setTogglingPayment(null);
+  };
+
   if (loading) return <Loading fullScreen />;
 
   if (!challenge) {
@@ -100,55 +139,136 @@ export default function BracketChallenge() {
   const canCreateMore = myBrackets.length < (challenge.max_brackets_per_user || 1);
   const isOpen = challenge.status === 'open';
   const scoringSystem = challenge.scoring_system || SCORING_PRESETS.standard.points;
+  const paidCount = members.filter(m => m.hasPaid).length;
+
+  // Count brackets submitted per user from leaderboard
+  const submittedByUser = {};
+  leaderboard.forEach(entry => {
+    submittedByUser[entry.userId] = (submittedByUser[entry.userId] || 0) + 1;
+  });
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <Link to="/dashboard" className="inline-flex items-center gap-1 text-fg/50 hover:text-fg text-sm mb-2 transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" />
-            My Leagues
-          </Link>
-          <h1 className="text-2xl font-display font-bold text-fg flex items-center gap-2">
-            <Trophy className="w-6 h-6 text-amber-400" />
-            {league?.name || 'Bracket Challenge'}
-          </h1>
-          <div className="flex items-center gap-3 mt-1 text-sm text-fg/50">
-            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-bold uppercase ${
-              isOpen ? 'bg-emerald-500/15 text-emerald-400' :
-              challenge.status === 'locked' ? 'bg-amber-500/15 text-amber-400' :
-              'bg-fg/10 text-fg/50'
-            }`}>
-              {isOpen ? 'Open' : challenge.status === 'locked' ? 'Locked' : 'Completed'}
-            </span>
-            <span>{challenge.scoring_preset} scoring</span>
-            {parseFloat(challenge.entry_fee) > 0 && (
-              <>
-                <span className="text-fg/30">•</span>
-                <span>${parseFloat(challenge.entry_fee)} entry</span>
-                <span className="text-fg/30">•</span>
-                <span className="text-emerald-400 font-medium">
-                  ${parseFloat(challenge.entry_fee) * leaderboard.length} pot
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <Link to="/dashboard" className="inline-flex items-center gap-1 text-fg/50 hover:text-fg text-sm mb-2 transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" />
+              My Leagues
+            </Link>
+            <div className="flex items-center gap-2 flex-wrap">
+              {isEditingName ? (
+                <input
+                  autoFocus
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  onBlur={handleLeagueNameSave}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleLeagueNameSave();
+                    if (e.key === 'Escape') setIsEditingName(false);
+                  }}
+                  maxLength={50}
+                  className="text-2xl font-display font-bold text-fg bg-transparent border-b-2 border-violet-500 outline-none flex-1 min-w-0"
+                />
+              ) : (
+                <h1 className="text-2xl font-display font-bold text-fg truncate">
+                  {league?.name || 'Bracket Challenge'}
+                </h1>
+              )}
+              {isCommissioner && !isEditingName && (
+                <button
+                  onClick={() => { setEditName(league?.name || ''); setIsEditingName(true); }}
+                  className="text-fg/30 hover:text-fg/60 transition-colors flex-shrink-0"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              )}
+              {isCommissioner && (
+                <span className="badge badge-active text-xs flex items-center gap-1 flex-shrink-0">
+                  <Crown className="w-3 h-3" />
+                  Commish
                 </span>
-              </>
-            )}
+              )}
+            </div>
+            <p className="text-fg/50 text-sm mt-1">
+              {members.length} member{members.length !== 1 ? 's' : ''}
+              {entryFee > 0 && <> &middot; ${entryFee}/bracket</>}
+            </p>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className={`text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded ${getSportBadgeClasses('ncaab')}`}>
+                March Madness
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-bold uppercase ${
+                isOpen ? 'bg-emerald-500/15 text-emerald-400' :
+                challenge.status === 'locked' ? 'bg-amber-500/15 text-amber-400' :
+                'bg-fg/10 text-fg/50'
+              }`}>
+                {isOpen ? 'Open' : challenge.status === 'locked' ? 'Locked' : 'Completed'}
+              </span>
+              <span className="text-xs text-fg/40">{challenge.scoring_preset} scoring</span>
+            </div>
           </div>
         </div>
 
-        {isCommissioner && (
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-2 rounded-lg hover:bg-fg/10 transition-colors text-fg/50 hover:text-fg"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-        )}
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
+          <ShareLeagueButton onClick={() => setShowShareModal(true)} />
+          {isCommissioner && (
+            <button
+              onClick={() => setShowSettings(true)}
+              className="btn-secondary flex items-center gap-2 text-sm py-2.5"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Settings</span>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Prize Pot Card */}
+      {entryFee > 0 && (
+        <div className="glass-card rounded-xl p-4 sm:p-5 mb-5 animate-in">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-fg/60 text-sm">Prize Pot</p>
+                <p className="text-2xl font-bold text-fg">
+                  ${(entryFee * leaderboard.length).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4 sm:gap-6">
+              <div className="text-center">
+                <p className="text-fg/60 text-xs">Per Bracket</p>
+                <p className="text-lg font-semibold text-fg">${entryFee}</p>
+              </div>
+              {isCommissioner && (
+                <div className="text-center">
+                  <p className="text-fg/60 text-xs">Paid</p>
+                  <p className="text-lg font-semibold text-green-500">
+                    {paidCount}/{members.length}
+                  </p>
+                </div>
+              )}
+              <div className="text-center">
+                <p className="text-fg/60 text-xs">Entries</p>
+                <p className="text-lg font-semibold text-fg">{leaderboard.length}</p>
+              </div>
+            </div>
+          </div>
+          <p className="text-fg/40 text-xs mt-3 pt-3 border-t border-fg/10">
+            💰 Pot splits evenly among winners. Each submitted bracket = one ${entryFee} entry.
+          </p>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-5 border-b border-fg/10 pb-px">
-        {['brackets', 'leaderboard'].map(tab => (
+        {['brackets', 'leaderboard', 'members'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -158,7 +278,9 @@ export default function BracketChallenge() {
                 : 'border-transparent text-fg/50 hover:text-fg/70'
             }`}
           >
-            {tab === 'brackets' ? 'My Brackets' : 'Leaderboard'}
+            {tab === 'brackets' ? 'My Brackets' :
+             tab === 'leaderboard' ? 'Leaderboard' :
+             `Members (${members.length})`}
           </button>
         ))}
       </div>
@@ -272,20 +394,119 @@ export default function BracketChallenge() {
         />
       )}
 
+      {/* Members Tab */}
+      {activeTab === 'members' && (
+        <div className="space-y-2">
+          {members.map(member => {
+            const memberCommissioner = member.userId === (league?.commissionerId || league?.commissioner_id);
+            const bracketCount = submittedByUser[member.userId] || 0;
+            const isMe = member.userId === user?.id || member.isMe;
+
+            return (
+              <div
+                key={member.id}
+                className={`glass-card rounded-xl p-4 flex items-center justify-between ${isMe ? 'border border-violet-500/20' : ''}`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-fg/10 flex items-center justify-center flex-shrink-0 text-fg/40 font-bold text-sm">
+                    {(member.displayName || '?')[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-medium truncate ${isMe ? 'text-violet-400' : 'text-fg'}`}>
+                        {member.displayName || 'Anonymous'}
+                      </span>
+                      {isMe && <span className="text-xs text-violet-400/60">(you)</span>}
+                      {memberCommissioner && (
+                        <span className="inline-flex items-center gap-0.5 text-xs text-amber-400">
+                          <Crown className="w-3 h-3" />
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-fg/40 mt-0.5">
+                      {bracketCount > 0 ? (
+                        <span className="text-emerald-400">{bracketCount} bracket{bracketCount !== 1 ? 's' : ''} submitted</span>
+                      ) : (
+                        <span>No brackets submitted</span>
+                      )}
+                      {isCommissioner && member.email && (
+                        <>
+                          <span className="text-fg/20">•</span>
+                          <span>{member.email}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment toggle (commissioner only, when entry fee > 0) */}
+                {isCommissioner && entryFee > 0 && (
+                  <button
+                    onClick={() => handleTogglePayment(member)}
+                    disabled={togglingPayment === member.id}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 flex-shrink-0 ${
+                      member.hasPaid
+                        ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
+                        : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
+                    }`}
+                  >
+                    {togglingPayment === member.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : member.hasPaid ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Paid
+                      </>
+                    ) : (
+                      <>
+                        <DollarSign className="w-4 h-4" />
+                        Mark Paid
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {members.length === 0 && (
+            <div className="text-center py-12 text-fg/40">
+              <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p>No members yet. Share your invite link to get started!</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Settings Modal */}
       {showSettings && isCommissioner && (
         <SettingsModal
           challenge={challenge}
+          league={league}
+          members={members}
           onClose={() => setShowSettings(false)}
           onUpdate={loadData}
+          onTogglePayment={handleTogglePayment}
+          togglingPayment={togglingPayment}
+        />
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <ShareLeagueModal
+          league={league}
+          isCommissioner={isCommissioner}
+          onClose={() => setShowShareModal(false)}
+          onInviteCodeUpdate={(newCode) => setLeague(prev => ({ ...prev, inviteCode: newCode }))}
         />
       )}
     </div>
   );
 }
 
-function SettingsModal({ challenge, onClose, onUpdate }) {
+function SettingsModal({ challenge, league, members, onClose, onUpdate, onTogglePayment, togglingPayment }) {
   const { showToast } = useToast();
+  const entryFee = parseFloat(challenge.entry_fee) || 0;
   const [config, setConfig] = useState({
     maxBracketsPerUser: challenge.max_brackets_per_user,
     scoringPreset: challenge.scoring_preset,
@@ -334,6 +555,59 @@ function SettingsModal({ challenge, onClose, onUpdate }) {
         ) : (
           <>
             <BracketSetup config={config} onChange={setConfig} />
+
+            {/* Payment Status in Settings */}
+            {(entryFee > 0 || parseFloat(config.entryFee) > 0) && members?.length > 0 && (
+              <div className="mt-5">
+                <label className="block text-fg/80 text-sm font-medium mb-2">
+                  Payment Status
+                </label>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {members.map(member => (
+                    <div
+                      key={member.id}
+                      className="flex items-center justify-between p-3 bg-fg/5 rounded-lg"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-fg/10 flex items-center justify-center text-fg/40 font-bold text-xs">
+                          {(member.displayName || '?')[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <span className="text-fg text-sm">{member.displayName}</span>
+                          {member.email && (
+                            <p className="text-fg/40 text-xs">{member.email}</p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onTogglePayment(member)}
+                        disabled={togglingPayment === member.id}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+                          member.hasPaid
+                            ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
+                            : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
+                        }`}
+                      >
+                        {togglingPayment === member.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : member.hasPaid ? (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Paid
+                          </>
+                        ) : (
+                          <>
+                            <DollarSign className="w-4 h-4" />
+                            Mark Paid
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button
               onClick={handleSave}
               disabled={saving}

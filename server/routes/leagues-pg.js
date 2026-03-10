@@ -94,13 +94,14 @@ router.get('/invite/:inviteCode', async (req, res) => {
     const { inviteCode } = req.params;
     
     const league = await db.getOne(`
-      SELECT 
-        l.id, 
-        l.name, 
+      SELECT
+        l.id,
+        l.name,
         l.max_strikes,
         l.start_week,
         l.season,
         l.status,
+        l.sport_id,
         l.password_hash IS NOT NULL as has_password,
         u.display_name as commissioner_name,
         COUNT(lm.id) as member_count
@@ -125,7 +126,8 @@ router.get('/invite/:inviteCode', async (req, res) => {
         season: league.season,
         memberCount: parseInt(league.member_count),
         commissionerName: league.commissioner_name || 'Unknown',
-        hasPassword: league.has_password
+        hasPassword: league.has_password,
+        sportId: league.sport_id || 'nfl'
       }
     });
   } catch (error) {
@@ -556,7 +558,7 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const { leagueId } = req.params;
-    const { maxStrikes, startWeek, doublePickWeeks, entryFee, prizePotOverride } = req.body;
+    const { maxStrikes, startWeek, doublePickWeeks, entryFee, prizePotOverride, name } = req.body;
 
     const league = await db.getOne('SELECT * FROM leagues WHERE id = $1', [leagueId]);
     
@@ -572,6 +574,18 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     const params = [];
     let paramIndex = 1;
     const changes = [];
+
+    if (name !== undefined) {
+      const trimmed = name.trim();
+      if (trimmed.length < 1 || trimmed.length > 50) {
+        return res.status(400).json({ error: 'League name must be between 1 and 50 characters' });
+      }
+      if (trimmed !== league.name) {
+        updates.push(`name = $${paramIndex++}`);
+        params.push(trimmed);
+        changes.push(`League name: "${league.name}" → "${trimmed}"`);
+      }
+    }
 
     if (maxStrikes !== undefined && maxStrikes !== league.max_strikes) {
       if (maxStrikes < 1 || maxStrikes > 5) {

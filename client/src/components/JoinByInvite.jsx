@@ -118,23 +118,43 @@ export default function JoinByInvite() {
           </div>
 
           {/* League Stats */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-fg/5 rounded-xl p-3 text-center">
-              <Users className="w-5 h-5 text-fg mx-auto mb-1" />
-              <p className="text-fg font-bold">{league.memberCount}</p>
-              <p className="text-fg/40 text-xs">Members</p>
+          {league.sportId === 'ncaab' ? (
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="bg-fg/5 rounded-xl p-3 text-center">
+                <Users className="w-5 h-5 text-fg mx-auto mb-1" />
+                <p className="text-fg font-bold">{league.memberCount}</p>
+                <p className="text-fg/40 text-xs">Members</p>
+              </div>
+              <div className="bg-fg/5 rounded-xl p-3 text-center">
+                <Trophy className="w-5 h-5 text-amber-400 mx-auto mb-1" />
+                <p className="text-fg font-bold text-sm">Bracket</p>
+                <p className="text-fg/40 text-xs">Challenge</p>
+              </div>
+              <div className="bg-fg/5 rounded-xl p-3 text-center">
+                <Calendar className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
+                <p className="text-fg font-bold text-sm">NCAAB</p>
+                <p className="text-fg/40 text-xs">March Madness</p>
+              </div>
             </div>
-            <div className="bg-fg/5 rounded-xl p-3 text-center">
-              <Shield className="w-5 h-5 text-orange-400 mx-auto mb-1" />
-              <p className="text-fg font-bold">{league.maxStrikes}</p>
-              <p className="text-fg/40 text-xs">Max Strikes</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="bg-fg/5 rounded-xl p-3 text-center">
+                <Users className="w-5 h-5 text-fg mx-auto mb-1" />
+                <p className="text-fg font-bold">{league.memberCount}</p>
+                <p className="text-fg/40 text-xs">Members</p>
+              </div>
+              <div className="bg-fg/5 rounded-xl p-3 text-center">
+                <Shield className="w-5 h-5 text-orange-400 mx-auto mb-1" />
+                <p className="text-fg font-bold">{league.maxStrikes}</p>
+                <p className="text-fg/40 text-xs">Max Strikes</p>
+              </div>
+              <div className="bg-fg/5 rounded-xl p-3 text-center">
+                <Calendar className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
+                <p className="text-fg font-bold">Week {league.startWeek}</p>
+                <p className="text-fg/40 text-xs">Start</p>
+              </div>
             </div>
-            <div className="bg-fg/5 rounded-xl p-3 text-center">
-              <Calendar className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-              <p className="text-fg font-bold">Week {league.startWeek}</p>
-              <p className="text-fg/40 text-xs">Start</p>
-            </div>
-          </div>
+          )}
 
           {/* Commissioner */}
           <div className="bg-fg/5 rounded-xl p-3 mb-6">

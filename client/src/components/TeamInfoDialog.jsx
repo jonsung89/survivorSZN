@@ -485,20 +485,21 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
       {data?.schedule?.length > 0 ? (
         data.schedule.map((game, i) => {
           const opponentAbbr = game.opponent?.abbreviation;
+          const isTBD = !opponentAbbr || opponentAbbr === 'TBD' || game.opponent?.name === 'TBD';
           const leagueSlug = espnLeagueSlug[sport];
-          const opponentLogo = game.opponent?.logo
+          const opponentLogo = isTBD ? null : (game.opponent?.logo
             || (opponentAbbr && leagueSlug
               ? `https://a.espncdn.com/i/teamlogos/${leagueSlug}/500/${opponentAbbr.toLowerCase()}.png`
               : null)
             || (game.opponent?.id
               ? `https://a.espncdn.com/i/teamlogos/${sport}/500/scoreboard/${game.opponent.id}.png`
-              : null);
+              : null));
 
           return (
             <div
               key={i}
               data-schedule-item
-              className={`flex items-center gap-2 sm:gap-3 py-2.5 px-3 rounded-lg ${
+              className={`flex items-center gap-1 sm:gap-3 py-2.5 px-2 sm:px-3 rounded-lg ${
                 game.isCompleted
                   ? game.result === 'W'
                     ? 'bg-green-500/5'
@@ -507,29 +508,36 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
               }`}
             >
               {/* Date */}
-              <div className="w-12 flex-shrink-0 text-center">
-                <div className="text-xs font-bold text-fg">
+              <div className="w-9 sm:w-12 flex-shrink-0 text-center">
+                <div className="text-[10px] sm:text-xs font-bold text-fg">
                   {new Date(game.date).toLocaleDateString('en-US', { month: 'short' })}
                 </div>
-                <div className="text-lg font-bold text-fg leading-tight">
+                <div className="text-base sm:text-lg font-bold text-fg leading-tight">
                   {new Date(game.date).getDate()}
                 </div>
               </div>
 
               {/* vs/@ indicator */}
-              <div className="w-6 flex-shrink-0 flex items-center justify-center">
+              <div className="w-5 sm:w-6 flex-shrink-0 flex items-center justify-center">
                 <span className="text-sm text-fg/50">{game.isHome ? 'vs' : '@'}</span>
               </div>
 
               {/* Opponent Logo */}
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 mr-0.5">
                 {opponentLogo ? (
-                  <img src={tl(opponentLogo)} alt={opponentAbbr} className="w-8 h-8 object-contain" />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-sm font-bold">
-                    {opponentAbbr?.charAt(0) || '?'}
-                  </div>
-                )}
+                  <img
+                    src={tl(opponentLogo)}
+                    alt={opponentAbbr}
+                    className="w-6 h-6 sm:w-8 sm:h-8 object-contain"
+                    onError={e => { e.target.style.display = 'none'; e.target.nextSibling && (e.target.nextSibling.style.display = 'flex'); }}
+                  />
+                ) : null}
+                <div
+                  className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-[10px] sm:text-xs font-bold overflow-hidden"
+                  style={opponentLogo ? { display: 'none' } : {}}
+                >
+                  {(opponentAbbr || '?').slice(0, 3)}
+                </div>
               </div>
 
               {/* Opponent Name */}
@@ -538,14 +546,20 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                   <div className="text-xs text-fg/50 leading-tight">
                     {game.opponent?.name?.split(' ').slice(0, -1).join(' ') || ''}
                   </div>
-                  <div className="text-base font-medium text-fg leading-tight">
+                  <div className="text-sm font-medium text-fg leading-tight">
+                    {sport === 'ncaab' && game.opponent?.rank && (
+                      <span className="text-sm text-fg/60 font-semibold mr-1">#{game.opponent.rank}</span>
+                    )}
                     {game.opponent?.name?.split(' ').pop() || game.opponent?.abbreviation || '?'}
                     {game.opponent?.record && (
-                      <span className="text-sm text-fg/40 font-normal ml-1.5">({game.opponent.record})</span>
+                      <span className="text-xs text-fg/40 font-normal ml-1 whitespace-nowrap">({game.opponent.record})</span>
                     )}
                   </div>
                 </div>
                 <span className="text-base font-medium text-fg hidden sm:inline">
+                  {sport === 'ncaab' && game.opponent?.rank && (
+                    <span className="text-sm text-fg/60 font-semibold mr-1">#{game.opponent.rank}</span>
+                  )}
                   {game.opponent?.name || game.opponent?.abbreviation || '?'}
                 </span>
                 {game.opponent?.record && (

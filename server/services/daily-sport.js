@@ -292,7 +292,9 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
           awayTeam: buildTeamData(awayCompetitor),
           broadcast: competition?.broadcasts?.[0]?.names?.[0] || '',
           venue: competition?.venue?.fullName || null,
-          odds: parseOdds()
+          odds: parseOdds(),
+          notes: competition?.notes?.[0]?.headline || null,
+          competitionType: competition?.type?.abbreviation || null
         };
       });
       teamRankSnapshotCache = nextRankSnapshot;
@@ -382,6 +384,35 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
       try {
         const l5 = data.lastFiveGames || [];
         if (l5.length > 0) {
+          // Collect unique opponent IDs to fetch their records
+          const opponentIds = new Set();
+          for (const teamData of l5) {
+            for (const e of (teamData.events || [])) {
+              if (e.opponent?.id) opponentIds.add(String(e.opponent.id));
+            }
+          }
+
+          // Fetch opponent records in parallel (cached for 6 hours)
+          const opponentRecordEntries = await Promise.all(
+            [...opponentIds].map(async (oppId) => {
+              try {
+                const oppData = await fetchWithCache(
+                  `${apiBase}/teams/${oppId}`,
+                  TEAM_CONTEXT_CACHE_TTL
+                );
+                const records = oppData?.team?.record?.items || [];
+                const overall = records.find(r => {
+                  const type = (r.type || r.name || '').toLowerCase();
+                  return type.includes('total') || type.includes('overall') || type === '';
+                });
+                return [oppId, overall?.summary || records[0]?.summary || null];
+              } catch {
+                return [oppId, null];
+              }
+            })
+          );
+          const opponentRecordMap = new Map(opponentRecordEntries);
+
           lastFiveGames = {};
           for (const teamData of l5) {
             const teamAbbr = teamData.team?.abbreviation;
@@ -392,6 +423,7 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
               opponent: e.opponent?.abbreviation || '?',
               opponentName: e.opponent?.displayName || e.opponent?.shortDisplayName || e.opponent?.abbreviation || '?',
               opponentLogo: e.opponent?.logo || null,
+              opponentRecord: e.opponent?.id ? (opponentRecordMap.get(String(e.opponent.id)) || null) : null,
               score: e.score,
               atVs: e.atVs || (e.atHome === true ? 'vs' : e.atHome === false ? '@' : '@')
             }));
@@ -565,6 +597,46 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
 
       // Parse schedule + streak
       const { schedule, streak } = parseTeamSchedule(scheduleData, teamId);
+
+      // Enrich schedule opponents with records & rankings from teams API
+      const opponentIds = new Set();
+      for (const game of schedule) {
+        if (game.opponent?.id) opponentIds.add(String(game.opponent.id));
+      }
+      if (opponentIds.size > 0) {
+        const oppEntries = await Promise.all(
+          [...opponentIds].map(async (oppId) => {
+            try {
+              const oppData = await fetchWithCache(
+                `${apiBase}/teams/${oppId}`,
+                TEAM_CONTEXT_CACHE_TTL
+              );
+              const oppTeam = oppData?.team || {};
+              const records = oppTeam.record?.items || [];
+              const overall = records.find(r => {
+                const type = (r.type || r.name || '').toLowerCase();
+                return type.includes('total') || type.includes('overall') || type === '';
+              });
+              return [oppId, {
+                record: overall?.summary || records[0]?.summary || null,
+                rank: oppTeam.rank ? parseInt(oppTeam.rank) : null,
+              }];
+            } catch {
+              return [oppId, { record: null, rank: null }];
+            }
+          })
+        );
+        const oppMap = new Map(oppEntries);
+        for (const game of schedule) {
+          if (game.opponent?.id) {
+            const info = oppMap.get(String(game.opponent.id));
+            if (info) {
+              if (info.record) game.opponent.record = info.record;
+              if (info.rank) game.opponent.rank = info.rank;
+            }
+          }
+        }
+      }
 
       // Parse news
       const news = parseNews(newsData);

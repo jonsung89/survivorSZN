@@ -84,10 +84,8 @@ const TeamRankBadge = ({ team }) => {
     } else if (movement < 0) {
       movementText = `▼${Math.abs(movement)}`;
       movementClass = 'text-red-500';
-    } else {
-      movementText = '—';
-      movementClass = 'text-fg/40';
     }
+    // No em dash for zero movement — just omit it
   }
 
   return (
@@ -670,7 +668,7 @@ export default function Schedule() {
     }
     const date = new Date(game.date);
     return (
-      <span className="text-xs text-fg/60">
+      <span className="text-sm text-fg/60">
         {date.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
@@ -718,8 +716,8 @@ export default function Schedule() {
       );
     }
     
-    // Fallback to text only
-    return <span className={`text-xs ${info.color}`}>{info.name}</span>;
+    // Fallback to text only — keep small, allow wrapping for long names
+    return <span className={`text-[11px] leading-tight ${info.color}`}>{info.name}</span>;
   };
 
   // Open team info dialog
@@ -793,26 +791,26 @@ export default function Schedule() {
           const gridClass = cellCount === 3 ? 'grid grid-cols-3 gap-2' : cellCount === 2 ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-1 gap-2 max-w-xs';
           return (
             <div className="space-y-2">
-              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+              <h4 className="text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
                 <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Betting Lines
               </h4>
               <div className={gridClass}>
                 {hasSpread && (
                   <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
-                    <div className="text-xs sm:text-sm text-fg/50">Spread</div>
+                    <div className="text-sm text-fg/50">Spread</div>
                     <div className="text-sm sm:text-base font-semibold text-fg">{odds.spread}</div>
                   </div>
                 )}
                 {hasOU && (
                   <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
-                    <div className="text-xs sm:text-sm text-fg/50">O/U</div>
+                    <div className="text-sm text-fg/50">O/U</div>
                     <div className="text-sm sm:text-base font-semibold text-fg">{odds.overUnder}</div>
                   </div>
                 )}
                 {hasML && (
                   <div className="bg-fg/5 rounded-lg p-2 sm:p-3 text-center">
-                    <div className="text-xs sm:text-sm text-fg/50">Moneyline</div>
+                    <div className="text-sm text-fg/50">Moneyline</div>
                     <div className="text-sm sm:text-base font-semibold text-fg">
                       {game.awayTeam?.abbreviation} {odds.awayMoneyLine > 0 ? '+' : ''}{odds.awayMoneyLine}
                     </div>
@@ -835,19 +833,29 @@ export default function Schedule() {
           const homeColor = tc(game.homeTeam);
           return (
             <div className="space-y-2">
-              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+              <h4 className="text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
                 <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Win Probability
               </h4>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-xs sm:text-sm font-medium text-fg">{game.awayTeam?.abbreviation}</span>
-                  <span className="text-xs sm:text-sm font-bold text-fg">{awayPct}%</span>
+                  <span className="text-sm font-medium text-fg">{game.awayTeam?.abbreviation}</span>
+                  <span className="text-sm font-bold text-fg">{awayPct}%</span>
                 </div>
                 <div className="flex-1 h-3 sm:h-4 rounded-full overflow-hidden flex">
                   <div
                     className="h-full transition-all duration-300"
-                    style={{ width: `${awayPct}%`, backgroundColor: awayColor }}
+                    style={{
+                      width: `${awayPct}%`,
+                      backgroundColor: awayColor,
+                      backgroundImage: `repeating-linear-gradient(
+                        -45deg,
+                        transparent,
+                        transparent 3px,
+                        rgba(255,255,255,0.15) 3px,
+                        rgba(255,255,255,0.15) 5px
+                      )`
+                    }}
                   />
                   <div
                     className="h-full transition-all duration-300"
@@ -855,8 +863,8 @@ export default function Schedule() {
                   />
                 </div>
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-xs sm:text-sm font-bold text-fg">{homePct}%</span>
-                  <span className="text-xs sm:text-sm font-medium text-fg">{game.homeTeam?.abbreviation}</span>
+                  <span className="text-sm font-bold text-fg">{homePct}%</span>
+                  <span className="text-sm font-medium text-fg">{game.homeTeam?.abbreviation}</span>
                 </div>
               </div>
             </div>
@@ -924,7 +932,7 @@ export default function Schedule() {
                     <span className="text-fg/50">{stat.label}</span>
                     <span className={`font-medium ${stat.rank ? getRankColor(stat.rank) : 'text-fg'}`}>
                       {stat.value}
-                      {stat.rank && <span className="ml-1 text-xs sm:text-sm">({stat.rank})</span>}
+                      {stat.rank && <span className="ml-1 text-sm">({stat.rank})</span>}
                     </span>
                   </div>
                 ))}
@@ -948,7 +956,7 @@ export default function Schedule() {
 
           return (
             <div className="space-y-2">
-              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+              <h4 className="text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
                 <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 {isPreseason ? 'Preseason Stats' : 'Season Averages'}
               </h4>
@@ -963,7 +971,7 @@ export default function Schedule() {
         {/* Probable Pitchers (MLB) */}
         {details?.probablePitchers && details.probablePitchers.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+            <h4 className="text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Probable Pitchers
             </h4>
@@ -980,11 +988,11 @@ export default function Schedule() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       {pitcher.team?.logo && <img src={tl(pitcher.team.logo)} alt="" className="w-4 h-4 object-contain" />}
-                      <span className="text-xs text-fg/50">{pitcher.team?.abbreviation}</span>
+                      <span className="text-sm text-fg/50">{pitcher.team?.abbreviation}</span>
                     </div>
                     <div className="text-sm font-semibold text-fg truncate">{pitcher.name}</div>
                     {Object.keys(pitcher.stats || {}).length > 0 && (
-                      <div className="text-xs text-fg/50 mt-0.5">
+                      <div className="text-sm text-fg/50 mt-0.5">
                         {pitcher.stats.W && pitcher.stats.L ? `${pitcher.stats.W}-${pitcher.stats.L}` : ''}
                         {pitcher.stats.ERA ? ` · ${pitcher.stats.ERA} ERA` : ''}
                         {pitcher.stats.WHIP ? ` · ${pitcher.stats.WHIP} WHIP` : ''}
@@ -1007,7 +1015,7 @@ export default function Schedule() {
           if (teams.length === 0) return null;
           return (
             <div className="space-y-2">
-              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+              <h4 className="text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Last 5 Games
               </h4>
@@ -1016,7 +1024,18 @@ export default function Schedule() {
                   <div key={team?.id} className="bg-fg/5 rounded-lg p-2 sm:p-3">
                     <div className="flex items-center gap-2 mb-2">
                       {team?.logo && <img src={tl(team.logo)} alt="" className="w-5 h-5 object-contain" />}
-                      <span className="text-sm font-semibold text-fg">{team?.abbreviation}</span>
+                      {selectedSport === 'ncaab' ? (
+                        <span className="text-sm font-semibold text-fg">
+                          {(() => { const r = Number(team?.ranking?.current); return (Number.isFinite(r) && r > 0 && r < 99) ? `#${r} ` : ''; })()}
+                          {team?.name || team?.abbreviation}
+                          {team?.record && <span className="text-fg/45 font-medium ml-1.5">({team.record})</span>}
+                        </span>
+                      ) : (
+                        <span className="text-sm font-semibold text-fg">
+                          {team?.abbreviation}
+                          {team?.record && <span className="text-fg/45 font-medium ml-1.5">{team.record}</span>}
+                        </span>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       {games.map((g, i) => {
@@ -1025,14 +1044,14 @@ export default function Schedule() {
                           return `${d.getMonth() + 1}/${d.getDate()}`;
                         })() : '';
                         return (
-                          <div key={i} className="flex items-center justify-between text-xs sm:text-sm">
+                          <div key={i} className="flex items-center justify-between text-sm">
                             <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                              <span className="text-fg/40 w-8 sm:w-10 flex-shrink-0">{dateStr}</span>
+                              <span className="text-fg/40 w-7 sm:w-9 flex-shrink-0 text-xs">{dateStr}</span>
                               <span className="text-fg/50 w-5 sm:w-7 flex-shrink-0 text-center">{g.atVs === 'vs' ? 'vs.' : '@'}</span>
                               {g.opponentLogo && <img src={tl(g.opponentLogo)} alt="" className="w-4 h-4 sm:w-5 sm:h-5 object-contain flex-shrink-0" />}
                               <span className="text-fg/70 truncate">
-                                <span className="hidden sm:inline">{g.opponentName || g.opponent}</span>
-                                <span className="sm:hidden">{g.opponent}</span>
+                                {g.opponentName || g.opponent}
+                                {g.opponentRecord && <span className="text-fg/40 ml-1">({g.opponentRecord})</span>}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
@@ -1067,7 +1086,7 @@ export default function Schedule() {
           const homeFiltered = filterKey(homeInj);
           if (awayFiltered.length === 0 && homeFiltered.length === 0) return null;
           const InjList = ({ injuries: injList }) => (
-            <div className="text-xs text-fg/60 space-y-0.5">
+            <div className="text-sm text-fg/60 space-y-0.5">
               {injList.map((inj, i) => (
                 <div key={i}>
                   <span className={inj.status?.toLowerCase().includes('out') ? 'text-red-500' : 'text-yellow-400'}>
@@ -1080,7 +1099,7 @@ export default function Schedule() {
           );
           return (
             <div className="space-y-2">
-              <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
+              <h4 className="text-sm font-semibold text-fg/50 uppercase tracking-wide flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Injury Report
               </h4>
@@ -1088,16 +1107,16 @@ export default function Schedule() {
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
                     {game.awayTeam?.logo && <img src={tl(game.awayTeam.logo)} alt="" className="w-4 h-4" />}
-                    <span className="text-xs text-fg/50">{awayKey}</span>
+                    <span className="text-sm text-fg/50">{awayKey}</span>
                   </div>
-                  {awayFiltered.length > 0 ? <InjList injuries={awayFiltered} /> : <span className="text-xs text-fg/30">None reported</span>}
+                  {awayFiltered.length > 0 ? <InjList injuries={awayFiltered} /> : <span className="text-sm text-fg/30">None reported</span>}
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
                     {game.homeTeam?.logo && <img src={tl(game.homeTeam.logo)} alt="" className="w-4 h-4" />}
-                    <span className="text-xs text-fg/50">{homeKey}</span>
+                    <span className="text-sm text-fg/50">{homeKey}</span>
                   </div>
-                  {homeFiltered.length > 0 ? <InjList injuries={homeFiltered} /> : <span className="text-xs text-fg/30">None reported</span>}
+                  {homeFiltered.length > 0 ? <InjList injuries={homeFiltered} /> : <span className="text-sm text-fg/30">None reported</span>}
                 </div>
               </div>
             </div>
@@ -1145,7 +1164,7 @@ export default function Schedule() {
             const displayList = expanded ? injList : keyInjuries;
             
             return (
-              <div className="text-xs text-fg/60 space-y-0.5">
+              <div className="text-sm text-fg/60 space-y-0.5">
                 {displayList.map((inj, i) => (
                   <div key={i}>
                     <span className={inj.displayStatus === 'Doubtful' ? 'text-yellow-400' : 'text-red-500'}>
@@ -1168,7 +1187,7 @@ export default function Schedule() {
           
           return (
             <div className="space-y-3">
-              <h4 className="text-xs font-medium text-fg/40 uppercase tracking-wide">
+              <h4 className="text-sm font-medium text-fg/40 uppercase tracking-wide">
                 Injuries
               </h4>
               <div className="grid grid-cols-2 gap-4">
@@ -1176,20 +1195,20 @@ export default function Schedule() {
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
                     {game.awayTeam?.logo && <img src={tl(game.awayTeam.logo)} alt="" className="w-4 h-4" />}
-                    <span className="text-xs text-fg/50">{game.awayTeam?.abbreviation}</span>
+                    <span className="text-sm text-fg/50">{game.awayTeam?.abbreviation}</span>
                   </div>
                   {awayInjuries.length > 0 ? <InjuryList injuries={awayInjuries} /> : (
-                    <span className="text-xs text-fg/30">None</span>
+                    <span className="text-sm text-fg/30">None</span>
                   )}
                 </div>
                 {/* Home Team */}
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
                     {game.homeTeam?.logo && <img src={tl(game.homeTeam.logo)} alt="" className="w-4 h-4" />}
-                    <span className="text-xs text-fg/50">{game.homeTeam?.abbreviation}</span>
+                    <span className="text-sm text-fg/50">{game.homeTeam?.abbreviation}</span>
                   </div>
                   {homeInjuries.length > 0 ? <InjuryList injuries={homeInjuries} /> : (
-                    <span className="text-xs text-fg/30">None</span>
+                    <span className="text-sm text-fg/30">None</span>
                   )}
                 </div>
               </div>
@@ -1304,7 +1323,7 @@ export default function Schedule() {
         {/* Top Performers by Team */}
         {hasLeaders ? (
           <div className="space-y-3">
-            <h4 className="text-xs sm:text-sm font-semibold text-fg/70 uppercase tracking-wide flex items-center gap-1.5">
+            <h4 className="text-sm font-semibold text-fg/70 uppercase tracking-wide flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Top Performers
             </h4>
@@ -1318,7 +1337,7 @@ export default function Schedule() {
                     {leaders[0]?.player?.teamLogo ? (
                       <img src={leaders[0].player.teamLogo} alt={teamAbbr} className="w-5 h-5" />
                     ) : null}
-                    <span className="text-xs font-semibold text-fg/70">{teamAbbr}</span>
+                    <span className="text-sm font-semibold text-fg/70">{teamAbbr}</span>
                   </div>
                   
                   {/* Leaders Grid */}
@@ -1338,7 +1357,7 @@ export default function Schedule() {
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="text-[10px] text-fg/40 uppercase">{leader.displayName}</div>
-                          <div className="text-xs font-medium text-fg truncate">{leader.player?.name || 'Unknown'}</div>
+                          <div className="text-sm font-medium text-fg truncate">{leader.player?.name || 'Unknown'}</div>
                           <div className="text-[11px] text-fg/70 font-medium leading-tight">{leader.value}</div>
                         </div>
                       </div>
@@ -1378,7 +1397,7 @@ export default function Schedule() {
                           <div className="flex-1 min-w-0">
                             <div className="text-[10px] sm:text-xs text-fg/40 uppercase">{leader.displayName}</div>
                             <div className="text-sm sm:text-base font-medium text-fg">{leader.player?.name || 'Unknown'}</div>
-                            <div className="text-xs sm:text-sm text-fg/70 font-medium">{leader.value}</div>
+                            <div className="text-sm text-fg/70 font-medium">{leader.value}</div>
                           </div>
                         </div>
                       ))}
@@ -1415,7 +1434,7 @@ export default function Schedule() {
                           <div className="flex-1 min-w-0">
                             <div className="text-[10px] sm:text-xs text-fg/40 uppercase">{leader.displayName}</div>
                             <div className="text-sm sm:text-base font-medium text-fg">{leader.player?.name || 'Unknown'}</div>
-                            <div className="text-xs sm:text-sm text-fg/70 font-medium">{leader.value}</div>
+                            <div className="text-sm text-fg/70 font-medium">{leader.value}</div>
                           </div>
                         </div>
                       ))}
@@ -1435,12 +1454,12 @@ export default function Schedule() {
         {/* Scoring Summary */}
         {details?.scoringPlays && details.scoringPlays.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide">
+            <h4 className="text-sm font-semibold text-fg/50 uppercase tracking-wide">
               {selectedSport === 'nhl' ? 'Goals' : 'Scoring Summary'}
             </h4>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {details.scoringPlays.map((play, idx) => (
-                <div key={idx} className="bg-fg/5 rounded-lg p-2 sm:p-3 text-xs sm:text-sm">
+                <div key={idx} className="bg-fg/5 rounded-lg p-2 sm:p-3 text-sm">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-fg/50">
                       {play.periodLabel || `Q${play.quarter}`} {play.time}
@@ -1462,7 +1481,7 @@ export default function Schedule() {
         {/* Final Stats Comparison */}
         {hasTeamStats && (
           <div className="space-y-2">
-            <h4 className="text-xs sm:text-sm font-semibold text-fg/50 uppercase tracking-wide">
+            <h4 className="text-sm font-semibold text-fg/50 uppercase tracking-wide">
               Team Stats
             </h4>
             <div className="space-y-1.5">
@@ -1520,6 +1539,9 @@ export default function Schedule() {
       >
         {/* Mobile Layout - Vertical Stack */}
         <div className="sm:hidden">
+          {game.notes && (
+            <div className="text-[11px] text-fg/50 font-medium mb-1.5 truncate">{game.notes}</div>
+          )}
           <div className="flex">
             {/* Teams Column */}
             <div className="flex-1 space-y-2">
@@ -1534,21 +1556,21 @@ export default function Schedule() {
                     />
                   ) : (
                     <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-[10px] flex-shrink-0 overflow-hidden"
                       style={{ backgroundColor: game.awayTeam?.color || '#666' }}
                     >
-                      {game.awayTeam?.abbreviation || '?'}
+                      {(game.awayTeam?.abbreviation || '?').slice(0, 3)}
                     </div>
                   )}
                 </ClickableTeam>
                 {isPast || isLive ? (
                   <>
+                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
                     <ClickableTeam team={game.awayTeam}>
                       <span className="text-fg font-medium text-base hover:underline">
                         {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
                       </span>
                     </ClickableTeam>
-                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
                     <span className={`ml-auto font-bold text-base ${
                       isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-500' : 'text-fg'
                     }`}>
@@ -1558,14 +1580,14 @@ export default function Schedule() {
                 ) : (
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
+                      {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
                       <ClickableTeam team={game.awayTeam}>
                         <span className="text-fg font-medium text-base hover:underline">
                           {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
                         </span>
                       </ClickableTeam>
-                      {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs text-fg/45 mt-0.5">
+                    <div className="flex items-center gap-1.5 text-sm text-fg/45 mt-0.5">
                       {game.awayTeam?.record && <span className="font-medium">{game.awayTeam.record}</span>}
                       {getTeamStandingBadges(game.awayTeam).map((b, i) => (
                         <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
@@ -1586,21 +1608,21 @@ export default function Schedule() {
                     />
                   ) : (
                     <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-[10px] flex-shrink-0 overflow-hidden"
                       style={{ backgroundColor: game.homeTeam?.color || '#666' }}
                     >
-                      {game.homeTeam?.abbreviation || '?'}
+                      {(game.homeTeam?.abbreviation || '?').slice(0, 3)}
                     </div>
                   )}
                 </ClickableTeam>
                 {isPast || isLive ? (
                   <>
+                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
                     <ClickableTeam team={game.homeTeam}>
                       <span className="text-fg font-medium text-base hover:underline">
                         {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
                       </span>
                     </ClickableTeam>
-                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
                     <span className={`ml-auto font-bold text-base ${
                       isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-500' : 'text-fg'
                     }`}>
@@ -1610,14 +1632,14 @@ export default function Schedule() {
                 ) : (
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
+                      {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
                       <ClickableTeam team={game.homeTeam}>
                         <span className="text-fg font-medium text-base hover:underline">
                           {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
                         </span>
                       </ClickableTeam>
-                      {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs text-fg/45 mt-0.5">
+                    <div className="flex items-center gap-1.5 text-sm text-fg/45 mt-0.5">
                       {game.homeTeam?.record && <span className="font-medium">{game.homeTeam.record}</span>}
                       {getTeamStandingBadges(game.homeTeam).map((b, i) => (
                         <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
@@ -1629,24 +1651,28 @@ export default function Schedule() {
             </div>
             
             {/* Game Info Column */}
-            <div className="flex-shrink-0 pl-4 border-l border-fg/10 ml-4 flex flex-col justify-center items-end min-w-[70px]">
+            <div className="flex-shrink-0 pl-4 border-l border-fg/10 ml-4 flex flex-col justify-center items-end max-w-[90px]">
               {isLive ? (
                 <div className="flex flex-col items-end gap-0.5">
-                  <span className="flex items-center justify-end gap-1.5 text-xs font-semibold text-red-500">
+                  <span className="flex items-center justify-end gap-1.5 text-sm font-semibold text-red-500">
                     <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
                     LIVE
                   </span>
                   {game.statusDetail && (
-                    <span className="text-[10px] text-fg/50">{game.statusDetail}</span>
+                    <span className="text-sm text-fg/50">{game.statusDetail}</span>
                   )}
                 </div>
               ) : isPast ? (
-                <span className="text-xs font-medium text-fg/50">Final</span>
+                <span className="text-sm font-medium text-fg/50">Final</span>
               ) : (
                 <>
-                  <span className="text-xs text-fg/70 font-medium">{dateStr}</span>
-                  <span className="text-xs text-fg/50">{timeStr}</span>
-                  {game.broadcast && <BroadcastIcon broadcast={game.broadcast} />}
+                  <span className="text-sm text-fg/70 font-medium">{dateStr}</span>
+                  <span className="text-sm text-fg/50">{timeStr}</span>
+                  {game.broadcast && (
+                    <span className="text-right leading-tight mt-0.5">
+                      <BroadcastIcon broadcast={game.broadcast} />
+                    </span>
+                  )}
                 </>
               )}
               <ChevronDown className={`w-4 h-4 text-fg/30 mt-1 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -1666,10 +1692,15 @@ export default function Schedule() {
             <div className="flex items-center gap-2">
               {getStatusDisplay(game)}
               {game.broadcast && !isPast && <BroadcastIcon broadcast={game.broadcast} />}
+              {game.notes && (
+                <span className="text-xs text-fg/50 bg-fg/5 px-2 py-0.5 rounded-full font-medium">
+                  {game.notes}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {game.venue && (
-                <span className="text-xs text-fg/40 truncate max-w-[150px]">
+                <span className="text-sm text-fg/40 truncate max-w-[200px]">
                   {game.venue}
                 </span>
               )}
@@ -1698,13 +1729,13 @@ export default function Schedule() {
                 )}
               </ClickableTeam>
               <ClickableTeam team={game.awayTeam} className="min-w-0 text-left">
-                <div className="text-fg font-medium text-base truncate hover:underline">
-                  {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
+                <div className="text-fg font-medium text-base truncate hover:underline flex items-center gap-1.5">
+                  {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
+                  <span className="truncate">{game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}</span>
                 </div>
                 {(game.awayTeam?.record ||
                   game.awayTeam?.standingSummary ||
-                  getTeamStandingBadges(game.awayTeam).length > 0 ||
-                  (selectedSport === 'ncaab' && game.awayTeam?.ranking?.current)) && (
+                  getTeamStandingBadges(game.awayTeam).length > 0) && (
                   <div className="mt-0.5 flex items-center gap-2 text-sm">
                     {game.awayTeam?.record && (
                       <span className="text-sm font-medium text-fg/45">{game.awayTeam.record}</span>
@@ -1712,7 +1743,6 @@ export default function Schedule() {
                     {getTeamStandingBadges(game.awayTeam).map((b, i) => (
                       <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
                     ))}
-                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
                   </div>
                 )}
               </ClickableTeam>
@@ -1742,13 +1772,13 @@ export default function Schedule() {
             {/* Home Team */}
             <div className={`flex-1 flex items-center justify-end gap-3 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
               <ClickableTeam team={game.homeTeam} className="min-w-0 text-right">
-                <div className="text-fg font-medium text-base truncate hover:underline">
-                  {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
+                <div className="text-fg font-medium text-base truncate hover:underline flex items-center justify-end gap-1.5">
+                  {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
+                  <span className="truncate">{game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}</span>
                 </div>
                 {(game.homeTeam?.record ||
                   game.homeTeam?.standingSummary ||
-                  getTeamStandingBadges(game.homeTeam).length > 0 ||
-                  (selectedSport === 'ncaab' && game.homeTeam?.ranking?.current)) && (
+                  getTeamStandingBadges(game.homeTeam).length > 0) && (
                   <div className="mt-0.5 flex items-center justify-end gap-2 text-sm">
                     {game.homeTeam?.record && (
                       <span className="text-sm font-medium text-fg/45">{game.homeTeam.record}</span>
@@ -1756,7 +1786,6 @@ export default function Schedule() {
                     {getTeamStandingBadges(game.homeTeam).map((b, i) => (
                       <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
                     ))}
-                    {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
                   </div>
                 )}
               </ClickableTeam>
@@ -1830,7 +1859,7 @@ export default function Schedule() {
               <BrandLogo size="md" className="flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-fg font-semibold text-sm sm:text-base">Join a Survivor Pool</p>
-                <p className="text-fg/50 text-xs sm:text-sm">Sign in to create or join a league and start making picks</p>
+                <p className="text-fg/50 text-sm">Sign in to create or join a league and start making picks</p>
               </div>
               <ArrowRight className="w-5 h-5 text-fg/30 group-hover:text-fg/60 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
             </div>

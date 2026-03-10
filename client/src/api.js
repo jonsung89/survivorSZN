@@ -428,6 +428,10 @@ export const bracketAPI = {
     const res = await fetch(`${API_URL}/brackets/tournament/${season}/matchup/${eventId}`);
     return res.json();
   },
+  getSelectionDate: async (season) => {
+    const res = await fetch(`${API_URL}/brackets/tournament/${season}/selection-date`);
+    return res.json();
+  },
   getLeaderboard: async (challengeId) => {
     const res = await authFetch(`/brackets/challenges/${challengeId}/leaderboard`);
     return res.json();

@@ -558,10 +558,53 @@ async function getTournamentResults(season) {
   return results;
 }
 
+/**
+ * Get Selection Sunday date from ESPN standings API.
+ * The postseason type's startDate is always First Four Tuesday;
+ * Selection Sunday is 2 days before that.
+ * Show time is hardcoded to 6 PM ET (CBS tradition).
+ */
+async function getSelectionSundayDate(season) {
+  const STANDINGS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours — date won't change mid-season
+  const url = `https://site.web.api.espn.com/apis/v2/sports/basketball/mens-college-basketball/standings?season=${season}`;
+
+  try {
+    const data = await fetchWithCache(url, STANDINGS_CACHE_TTL);
+    const currentSeason = (data.seasons || []).find(s => s.year === season);
+    if (!currentSeason) return null;
+
+    const postseason = (currentSeason.types || []).find(t => String(t.id) === '3');
+    if (!postseason?.startDate) return null;
+
+    // startDate is First Four Tuesday — Selection Sunday is 2 days before
+    const firstFour = new Date(postseason.startDate);
+    const selectionSunday = new Date(firstFour);
+    selectionSunday.setDate(selectionSunday.getDate() - 2);
+
+    // Set to 6 PM ET (Selection Show broadcast time on CBS)
+    // We return an ISO string with the date + fixed 6 PM ET time
+    const year = selectionSunday.getUTCFullYear();
+    const month = String(selectionSunday.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(selectionSunday.getUTCDate()).padStart(2, '0');
+
+    return {
+      date: `${year}-${month}-${day}`,
+      // 6 PM ET = 23:00 UTC (EST) or 22:00 UTC (EDT, which is March)
+      // March is EDT so offset is -04:00
+      dateTime: `${year}-${month}-${day}T18:00:00-04:00`,
+      source: 'espn',
+    };
+  } catch (err) {
+    console.error('Failed to fetch Selection Sunday date from ESPN:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   getTournamentBracket,
   getTeamBreakdown,
   getMatchupPrediction,
   getTournamentResults,
   fetchTournamentGames,
+  getSelectionSundayDate,
 };

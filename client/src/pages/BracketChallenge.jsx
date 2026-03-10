@@ -27,6 +27,7 @@ export default function BracketChallenge() {
   const [showSettings, setShowSettings] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [fieldAnnounced, setFieldAnnounced] = useState(null); // null = loading, true/false
+  const [selectionDate, setSelectionDate] = useState(null); // fetched from ESPN
   const [selectionCountdown, setSelectionCountdown] = useState(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
@@ -40,14 +41,15 @@ export default function BracketChallenge() {
     loadData();
   }, [leagueId]);
 
-  // Selection Show countdown (March 15, 2026 at 6pm ET)
+  // Selection Show countdown (date fetched from ESPN standings API)
   useEffect(() => {
-    if (fieldAnnounced !== false) return;
+    if (fieldAnnounced !== false || !selectionDate) return;
 
-    const selectionDate = new Date('2026-03-15T18:00:00-05:00');
+    const target = new Date(selectionDate);
+    if (isNaN(target.getTime())) return;
 
     const update = () => {
-      const diff = selectionDate - new Date();
+      const diff = target - new Date();
       if (diff <= 0) { setSelectionCountdown(null); return; }
       setSelectionCountdown({
         days: Math.floor(diff / 86400000),
@@ -60,7 +62,7 @@ export default function BracketChallenge() {
     update();
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
-  }, [fieldAnnounced]);
+  }, [fieldAnnounced, selectionDate]);
 
   const loadData = async () => {
     try {
@@ -74,12 +76,20 @@ export default function BracketChallenge() {
       setChallenge(challengeData.challenge);
       setMyBrackets(challengeData.myBrackets || []);
 
-      // Check if tournament field has been announced
+      // Check if tournament field has been announced + fetch selection date
       try {
         const season = leagueObj.season || new Date().getFullYear();
-        const tournamentData = await bracketAPI.getTournamentData(season);
+        const [tournamentData, selectionData] = await Promise.all([
+          bracketAPI.getTournamentData(season),
+          bracketAPI.getSelectionDate(season).catch(() => null),
+        ]);
         const realTeams = Object.values(tournamentData.teams || {}).filter(t => t.name !== 'TBD');
         setFieldAnnounced(realTeams.length >= 64);
+
+        // Use ESPN-derived date, or null if not available
+        if (selectionData?.dateTime) {
+          setSelectionDate(selectionData.dateTime);
+        }
       } catch {
         setFieldAnnounced(false);
       }

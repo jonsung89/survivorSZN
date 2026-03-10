@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults } = require('../services/ncaab-tournament');
+const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate } = require('../services/ncaab-tournament');
 const { SCORING_PRESETS, calculateBracketScore, calculatePotentialPoints, getSlotRound, countPicks } = require('../utils/bracket-slots');
 
 const getUser = async (req) => {
@@ -344,6 +344,20 @@ router.get('/tournament/:season', async (req, res) => {
   } catch (error) {
     console.error('Error fetching tournament data:', error);
     res.status(500).json({ error: 'Failed to fetch tournament data' });
+  }
+});
+
+// Get Selection Sunday date (derived from ESPN standings API)
+router.get('/tournament/:season/selection-date', async (req, res) => {
+  try {
+    const result = await getSelectionSundayDate(parseInt(req.params.season));
+    if (!result) {
+      return res.status(404).json({ error: 'Selection date not available for this season' });
+    }
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching selection date:', error);
+    res.status(500).json({ error: 'Failed to fetch selection date' });
   }
 });
 

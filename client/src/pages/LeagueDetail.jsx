@@ -16,6 +16,7 @@ import ChatWidget from '../components/ChatWidget';
 import Avatar from '../components/Avatar';
 import { getSportModule } from '../sports';
 import { useThemedLogo } from '../utils/logo';
+import AppIcon from '../components/AppIcon';
 
 export default function LeagueDetail() {
   const { leagueId } = useParams();
@@ -729,8 +730,8 @@ export default function LeagueDetail() {
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-3 sm:gap-4 animate-in">
-          <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br ${sport.gradientClasses || 'from-blue-500 to-blue-700'} flex items-center justify-center shadow-lg flex-shrink-0`}>
-            <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center shadow-lg flex-shrink-0">
+            <AppIcon className="w-7 h-7 sm:w-9 sm:h-9" color="white" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -798,35 +799,25 @@ export default function LeagueDetail() {
         const activeMembers = league.members?.filter(m => m.status === 'active') || [];
         const winners = activeMembers.length > 0 ? activeMembers : null;
         return (
-          <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-yellow-600/10 animate-in" style={{ animationDelay: '25ms' }}>
-            <div className="flex items-center gap-3 mb-2">
-              <Trophy className="w-6 h-6 text-amber-500" />
+          <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border border-fg/10 animate-in" style={{ animationDelay: '25ms' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🏆</span>
               <h2 className="text-lg font-semibold text-fg">Season Complete</h2>
             </div>
             {winners ? (
-              <div className="mt-2">
-                <p className="text-fg/60 text-sm mb-2">
-                  {winners.length === 1 ? 'Winner' : `${winners.length} Winners`}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {winners.map(w => (
-                    <span
-                      key={w.userId}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${
-                        w.userId === user?.id
-                          ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30'
-                          : 'bg-fg/10 text-fg/70'
-                      }`}
-                    >
-                      <Trophy className="w-3.5 h-3.5" />
-                      {w.displayName}
-                      {w.userId === user?.id && <span className="text-xs ml-1">(You)</span>}
+              <p className="text-fg/70 text-sm mt-1">
+                {winners.length === 1 ? 'Winner: ' : `${winners.length} Winners: `}
+                {winners.map((w, i) => (
+                  <span key={w.userId}>
+                    <span className={w.userId === user?.id ? 'text-fg font-medium' : ''}>
+                      {w.displayName}{w.userId === user?.id && ' (You)'}
                     </span>
-                  ))}
-                </div>
-              </div>
+                    {i < winners.length - 1 && ', '}
+                  </span>
+                ))}
+              </p>
             ) : (
-              <p className="text-fg/50 text-sm">No survivors — everyone was eliminated!</p>
+              <p className="text-fg/50 text-sm mt-1">No survivors — everyone was eliminated!</p>
             )}
           </div>
         );
@@ -1465,6 +1456,9 @@ export default function LeagueDetail() {
         {/* isLoadingWeek: true when standings data doesn't match the selected week yet */}
         {(() => {
           const isLoadingWeek = loadingStandings || loadedWeek !== selectedWeek;
+          const prizePot = league.prizePotOverride || (league.entryFee * (league.members?.length || 0));
+          const winnerCount = seasonOver ? (league.members?.filter(m => m.status === 'active')?.length || 0) : 0;
+          const perWinnerPrize = prizePot > 0 && winnerCount > 0 ? Math.floor(prizePot / winnerCount) : 0;
           return (<>
         {/* Mobile Card View */}
         <div className="sm:hidden divide-y divide-fg/5">
@@ -1512,13 +1506,14 @@ export default function LeagueDetail() {
                   </div>
                   {isLoadingWeek ? (
                     <div className="shimmer h-5 w-14 rounded" />
+                  ) : isFinalView && effectiveStatus === 'active' ? (
+                    <span className="flex items-center gap-1" title="Winner">
+                      <span className="text-sm">🏆</span>
+                      {perWinnerPrize > 0 && <span className="text-sm font-medium text-green-500">${perWinnerPrize.toLocaleString()}</span>}
+                    </span>
                   ) : (
-                    <span className={`badge text-xs ${
-                      isFinalView && effectiveStatus === 'active'
-                        ? 'bg-amber-500/20 text-amber-600 border-amber-500/30'
-                        : effectiveStatus === 'active' ? 'badge-active' : 'badge-eliminated'
-                    }`}>
-                      {isFinalView && effectiveStatus === 'active' ? 'Winner' : effectiveStatus}
+                    <span className={`badge text-xs ${effectiveStatus === 'active' ? 'badge-active' : 'badge-eliminated'}`}>
+                      {effectiveStatus}
                     </span>
                   )}
                 </div>
@@ -1679,15 +1674,14 @@ export default function LeagueDetail() {
                     <td className="px-4 py-4 text-center">
                       {isLoadingWeek ? (
                         <div className="flex justify-center"><div className="shimmer h-5 w-16 rounded" /></div>
+                      ) : isFinalView && effectiveStatus === 'active' ? (
+                        <span className="inline-flex items-center gap-1" title="Winner">
+                          <span className="text-base">🏆</span>
+                          {perWinnerPrize > 0 && <span className="text-sm font-medium text-green-500">${perWinnerPrize.toLocaleString()}</span>}
+                        </span>
                       ) : (
-                        <span className={`badge ${
-                          isFinalView && effectiveStatus === 'active'
-                            ? 'bg-amber-500/20 text-amber-600 border-amber-500/30'
-                            : effectiveStatus === 'active'
-                              ? 'badge-active'
-                              : 'badge-eliminated'
-                        }`}>
-                          {isFinalView && effectiveStatus === 'active' ? 'Winner' : effectiveStatus}
+                        <span className={`badge ${effectiveStatus === 'active' ? 'badge-active' : 'badge-eliminated'}`}>
+                          {effectiveStatus}
                         </span>
                       )}
                     </td>

@@ -46,7 +46,6 @@ export default function Dashboard() {
   const [weekStarted, setWeekStarted] = useState(false);
   const [gameDetails, setGameDetails] = useState({});
   const [winnersDialog, setWinnersDialog] = useState({ open: false, leagueName: '', winners: [], prizePool: 0 });
-
   // BroadcastIcon component (same as Schedule.jsx)
   const BroadcastIcon = ({ broadcast }) => {
     const [imgError, setImgError] = useState(false);
@@ -588,7 +587,7 @@ export default function Dashboard() {
               <Link
                 key={league.id}
                 to={`/league/${league.id}`}
-                className={`flex items-center gap-3 p-4 hover:bg-fg/[0.04] active:bg-fg/[0.06] transition-all ${
+                className={`flex items-center gap-2.5 sm:gap-3 p-3 sm:p-4 hover:bg-fg/[0.04] active:bg-fg/[0.06] transition-all ${
                   i !== 0 ? 'border-t border-fg/5' : ''
                 }`}
               >
@@ -601,7 +600,7 @@ export default function Dashboard() {
                       : 'rgb(139 92 246)'}
                   />
                   {league.memberStatus === 'eliminated' && !isWinner && (
-                    <div className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-red-500 flex items-center justify-center ring-1 ring-[rgb(var(--color-surface))]">
+                    <div className="absolute bottom-0 right-0 w-4.5 h-4.5 rounded-full bg-red-500 flex items-center justify-center">
                       <X className="w-3 h-3 text-white" strokeWidth={3} />
                     </div>
                   )}
@@ -609,12 +608,25 @@ export default function Dashboard() {
 
                 {/* League name and status */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-fg text-base truncate">{league.name}</h3>
-                    {league.isCommissioner && <span className="badge badge-active text-xs">Commish</span>}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h3 className="font-semibold text-fg text-sm sm:text-base truncate max-w-[60vw] sm:max-w-none">{league.name}</h3>
+                    {league.isCommissioner && (
+                      <span className="relative group/commish">
+                        <button
+                          onMouseDown={(e) => { if (document.activeElement === e.currentTarget) { e.preventDefault(); e.currentTarget.blur(); } }}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          className="text-sm leading-none focus:outline-none"
+                        >⭐</button>
+                        <div className="pointer-events-none opacity-0 group-focus-within/commish:opacity-100 transition-opacity duration-150 absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1 rounded bg-neutral-800 text-white text-xs font-medium whitespace-nowrap z-50 shadow-lg">
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-neutral-800" />
+                          Commissioner
+                        </div>
+                      </span>
+                    )}
                     <span className={`text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded ${getSportBadgeClasses(league.sportId)}`}>{sportMod.name}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
+                  {/* Mobile-only status row */}
+                  <div className="flex items-center gap-2 text-sm sm:hidden">
                     {isPast ? (
                       isWinner ? (
                         <button
@@ -623,9 +635,10 @@ export default function Dashboard() {
                             const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
                             setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
                           }}
-                          className="text-xs font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 transition-colors"
+                          className="text-sm hover:opacity-70 transition-opacity"
+                          title="Winner"
                         >
-                          Winner!{league.winners?.length > 1 && ` (+${league.winners.length - 1} other${league.winners.length > 2 ? 's' : ''})`}
+                          🏆{league.winners?.length > 1 && <span className="text-fg/50 text-xs ml-0.5">(+{league.winners.length - 1})</span>}
                         </button>
                       ) : league.winners?.length > 0 ? (
                         league.winners.length <= 3 ? (
@@ -659,8 +672,54 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Right side: pick or strike info */}
-                <div className="flex items-center gap-3">
+                {/* Right side: status (desktop) + pick/strike info */}
+                <div className="flex items-center gap-2 sm:gap-3">
+                  {/* Desktop-only status */}
+                  <div className="hidden sm:flex items-center gap-2 text-sm">
+                    {isPast ? (
+                      isWinner ? (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
+                            setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
+                          }}
+                          className="hover:opacity-70 transition-opacity"
+                          title="Winner"
+                        >
+                          🏆{league.winners?.length > 1 && <span className="text-fg/50 text-xs ml-0.5">(+{league.winners.length - 1})</span>}
+                        </button>
+                      ) : league.winners?.length > 0 ? (
+                        league.winners.length <= 3 ? (
+                          <span className="text-fg/50">Won by {league.winners.map(w => w.displayName).join(', ')}</span>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
+                              setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
+                            }}
+                            className="text-fg/50 hover:text-fg/70 transition-colors"
+                          >
+                            {league.winners.length} winners
+                          </button>
+                        )
+                      ) : league.memberStatus === 'eliminated' ? (
+                        <span className="text-fg/40">Eliminated</span>
+                      ) : (
+                        <span className="text-fg/40">Season Complete</span>
+                      )
+                    ) : (
+                      <>
+                        <span className={league.memberStatus === 'active' ? 'text-green-500' : 'text-red-500'}>
+                          {league.memberStatus === 'active' ? 'Active' : 'Eliminated'}
+                        </span>
+                        <span className="text-fg/30">•</span>
+                        <span className="text-fg/50">{league.activeCount}/{league.memberCount} alive</span>
+                      </>
+                    )}
+                  </div>
+
                   {!isPast && league.memberStatus === 'active' && league.currentPickTeamId ? (
                     <div className="flex items-center gap-2">
                       {(() => {
@@ -765,34 +824,32 @@ export default function Dashboard() {
               </div>
 
               {pool > 0 && (
-                <div className="flex items-center gap-4 mb-4 p-3 rounded-xl bg-gradient-to-r from-amber-600/10 to-orange-600/10 border border-amber-600/20">
+                <div className="flex items-center gap-4 mb-4 p-3 rounded-xl border border-fg/10">
                   <div className="text-center flex-1">
-                    <p className="text-fg/50 text-xs uppercase tracking-wide">Prize Pool</p>
+                    <p className="text-fg/40 text-xs uppercase tracking-wide">Prize Pool</p>
                     <p className="text-lg font-bold text-fg">${pool.toLocaleString()}</p>
                   </div>
                   {winnersDialog.winners.length > 0 && (
                     <>
                       <div className="w-px h-8 bg-fg/10" />
                       <div className="text-center flex-1">
-                        <p className="text-fg/50 text-xs uppercase tracking-wide">Per Winner</p>
-                        <p className="text-lg font-bold text-green-600">${perWinner.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                        <p className="text-fg/40 text-xs uppercase tracking-wide">Per Winner</p>
+                        <p className="text-lg font-bold text-green-500">${perWinner.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                       </div>
                     </>
                   )}
                 </div>
               )}
 
-              <p className="text-fg/50 text-sm mb-3">{winnersDialog.winners.length} Winner{winnersDialog.winners.length !== 1 ? 's' : ''}</p>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <p className="text-fg/40 text-sm mb-3">{winnersDialog.winners.length} Winner{winnersDialog.winners.length !== 1 ? 's' : ''}</p>
+              <div className="divide-y divide-fg/5 max-h-64 overflow-y-auto">
                 {winnersDialog.winners.map((w, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-fg/5">
-                    <div className="w-6 h-6 rounded-md bg-gradient-to-br from-amber-600 to-orange-600 flex items-center justify-center flex-shrink-0">
-                      <Trophy className="w-3.5 h-3.5 text-white" />
-                    </div>
+                  <div key={i} className="flex items-center gap-3 py-2.5">
+                    <span className="text-base flex-shrink-0">🏆</span>
                     <span className="text-fg text-sm">{w.displayName}</span>
                     <div className="flex items-center gap-2 ml-auto">
-                      {perWinner > 0 && <span className="text-green-600 text-xs font-semibold">${perWinner.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>}
-                      {w.isMe && <span className="text-amber-600 text-xs font-semibold bg-amber-600/15 px-1.5 py-0.5 rounded">You</span>}
+                      {perWinner > 0 && <span className="text-green-500 text-sm font-medium">${perWinner.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>}
+                      {w.isMe && <span className="text-fg/50 text-xs font-medium">(You)</span>}
                     </div>
                   </div>
                 ))}

@@ -1856,7 +1856,7 @@ export default function Schedule() {
             </div>
 
             {dailySportSeasons[selectedSport] && (
-              <div className="relative" ref={dailySeasonDropdownRef}>
+              <div className="relative z-20" ref={dailySeasonDropdownRef}>
                 <button
                   onClick={() => setShowDailySeasonDropdown(!showDailySeasonDropdown)}
                   className="flex items-center gap-2 px-4 py-2 bg-fg/10 hover:bg-fg/15 rounded-lg transition-colors text-fg text-sm font-medium"

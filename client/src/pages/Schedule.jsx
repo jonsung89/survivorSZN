@@ -1842,7 +1842,7 @@ export default function Schedule() {
         /* Daily sport rendering (NBA, MLB, NHL, NCAAB) */
         <>
           {/* Header with Season Info & Dropdown */}
-          <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 animate-in">
+          <div className="relative z-10 mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 animate-in">
             <div>
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg">
                 {selectedSportTab?.name} Schedule
@@ -1856,7 +1856,7 @@ export default function Schedule() {
             </div>
 
             {dailySportSeasons[selectedSport] && (
-              <div className="relative z-20" ref={dailySeasonDropdownRef}>
+              <div className="relative" ref={dailySeasonDropdownRef}>
                 <button
                   onClick={() => setShowDailySeasonDropdown(!showDailySeasonDropdown)}
                   className="flex items-center gap-2 px-4 py-2 bg-fg/10 hover:bg-fg/15 rounded-lg transition-colors text-fg text-sm font-medium"

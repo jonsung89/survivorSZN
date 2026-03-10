@@ -27,6 +27,7 @@ export default function BracketChallenge() {
   const [showSettings, setShowSettings] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [fieldAnnounced, setFieldAnnounced] = useState(null); // null = loading, true/false
+  const [selectionCountdown, setSelectionCountdown] = useState(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
   const [togglingPayment, setTogglingPayment] = useState(null);
@@ -38,6 +39,28 @@ export default function BracketChallenge() {
   useEffect(() => {
     loadData();
   }, [leagueId]);
+
+  // Selection Show countdown (March 15, 2026 at 6pm ET)
+  useEffect(() => {
+    if (fieldAnnounced !== false) return;
+
+    const selectionDate = new Date('2026-03-15T18:00:00-05:00');
+
+    const update = () => {
+      const diff = selectionDate - new Date();
+      if (diff <= 0) { setSelectionCountdown(null); return; }
+      setSelectionCountdown({
+        days: Math.floor(diff / 86400000),
+        hours: Math.floor((diff % 86400000) / 3600000),
+        minutes: Math.floor((diff % 3600000) / 60000),
+        seconds: Math.floor((diff % 60000) / 1000),
+      });
+    };
+
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [fieldAnnounced]);
 
   const loadData = async () => {
     try {
@@ -348,10 +371,34 @@ export default function BracketChallenge() {
               <div className="w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
                 <Calendar className="w-7 h-7 text-amber-400" />
               </div>
-              <h3 className="text-lg font-display font-bold text-fg mb-2">You're Early!</h3>
-              <p className="text-fg/50 text-sm max-w-md mx-auto mb-3">
-                The tournament field of 68 has not been announced yet. Come back after the Selection Show on <span className="text-fg/70 font-medium">March 15th at 6:00pm ET</span> to fill out your bracket.
+              <h3 className="text-lg font-display font-bold text-fg mb-2">Selection Show Countdown</h3>
+              <p className="text-fg/50 text-sm max-w-md mx-auto mb-4">
+                The tournament field will be announced on <span className="text-fg/70 font-medium">March 15th at 6:00pm ET</span>. Brackets open after the selection.
               </p>
+
+              {selectionCountdown && (
+                <div className="flex justify-center gap-2 mb-4">
+                  {selectionCountdown.days > 0 && (
+                    <div className="text-center px-3 py-2 rounded-lg bg-fg/5 min-w-[52px]">
+                      <p className="text-2xl font-bold text-fg">{selectionCountdown.days}</p>
+                      <p className="text-fg/50 text-[10px] uppercase">Days</p>
+                    </div>
+                  )}
+                  <div className="text-center px-3 py-2 rounded-lg bg-fg/5 min-w-[52px]">
+                    <p className="text-2xl font-bold text-fg">{String(selectionCountdown.hours).padStart(2, '0')}</p>
+                    <p className="text-fg/50 text-[10px] uppercase">Hrs</p>
+                  </div>
+                  <div className="text-center px-3 py-2 rounded-lg bg-fg/5 min-w-[52px]">
+                    <p className="text-2xl font-bold text-fg">{String(selectionCountdown.minutes).padStart(2, '0')}</p>
+                    <p className="text-fg/50 text-[10px] uppercase">Min</p>
+                  </div>
+                  <div className="text-center px-3 py-2 rounded-lg bg-fg/5 min-w-[52px]">
+                    <p className="text-2xl font-bold text-amber-400">{String(selectionCountdown.seconds).padStart(2, '0')}</p>
+                    <p className="text-fg/50 text-[10px] uppercase">Sec</p>
+                  </div>
+                </div>
+              )}
+
               <p className="text-fg/30 text-xs">
                 Teams will be seeded and placed into regions after the selection committee's announcement.
               </p>

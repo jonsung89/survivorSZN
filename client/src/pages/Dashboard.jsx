@@ -285,13 +285,11 @@ export default function Dashboard() {
         <h1 className="text-2xl sm:text-3xl font-display font-bold text-fg">
           Welcome back, {user?.displayName || 'Player'}!
         </h1>
-        <p className="text-fg/60 mt-1 text-base">
-          {seasonInfo
-            ? seasonInfo.isSeasonOver
-              ? `${seasonInfo.season} Season Complete • Offseason`
-              : `${getWeekLabel(seasonInfo.week, seasonInfo.seasonType)} • ${seasonInfo.season} Season`
-            : 'Loading season info...'}
-        </p>
+        {seasonInfo && !seasonInfo.isSeasonOver && (
+          <p className="text-fg/60 mt-1 text-base">
+            {`${getWeekLabel(seasonInfo.week, seasonInfo.seasonType)} • ${seasonInfo.season} Season`}
+          </p>
+        )}
       </div>
 
       {/* Countdown to Next Game - shows when there are upcoming games and season is active */}
@@ -600,8 +598,12 @@ export default function Dashboard() {
                       ? 'rgb(139 92 246 / 0.25)'
                       : 'rgb(139 92 246)'}
                   />
-                  {league.memberStatus === 'eliminated' && !isWinner && (
-                    <div className="absolute bottom-0 right-0 w-4.5 h-4.5 rounded-full bg-red-500 flex items-center justify-center">
+                  {isWinner ? (
+                    <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center shadow-sm">
+                      <Trophy className="w-3 h-3 text-white" />
+                    </div>
+                  ) : league.memberStatus === 'eliminated' && (
+                    <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm">
                       <X className="w-3 h-3 text-white" strokeWidth={3} />
                     </div>
                   )}
@@ -628,40 +630,7 @@ export default function Dashboard() {
                   </div>
                   {/* Mobile-only status row */}
                   <div className="flex items-center gap-2 text-sm sm:hidden">
-                    {isPast ? (
-                      isWinner ? (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
-                            setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
-                          }}
-                          className="text-sm hover:opacity-70 transition-opacity"
-                          title="Winner"
-                        >
-                          🏆{league.winners?.length > 1 && <span className="text-fg/50 text-xs ml-0.5">(+{league.winners.length - 1})</span>}
-                        </button>
-                      ) : league.winners?.length > 0 ? (
-                        league.winners.length <= 3 ? (
-                          <span className="text-fg/50">Won by {league.winners.map(w => w.displayName).join(', ')}</span>
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
-                              setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
-                            }}
-                            className="text-fg/50 hover:text-fg/70 transition-colors"
-                          >
-                            {league.winners.length} winners
-                          </button>
-                        )
-                      ) : league.memberStatus === 'eliminated' ? (
-                        <span className="text-fg/40">Eliminated</span>
-                      ) : (
-                        <span className="text-fg/40">Season Complete</span>
-                      )
-                    ) : isBracketLeague ? (
+                    {isPast ? null : isBracketLeague ? (
                       <span className="text-violet-400">
                         {league.memberCount} member{league.memberCount !== 1 ? 's' : ''}
                       </span>
@@ -681,40 +650,7 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2 sm:gap-3">
                   {/* Desktop-only status */}
                   <div className="hidden sm:flex items-center gap-2 text-sm">
-                    {isPast ? (
-                      isWinner ? (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
-                            setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
-                          }}
-                          className="hover:opacity-70 transition-opacity"
-                          title="Winner"
-                        >
-                          🏆{league.winners?.length > 1 && <span className="text-fg/50 text-xs ml-0.5">(+{league.winners.length - 1})</span>}
-                        </button>
-                      ) : league.winners?.length > 0 ? (
-                        league.winners.length <= 3 ? (
-                          <span className="text-fg/50">Won by {league.winners.map(w => w.displayName).join(', ')}</span>
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
-                              setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
-                            }}
-                            className="text-fg/50 hover:text-fg/70 transition-colors"
-                          >
-                            {league.winners.length} winners
-                          </button>
-                        )
-                      ) : league.memberStatus === 'eliminated' ? (
-                        <span className="text-fg/40">Eliminated</span>
-                      ) : (
-                        <span className="text-fg/40">Season Complete</span>
-                      )
-                    ) : isBracketLeague ? (
+                    {isPast ? null : isBracketLeague ? (
                       <span className="text-violet-400">
                         {league.memberCount} member{league.memberCount !== 1 ? 's' : ''}
                       </span>

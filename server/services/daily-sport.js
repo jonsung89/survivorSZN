@@ -260,8 +260,11 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
           if (!odds) return null;
           const homeML = odds.moneyline?.home?.close?.odds;
           const awayML = odds.moneyline?.away?.close?.odds;
+          // For NHL and MLB, ESPN's odds.details contains the moneyline (e.g. "BOS -155"),
+          // not a point spread. The moneyline is already shown separately, so skip it.
+          const hasPointSpread = sportName !== 'NHL' && sportName !== 'MLB';
           return {
-            spread: odds.details || null,
+            spread: hasPointSpread ? (odds.details || null) : null,
             overUnder: odds.overUnder || null,
             homeSpreadOdds: odds.pointSpread?.home?.close?.odds || null,
             awaySpreadOdds: odds.pointSpread?.away?.close?.odds || null,

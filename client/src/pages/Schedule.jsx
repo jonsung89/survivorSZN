@@ -176,10 +176,13 @@ export default function Schedule() {
   const [leagueRanksByStat, setLeagueRanksByStat] = useState({});
   const [leagueRanksLoaded, setLeagueRanksLoaded] = useState(false);
   const [sportStatuses, setSportStatuses] = useState({});
+  const [dailySportSeasons, setDailySportSeasons] = useState({});
+  const [showDailySeasonDropdown, setShowDailySeasonDropdown] = useState(false);
 
   const weekTabsRef = useRef(null);
   const weekButtonRefs = useRef({});
   const seasonDropdownRef = useRef(null);
+  const dailySeasonDropdownRef = useRef(null);
 
   // Sync selected sport/week/date → URL query params
   useEffect(() => {
@@ -263,6 +266,45 @@ export default function Schedule() {
   const seasonOptions = Array.from({ length: currentYear - 2019 }, (_, i) => currentYear - i);
   const playoffRoundNumbers = [1, 2, 3, 5]; // Wild Card, Divisional, Conference, Super Bowl
 
+  // Daily sport season helpers
+  const SPLIT_YEAR_SPORTS = ['nba', 'nhl', 'ncaab'];
+
+  const formatSeasonYear = (sport, seasonYear) => {
+    if (!seasonYear) return '';
+    if (SPLIT_YEAR_SPORTS.includes(sport)) return `${seasonYear - 1}-${String(seasonYear).slice(2)}`;
+    return String(seasonYear);
+  };
+
+  const getSeasonTypeLabel = (seasonType) => {
+    if (seasonType === 1) return 'Preseason';
+    if (seasonType === 3) return 'Postseason';
+    return 'Regular Season';
+  };
+
+  const getDailySeasonOptions = (sport) => {
+    const cur = dailySportSeasons[sport]?.season || new Date().getFullYear();
+    return Array.from({ length: 6 }, (_, i) => cur - i);
+  };
+
+  const getDefaultDateForSeason = (sport, seasonYear) => {
+    if (SPLIT_YEAR_SPORTS.includes(sport)) return `${seasonYear - 1}-11-01`;
+    return `${seasonYear}-04-01`;
+  };
+
+  const handleDailySeasonChange = (newSeasonYear) => {
+    const originalSeasonYear = dailySportSeasons[selectedSport]?.season;
+    setDailySportSeasons(prev => ({
+      ...prev,
+      [selectedSport]: { ...prev[selectedSport], season: newSeasonYear, seasonType: 2 },
+    }));
+    setShowDailySeasonDropdown(false);
+    if (newSeasonYear === originalSeasonYear) {
+      setSelectedDate(new Date().toISOString().split('T')[0]);
+    } else {
+      setSelectedDate(getDefaultDateForSeason(selectedSport, newSeasonYear));
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -293,14 +335,18 @@ export default function Schedule() {
             statuses.nfl = 'active';
           }
         }
+        const seasonData = {};
         dailySports.forEach((sport, i) => {
           if (dailyResults[i].status === 'fulfilled') {
-            const st = dailyResults[i].value.seasonType;
+            const result = dailyResults[i].value;
+            const st = result.seasonType;
             if (st === 2 || st === 3) statuses[sport] = 'active';
             else if (st === 1) statuses[sport] = 'preseason';
+            seasonData[sport] = { season: result.season, seasonType: st };
           }
         });
         setSportStatuses(statuses);
+        setDailySportSeasons(seasonData);
 
         // Auto-select first in-season sport if no URL param was provided
         let activeSport = selectedSport;
@@ -398,6 +444,9 @@ export default function Schedule() {
       if (seasonDropdownRef.current && !seasonDropdownRef.current.contains(event.target)) {
         setShowSeasonDropdown(false);
       }
+      if (dailySeasonDropdownRef.current && !dailySeasonDropdownRef.current.contains(event.target)) {
+        setShowDailySeasonDropdown(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -483,6 +532,7 @@ export default function Schedule() {
     setExpandedGame(null);
     setGameDetails({});
     setGameInjuries({});
+    setShowDailySeasonDropdown(false);
     // Reset date to today for daily sports
     const sportTab = SPORT_TABS.find(s => s.id === sportId);
     if (sportTab?.scheduleType === 'daily') {
@@ -1791,11 +1841,49 @@ export default function Schedule() {
       {selectedSportTab?.scheduleType === 'daily' ? (
         /* Daily sport rendering (NBA, MLB, NHL, NCAAB) */
         <>
-          {/* Header */}
-          <div className="mb-4 sm:mb-6 animate-in">
-            <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg">
-              {selectedSportTab?.name} Schedule
-            </h1>
+          {/* Header with Season Info & Dropdown */}
+          <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 animate-in">
+            <div>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg">
+                {selectedSportTab?.name} Schedule
+              </h1>
+              {dailySportSeasons[selectedSport] && (
+                <p className="text-fg/60 text-sm sm:text-base mt-1">
+                  {formatSeasonYear(selectedSport, dailySportSeasons[selectedSport].season)}{' '}
+                  {getSeasonTypeLabel(dailySportSeasons[selectedSport].seasonType)}
+                </p>
+              )}
+            </div>
+
+            {dailySportSeasons[selectedSport] && (
+              <div className="relative" ref={dailySeasonDropdownRef}>
+                <button
+                  onClick={() => setShowDailySeasonDropdown(!showDailySeasonDropdown)}
+                  className="flex items-center gap-2 px-4 py-2 bg-fg/10 hover:bg-fg/15 rounded-lg transition-colors text-fg text-sm font-medium"
+                >
+                  {formatSeasonYear(selectedSport, dailySportSeasons[selectedSport].season)}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showDailySeasonDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showDailySeasonDropdown && (
+                  <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-36 bg-elevated border border-fg/20 rounded-lg shadow-2xl z-50 overflow-hidden">
+                    {getDailySeasonOptions(selectedSport).map(year => (
+                      <button
+                        key={year}
+                        onClick={() => handleDailySeasonChange(year)}
+                        className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
+                          year === dailySportSeasons[selectedSport]?.season
+                            ? 'bg-fg/20 text-fg font-semibold'
+                            : 'text-fg hover:bg-fg/10'
+                        }`}
+                      >
+                        {formatSeasonYear(selectedSport, year)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Date Picker */}

@@ -102,8 +102,11 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
                 ) : (
                   <>
                     <td className="py-1 sm:py-1.5 pl-2 pr-1 sticky left-0 bg-inset z-10 overflow-hidden">
-                      <span className="text-fg font-medium truncate block" title={row.name}>
+                      <span className="text-fg font-medium truncate block sm:hidden" title={row.name}>
                         {row.shortName || row.name}
+                      </span>
+                      <span className="text-fg font-medium truncate hidden sm:block" title={row.name}>
+                        {row.name || row.shortName}
                       </span>
                     </td>
                     {row.stats.map((stat, j) => (

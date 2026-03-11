@@ -165,7 +165,7 @@ router.get('/browse', optionalAuth, async (req, res) => {
       ${userId ? "LEFT JOIN league_members my_membership ON l.id = my_membership.league_id AND my_membership.user_id = $1" : ""}
       WHERE l.status = 'active'
       GROUP BY l.id, u.display_name${userId ? ", my_membership.user_id" : ""}
-      ORDER BY COUNT(lm.id) DESC
+      ORDER BY l.updated_at DESC NULLS LAST, l.created_at DESC
       LIMIT 50
     `, userId ? [userId] : []);
 

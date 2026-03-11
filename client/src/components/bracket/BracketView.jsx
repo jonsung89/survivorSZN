@@ -109,7 +109,7 @@ export default function BracketView({
 
     return (
       <div className="hidden md:block overflow-x-auto pb-4">
-        <div style={{ minWidth: '2300px' }} className="grid grid-cols-[1fr_auto_auto_auto_1fr] gap-y-6">
+        <div style={{ minWidth: '2800px' }} className="grid grid-cols-[1fr_auto_auto_auto_1fr] gap-y-6">
           {/* === Row 1 === */}
 
           {/* Top-left region */}
@@ -239,7 +239,7 @@ export default function BracketView({
             onClick={() => setMobileTab(idx)}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
               mobileTab === idx
-                ? 'bg-fg/90 text-white border border-fg/80 shadow-sm'
+                ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white shadow-sm'
                 : 'bg-fg/5 text-fg/50 border border-transparent hover:bg-fg/10'
             }`}
           >

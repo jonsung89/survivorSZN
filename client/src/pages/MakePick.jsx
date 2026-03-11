@@ -292,9 +292,13 @@ export default function MakePick() {
   return (
     <div className="max-w-2xl mx-auto px-2 sm:px-4 py-3 sm:py-6 pb-24">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-3 sm:mb-4">
-        <Link to={`/league/${leagueId}`} className="p-2 -ml-2 hover:bg-fg/10 rounded-lg">
-          <ArrowLeft className="w-5 h-5 text-fg" />
+      <div className="mb-3 sm:mb-4">
+        <Link
+          to={`/league/${leagueId}`}
+          className="inline-flex items-center gap-1.5 text-fg/70 hover:text-fg text-base font-medium mb-2 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
         </Link>
         <div className="min-w-0">
           <h1 className="font-display text-xl sm:text-2xl font-bold text-fg">

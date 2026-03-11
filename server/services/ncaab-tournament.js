@@ -5,9 +5,11 @@ const { fetchWithCache } = require('./espn');
 const { SEED_MATCHUPS, REGIONS, getSlotRound, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
 
 const API_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball';
+const ATHLETE_API_BASE = 'https://site.web.api.espn.com/apis/common/v3/sports/basketball/mens-college-basketball/athletes';
 const TOURNAMENT_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 const TEAM_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 const ROSTER_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+const PLAYER_STATS_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
 // Region name variants ESPN uses in notes
 const REGION_ALIASES = {
@@ -272,8 +274,9 @@ async function getTeamBreakdown(teamId, season) {
   // Parse schedule for last 5 and vs Top 25
   const { last5, vsTop25, fullSchedule } = parseTeamSchedule(scheduleData, teamId);
 
-  // Parse key players from roster
-  const keyPlayers = parseKeyPlayers(rosterData, statsData);
+  // Parse key players from roster, then enrich with per-player stats
+  const rawPlayers = parseKeyPlayers(rosterData, statsData);
+  const keyPlayers = await enrichPlayersWithStats(rawPlayers, 5);
 
   // Parse news headlines
   const headlines = parseNews(newsData);
@@ -430,9 +433,67 @@ function parseKeyPlayers(rosterData, statsData) {
     });
   }
 
-  // Sort by jersey or name and take top entries — real sorting by stats
-  // would require per-player stats which we'll parse if available
   return players.slice(0, 10);
+}
+
+/**
+ * Fetch per-player season averages from ESPN athlete overview endpoint.
+ * Fetches top N players in parallel, then sorts by PPG descending.
+ */
+async function enrichPlayersWithStats(players, maxPlayers = 5) {
+  const toFetch = players.slice(0, maxPlayers).filter(p => p.id);
+
+  const results = await Promise.allSettled(
+    toFetch.map(p =>
+      fetchWithCache(`${ATHLETE_API_BASE}/${p.id}/overview`, PLAYER_STATS_CACHE_TTL)
+    )
+  );
+
+  for (let i = 0; i < toFetch.length; i++) {
+    if (results[i].status !== 'fulfilled') continue;
+    const data = results[i].value;
+    const statsObj = data?.statistics;
+    if (!statsObj?.names || !statsObj?.splits?.[0]?.stats) continue;
+
+    const names = statsObj.names;
+    const labels = statsObj.labels || [];
+    const values = statsObj.splits[0].stats;
+
+    // Build a clean stats map: { ppg: '22.7', rpg: '10.2', ... }
+    const parsed = {};
+    for (let j = 0; j < names.length; j++) {
+      const name = names[j];
+      const val = values[j];
+      const label = labels[j] || '';
+      if (name === 'avgPoints') parsed.ppg = val;
+      else if (name === 'avgRebounds') parsed.rpg = val;
+      else if (name === 'avgAssists') parsed.apg = val;
+      else if (name === 'avgMinutes') parsed.mpg = val;
+      else if (name === 'fieldGoalPct') parsed.fgPct = val;
+      else if (name === 'threePointFieldGoalPct') parsed.threePct = val;
+      else if (name === 'freeThrowPct') parsed.ftPct = val;
+      else if (name === 'avgSteals') parsed.spg = val;
+      else if (name === 'avgBlocks') parsed.bpg = val;
+      else if (name === 'avgTurnovers') parsed.tpg = val;
+      else if (name === 'gamesPlayed') parsed.gp = val;
+      else if (name === 'avgFouls') parsed.fpg = val;
+    }
+    toFetch[i].stats = parsed;
+  }
+
+  // Sort by PPG descending (players with stats first, then those without)
+  const enriched = players.map(p => {
+    const match = toFetch.find(t => t.id === p.id);
+    return match || p;
+  });
+
+  enriched.sort((a, b) => {
+    const aPpg = parseFloat(a.stats?.ppg) || 0;
+    const bPpg = parseFloat(b.stats?.ppg) || 0;
+    return bPpg - aPpg;
+  });
+
+  return enriched;
 }
 
 function parseNews(newsData) {

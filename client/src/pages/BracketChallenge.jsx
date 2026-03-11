@@ -8,6 +8,7 @@ import Loading from '../components/Loading';
 import BracketLeaderboard from '../components/bracket/BracketLeaderboard';
 import BracketSetup from '../components/bracket/BracketSetup';
 import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
+import ChatWidget from '../components/ChatWidget';
 import { getSportBadgeClasses } from '../sports';
 import { SCORING_PRESETS, countPicks } from '../utils/bracketSlots';
 
@@ -186,8 +187,8 @@ export default function BracketChallenge() {
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <Link to="/dashboard" className="inline-flex items-center gap-1 text-fg/50 hover:text-fg text-sm mb-2 transition-colors">
-              <ArrowLeft className="w-3.5 h-3.5" />
+            <Link to="/dashboard" className="inline-flex items-center gap-1.5 text-fg/70 hover:text-fg text-base font-medium mb-2 transition-colors">
+              <ArrowLeft className="w-4 h-4" />
               My Leagues
             </Link>
             <div className="flex items-center gap-2 flex-wrap">
@@ -337,18 +338,18 @@ export default function BracketChallenge() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-medium text-fg">{bracket.name || `Bracket ${bracket.bracket_number}`}</h3>
-                    <div className="flex items-center gap-3 mt-1 text-sm text-fg/50">
+                    <div className="flex items-center gap-3 mt-1.5 text-sm text-fg/50">
                       {bracket.is_submitted ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-400">
-                          <Check className="w-3 h-3" /> Submitted
+                        <span className="inline-flex items-center gap-1.5 text-emerald-500 font-medium">
+                          <Check className="w-4 h-4" /> Submitted
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-amber-400">
-                          <Clock className="w-3 h-3" /> {pickCount}/63 picks
+                        <span className="inline-flex items-center gap-1.5 text-orange-500 font-medium">
+                          <Clock className="w-4 h-4" /> {pickCount}/63 picks
                         </span>
                       )}
                       {bracket.is_submitted && (
-                        <span className="font-mono">{bracket.total_score} pts</span>
+                        <span className="font-mono font-medium text-fg/70">{bracket.total_score} pts</span>
                       )}
                     </div>
                   </div>
@@ -480,17 +481,14 @@ export default function BracketChallenge() {
                         </span>
                       )}
                     </div>
+                    {isCommissioner && member.email && (
+                      <p className="text-xs text-fg/40 mt-0.5 truncate">{member.email}</p>
+                    )}
                     <div className="flex items-center gap-2 text-xs text-fg/40 mt-0.5">
                       {bracketCount > 0 ? (
                         <span className="text-emerald-400">{bracketCount} bracket{bracketCount !== 1 ? 's' : ''} submitted</span>
                       ) : (
                         <span>No brackets submitted</span>
-                      )}
-                      {isCommissioner && member.email && (
-                        <>
-                          <span className="text-fg/20">•</span>
-                          <span>{member.email}</span>
-                        </>
                       )}
                     </div>
                   </div>
@@ -555,6 +553,16 @@ export default function BracketChallenge() {
           isCommissioner={isCommissioner}
           onClose={() => setShowShareModal(false)}
           onInviteCodeUpdate={(newCode) => setLeague(prev => ({ ...prev, inviteCode: newCode }))}
+        />
+      )}
+
+      {/* Chat */}
+      {league && (
+        <ChatWidget
+          leagueId={league.id}
+          leagueName={league.name}
+          commissionerId={league.commissionerId || league.commissioner_id}
+          members={members}
         />
       )}
     </div>

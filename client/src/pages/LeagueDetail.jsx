@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
 import { 
-  Trophy, Users, Settings, ChevronLeft, ChevronRight,
+  Trophy, Users, Settings, ChevronLeft, ChevronRight, ArrowLeft,
   Crown, Plus, Minus, Check, X, Calendar, Loader2,
   AlertCircle, Eye, EyeOff, History, AlertTriangle, Edit3,
   Pencil, CalendarCheck, DollarSign, Lock
@@ -734,6 +734,13 @@ export default function LeagueDetail() {
       <div className="max-w-6xl mx-auto px-3 sm:px-4 pt-4 sm:pt-8 pb-32 lg:pb-8">
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6 sm:mb-8">
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-1.5 text-fg/70 hover:text-fg text-base font-medium transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          My Leagues
+        </Link>
         <div className="flex items-center gap-3 sm:gap-4 animate-in">
           <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center shadow-lg flex-shrink-0">
             <AppIcon className="w-9 h-9 sm:w-12 sm:h-12" color="white" />

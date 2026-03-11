@@ -106,12 +106,14 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [isAnimatingIn, setIsAnimatingIn] = useState(false);
-  const [sheetSize, setSheetSize] = useState(() => {
+  // Sheet height in pixels — persisted in localStorage
+  const [sheetHeight, setSheetHeight] = useState(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('chatSheetSize');
-      return saved === 'half' ? 'half' : 'full';
+      const saved = parseInt(localStorage.getItem('chatSheetHeight'), 10);
+      if (saved && saved > 150) return saved;
+      return window.innerHeight - 40; // default to full
     }
-    return 'full';
+    return 700;
   });
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(true); // Start collapsed on smaller desktops
   const [messages, setMessages] = useState([]);
@@ -166,6 +168,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const dragCurrentY = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
+  const openedAtRef = useRef(0); // timestamp to prevent immediate close
+  const bottomBarRef = useRef(null); // measure bottom bar height
+  const [bottomBarHeight, setBottomBarHeight] = useState(0);
+
+  // Derive sheetSize from height for feature gating (full = > 50% viewport, half = smaller)
+  const sheetSize = typeof window !== 'undefined' && sheetHeight > window.innerHeight * 0.5 ? 'full' : 'half';
 
   // Toggle desktop chat collapsed state
   const toggleCollapsed = () => {
@@ -305,24 +313,23 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     }
   }, [messages]);
 
-  // Scroll to bottom when resizing sheet (especially full -> half)
+  // Measure bottom bar height
   useEffect(() => {
-    if (sheetSize && mobileMessagesRef.current) {
-      // Delay to let the resize animation complete
+    if (bottomBarRef.current) {
+      setBottomBarHeight(bottomBarRef.current.offsetHeight);
+    }
+  });
+
+  // Scroll to bottom when resizing sheet
+  useEffect(() => {
+    if (sheetHeight && mobileMessagesRef.current) {
       setTimeout(() => {
         if (mobileMessagesRef.current) {
           mobileMessagesRef.current.scrollTop = mobileMessagesRef.current.scrollHeight;
         }
-      }, 350); // Match the transition duration
+      }, 350);
     }
-  }, [sheetSize]);
-
-  // Save sheet size preference to localStorage
-  useEffect(() => {
-    if (sheetSize) {
-      localStorage.setItem('chatSheetSize', sheetSize);
-    }
-  }, [sheetSize]);
+  }, [sheetHeight]);
 
   const fetchUnreadCount = async () => {
     try {
@@ -782,7 +789,6 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
   // Touch handlers for drag-to-resize/close
   const handleTouchStart = (e) => {
-    // Only handle touches on the header/handle area
     const touch = e.touches[0];
     dragStartY.current = touch.clientY;
     dragCurrentY.current = touch.clientY;
@@ -792,51 +798,32 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
   const handleTouchMove = (e) => {
     if (!isDragging) return;
-    
+
     const touch = e.touches[0];
     dragCurrentY.current = touch.clientY;
     const delta = dragCurrentY.current - dragStartY.current;
-    
-    if (sheetSize === 'full') {
-      // From full: only allow dragging down, with slight resistance
-      if (delta > 0) {
-        setDragOffset(delta);
-      }
-    } else if (sheetSize === 'half') {
-      // From half: allow dragging up (to full) or down (to close)
-      // Limit upward drag
-      const clampedDelta = Math.max(delta, -150);
-      setDragOffset(clampedDelta);
-    }
+    setDragOffset(delta);
   };
 
   const handleTouchEnd = () => {
     if (!isDragging) return;
     setIsDragging(false);
-    
+
     const delta = dragCurrentY.current - dragStartY.current;
-    
-    // Determine snap point based on drag distance and current state
-    if (sheetSize === 'full') {
-      if (delta > 250) {
-        // Dragged down a lot - close completely
-        closeSheet();
-      } else if (delta > 120) {
-        // Dragged down moderately - go to half
-        setSheetSize('half');
-      }
-      // Otherwise snap back to full
-    } else if (sheetSize === 'half') {
-      if (delta > 80) {
-        // Dragged down from half - close
-        closeSheet();
-      } else if (delta < -60) {
-        // Dragged up from half - go to full
-        setSheetSize('full');
-      }
-      // Otherwise stay at half
+    const newHeight = sheetHeight - delta;
+    const maxH = window.innerHeight - 40;
+    const minH = 150; // minimum before close threshold
+
+    if (newHeight < minH) {
+      // Dragged below minimum — close
+      closeSheet();
+    } else {
+      // Clamp and save new height
+      const clamped = Math.min(Math.max(newHeight, 200), maxH);
+      setSheetHeight(clamped);
+      localStorage.setItem('chatSheetHeight', String(clamped));
     }
-    
+
     setDragOffset(0);
   };
 
@@ -853,7 +840,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const openSheet = () => {
     setIsOpen(true);
     setIsClosing(false);
-    // sheetSize is already set from localStorage or previous session
+    openedAtRef.current = Date.now();
     // Trigger animation after a frame to ensure initial state is rendered
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -863,11 +850,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     markAsRead();
   };
 
-  // Get sheet height based on size
+  // Get sheet height in pixels
   const getSheetHeight = () => {
-    if (sheetSize === 'full') return 'calc(100% - 40px)';
-    if (sheetSize === 'half') return '35%';
-    return '0';
+    return `${sheetHeight}px`;
   };
 
   const formatTime = (dateStr) => {
@@ -1553,10 +1538,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
       </div>
       {/* Mobile: Bottom Chat Bar + Sheet */}
       <div className="lg:hidden">
-        {/* Bottom Chat Preview Bar */}
-        <div 
-          className={`fixed inset-x-0 bottom-0 z-40 transition-all duration-300 ${
-            isOpen ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'
+        {/* Bottom Chat Preview Bar - hidden when sheet is open */}
+        <div
+          ref={bottomBarRef}
+          className={`fixed inset-x-0 bottom-0 z-[51] transition-all duration-300 ${
+            isOpen ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
           }`}
         >
           {/* New message highlight effect */}
@@ -1569,7 +1555,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             hasNewMessage ? 'border-nfl-blue/50' : 'border-fg/15'
           }`}>
             <button
-              onClick={openSheet}
+              onClick={isOpen ? closeSheet : openSheet}
               className="w-full px-4 py-3 flex items-center gap-3 active:bg-fg/5 transition-colors"
             >
               {/* Left: Avatar or Icon */}
@@ -1581,8 +1567,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     size="sm" 
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-nfl-blue/20 flex items-center justify-center">
-                    <MessageCircle className="w-5 h-5 text-nfl-blue" />
+                  <div className="w-10 h-10 rounded-full bg-fg/10 flex items-center justify-center">
+                    <MessageCircle className="w-6 h-6 text-fg/70" />
                   </div>
                 )}
                 {/* Unread badge */}
@@ -1644,7 +1630,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     {formatTime(messages[messages.length - 1]?.created_at || messages[messages.length - 1]?.createdAt)}
                   </span>
                 )}
-                <ChevronUp className="w-5 h-5 text-fg/50" />
+                <ChevronUp className={`w-5 h-5 text-fg/50 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
               </div>
             </button>
             
@@ -1666,29 +1652,28 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
         {/* Bottom sheet overlay with animation */}
         {(isOpen || isClosing) && (
           <>
-            {/* Backdrop - pass-through in half mode so users can interact with league details */}
-            <div 
-              className={`fixed inset-0 z-50 transition-opacity duration-300 ${
-                sheetSize === 'half' 
-                  ? 'bg-black/20 pointer-events-none' 
-                  : 'bg-black/60 backdrop-blur-sm'
-              } ${
-                isAnimatingIn && !isClosing ? 'opacity-100' : 'opacity-0'
+            {/* Invisible backdrop — tap to close when full, pass-through when small */}
+            <div
+              className={`fixed inset-0 z-50 ${
+                sheetSize === 'half' ? 'pointer-events-none' : ''
               }`}
-              onClick={sheetSize === 'half' ? undefined : closeSheet}
+              onClick={sheetSize === 'half' ? undefined : () => { if (Date.now() - openedAtRef.current > 400) closeSheet(); }}
             />
             
             {/* Chat Panel - Bottom Sheet */}
-            <div 
+            <div
               ref={sheetRef}
               className={`fixed inset-x-0 bottom-0 z-50 bg-canvas flex flex-col rounded-t-3xl shadow-2xl overflow-hidden ${
                 isDragging ? '' : 'transition-all duration-300 ease-out'
               }`}
-              style={{ 
-                height: getSheetHeight(),
+              style={{
+                height: isDragging
+                  ? `${Math.max(sheetHeight - dragOffset, 100)}px`
+                  : getSheetHeight(),
                 maxHeight: 'calc(100dvh - 40px)',
-                transform: isAnimatingIn && !isClosing 
-                  ? `translateY(${dragOffset}px)` 
+                overscrollBehavior: 'contain',
+                transform: isAnimatingIn && !isClosing
+                  ? 'translateY(0)'
                   : 'translateY(100%)',
                 opacity: isAnimatingIn && !isClosing ? 1 : 0
               }}
@@ -1739,7 +1724,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   <div className="flex items-center gap-1">
                     {/* Size toggle button */}
                     <button
-                      onClick={() => setSheetSize(sheetSize === 'full' ? 'half' : 'full')}
+                      onClick={() => {
+                        const maxH = window.innerHeight - 40;
+                        const newH = sheetSize === 'full' ? Math.round(maxH * 0.4) : maxH;
+                        setSheetHeight(newH);
+                        localStorage.setItem('chatSheetHeight', String(newH));
+                      }}
                       className="p-2 hover:bg-fg/10 rounded-full transition-colors"
                       title={sheetSize === 'full' ? 'Minimize' : 'Maximize'}
                     >
@@ -1765,7 +1755,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 ref={mobileMessagesRef}
                 onScroll={handleScroll}
                 className="flex-1 overflow-y-auto overflow-x-hidden p-4"
-                style={{ touchAction: 'pan-y' }}
+                style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}
               >
                 {renderMessages()}
               </div>
@@ -1898,7 +1888,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   {sheetSize === 'half' && (
                     <button
                       onClick={() => {
-                        setSheetSize('full');
+                        const maxH = window.innerHeight - 40;
+                        setSheetHeight(maxH);
+                        localStorage.setItem('chatSheetHeight', String(maxH));
                         setShowEmojiPicker(true);
                         setShowGifPicker(false);
                       }}
@@ -1907,12 +1899,14 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       <Smile className="w-5 h-5" />
                     </button>
                   )}
-                  
+
                   {/* GIF button - in half mode, expands and opens picker */}
                   {sheetSize === 'half' && (
                     <button
                       onClick={() => {
-                        setSheetSize('full');
+                        const maxH = window.innerHeight - 40;
+                        setSheetHeight(maxH);
+                        localStorage.setItem('chatSheetHeight', String(maxH));
                         setShowGifPicker(true);
                         setShowEmojiPicker(false);
                       }}

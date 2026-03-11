@@ -182,7 +182,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setMode('select')}
-                  className="text-fg/50 hover:text-fg text-sm mb-4"
+                  className="text-fg/70 hover:text-fg text-base font-medium mb-4"
                 >
                   ← Back
                 </button>
@@ -228,7 +228,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setMode('phone')}
-                  className="text-fg/50 hover:text-fg text-sm mb-4"
+                  className="text-fg/70 hover:text-fg text-base font-medium mb-4"
                 >
                   ← Back
                 </button>

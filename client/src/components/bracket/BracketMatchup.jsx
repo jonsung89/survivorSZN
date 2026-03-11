@@ -161,7 +161,7 @@ export default function BracketMatchup({
   const showInfoButton = team1 && team2 && onDetailClick;
 
   return (
-    <div className="flex items-center gap-1.5 md:gap-0 group w-full">
+    <div className="relative flex items-center gap-1.5 md:gap-0 group w-full">
       {/* Card */}
       <div className={`relative flex-1 md:flex-none md:w-full rounded-lg transition-all duration-150 shadow-md overflow-hidden ${
         isLive ? 'border border-red-500/40 shadow-[0_0_8px_rgba(239,68,68,0.15)]' : ''
@@ -188,13 +188,14 @@ export default function BracketMatchup({
         </button>
       )}
 
-      {/* Desktop: hover-reveal info button outside the card */}
+      {/* Desktop: always-visible info button centered in the gap between columns */}
       {showInfoButton && (
         <button
           onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
-          className="absolute -right-1 top-1/2 -translate-y-1/2 translate-x-full opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full bg-fg/10 hover:bg-fg/20 text-fg/50 hover:text-fg/80 hidden md:block"
+          className="absolute top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full text-fg/50 hover:text-fg/80 hover:bg-fg/15 transition-colors hidden md:flex items-center justify-center"
+          style={{ right: '-36px' }}
         >
-          <Info className="w-3.5 h-3.5" />
+          <Info className="w-4 h-4" />
         </button>
       )}
     </div>

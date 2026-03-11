@@ -129,7 +129,7 @@ export default function CreateLeague() {
       {/* Back Link */}
       <Link
         to="/leagues"
-        className="inline-flex items-center gap-2 text-fg/60 hover:text-fg transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-fg/70 hover:text-fg text-base font-medium transition-colors mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Leagues

@@ -9,6 +9,7 @@ import BracketView from '../components/bracket/BracketView';
 import BracketScoreHeader from '../components/bracket/BracketScoreHeader';
 import MatchupDetailDialog from '../components/bracket/MatchupDetailDialog';
 import TiebreakerInput from '../components/bracket/TiebreakerInput';
+import ChatWidget from '../components/ChatWidget';
 import {
   countPicks,
   getNextSlot,
@@ -43,8 +44,8 @@ export default function BracketFill() {
   const saveTimeoutRef = useRef(null);
   const lastSavedPicksRef = useRef('{}');
 
-  const isReadOnly = bracket?.is_submitted || challenge?.status === 'completed';
   const isOwner = bracket?.user_id === user?.id;
+  const isReadOnly = bracket?.is_submitted || challenge?.status === 'completed' || !isOwner;
   const pickCount = countPicks(picks);
   const scoringSystem = challenge?.scoring_system || SCORING_PRESETS.standard.points;
 
@@ -368,6 +369,13 @@ export default function BracketFill() {
       )}
 
       {/* Submit Confirmation */}
+      {/* Chat */}
+      {leagueId && (
+        <ChatWidget
+          leagueId={leagueId}
+        />
+      )}
+
       {showSubmitConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowSubmitConfirm(false)}>
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />

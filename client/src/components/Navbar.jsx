@@ -233,7 +233,7 @@ export default function Navbar() {
               
               {/* Theme toggle — mobile */}
               <button
-                onClick={toggleTheme}
+                onClick={() => { toggleTheme(); setMobileMenuOpen(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-fg/70 hover:bg-fg/5 transition-colors"
               >
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}

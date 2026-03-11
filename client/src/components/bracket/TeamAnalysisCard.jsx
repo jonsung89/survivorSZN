@@ -47,41 +47,19 @@ export default function TeamAnalysisCard({ team, teamColor }) {
 
   return (
     <div className="flex-1 min-w-0">
-      {/* Team Header */}
-      <div className="flex items-center gap-3 mb-5">
-        {team.logo && (
-          <img src={team.logo} alt="" className="w-12 h-12 object-contain flex-shrink-0" />
-        )}
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            {team.seed && (
-              <span className="text-sm font-mono font-bold text-fg/50 bg-fg/10 rounded px-1.5 py-0.5">
-                #{team.seed}
-              </span>
-            )}
-            <h3 className="text-lg font-display font-bold text-fg truncate">{team.name}</h3>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-fg/50 mt-0.5">
-            <span>{team.record}</span>
-            {team.conference && <><span className="text-fg/20">|</span><span>{team.conference}</span></>}
-            {team.coach && <><span className="text-fg/20">|</span><span>HC: {team.coach}</span></>}
-          </div>
-        </div>
-      </div>
-
       {/* Season Stats */}
       <div className="mb-5">
-        <h4 className="text-sm font-bold text-fg/50 uppercase tracking-wider mb-2">Season Averages</h4>
-        <div className="grid grid-cols-5 gap-x-2 gap-y-1.5">
+        <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider mb-2">Season Averages</h4>
+        <div className="grid grid-cols-5 gap-x-2 gap-y-1.5 md:gap-y-2">
           {STAT_DISPLAY.map(({ key, alt, label, invertRank }) => {
             const stat = getStat(key, alt);
             if (!stat) return null;
             return (
               <div key={key} className="text-center">
-                <div className="text-xs text-fg/35">{label}</div>
-                <div className="text-sm font-mono font-medium text-fg/80">{stat.value || '—'}</div>
+                <div className="text-xs md:text-sm text-fg/35">{label}</div>
+                <div className="text-sm md:text-lg font-mono font-medium text-fg/80">{stat.value || '—'}</div>
                 {stat.rank && (
-                  <div className={`text-xs font-mono ${getRankColor(stat.rank, invertRank)}`}>
+                  <div className={`text-xs md:text-sm font-mono ${getRankColor(stat.rank, invertRank)}`}>
                     #{stat.rank}
                   </div>
                 )}
@@ -94,24 +72,65 @@ export default function TeamAnalysisCard({ team, teamColor }) {
       {/* Key Players */}
       {team.keyPlayers && team.keyPlayers.length > 0 && (
         <div className="mb-5">
-          <h4 className="text-sm font-bold text-fg/50 uppercase tracking-wider mb-2">Key Players</h4>
-          <div className="space-y-1.5">
+          <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider mb-2">Key Players</h4>
+          <div className="space-y-2.5 md:space-y-3">
             {team.keyPlayers.slice(0, 5).map((player, idx) => (
-              <div key={player.id || idx} className="flex items-center gap-2 text-sm">
+              <div key={player.id || idx} className="flex gap-2 md:gap-3">
+                {/* Avatar — larger to span name + stats, vertically centered */}
                 {player.headshot ? (
-                  <img src={player.headshot} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0 bg-fg/10" />
+                  <img src={player.headshot} alt="" className="w-9 h-9 md:w-11 md:h-11 rounded-full object-cover flex-shrink-0 bg-fg/10 mt-0.5" />
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-fg/10 flex-shrink-0 flex items-center justify-center text-xs text-fg/30">
+                  <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-fg/10 flex-shrink-0 flex items-center justify-center text-xs md:text-sm text-fg/30 mt-0.5">
                     {player.jersey || '?'}
                   </div>
                 )}
+                {/* Name + stats stacked */}
                 <div className="flex-1 min-w-0">
-                  <span className="text-fg/80 font-medium truncate">{player.name}</span>
-                  <span className="text-fg/30 ml-1 text-xs">{player.position}</span>
+                  {/* Name row */}
+                  <div className="flex items-center text-sm md:text-base">
+                    <span className="text-fg/80 font-medium truncate">{player.name}</span>
+                    <span className="text-fg/30 ml-1 text-xs md:text-sm">{player.position}</span>
+                    {player.year && (
+                      <span className="text-xs md:text-sm text-fg/30 flex-shrink-0 ml-auto">{player.year}</span>
+                    )}
+                  </div>
+                  {/* Stats line — directly under the name */}
+                  {player.stats?.ppg && (
+                    <>
+                      {/* Mobile: compact PTS / REB / AST */}
+                      <div className="flex items-center gap-3 mt-0.5 md:hidden">
+                        <span className="text-xs font-mono text-fg/60">
+                          <span className="text-fg/80 font-semibold">{player.stats.ppg}</span> <span className="text-fg/35">PTS</span>
+                        </span>
+                        {player.stats.rpg && (
+                          <span className="text-xs font-mono text-fg/60">
+                            <span className="text-fg/80 font-semibold">{player.stats.rpg}</span> <span className="text-fg/35">REB</span>
+                          </span>
+                        )}
+                        {player.stats.apg && (
+                          <span className="text-xs font-mono text-fg/60">
+                            <span className="text-fg/80 font-semibold">{player.stats.apg}</span> <span className="text-fg/35">AST</span>
+                          </span>
+                        )}
+                      </div>
+                      {/* Desktop: fuller stat line */}
+                      <div className="hidden md:flex items-center gap-4 mt-0.5">
+                        {[
+                          { val: player.stats.ppg, label: 'PTS' },
+                          { val: player.stats.rpg, label: 'REB' },
+                          { val: player.stats.apg, label: 'AST' },
+                          { val: player.stats.fgPct, label: 'FG%', suffix: '%' },
+                          { val: player.stats.mpg, label: 'MIN' },
+                        ].filter(s => s.val).map(s => (
+                          <span key={s.label} className="text-sm font-mono text-fg/60">
+                            <span className="text-fg/80 font-semibold">{s.val}{s.suffix && !String(s.val).includes('%') ? s.suffix : ''}</span>{' '}
+                            <span className="text-fg/35 text-xs">{s.label}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
-                {player.year && (
-                  <span className="text-xs text-fg/30 flex-shrink-0">{player.year}</span>
-                )}
               </div>
             ))}
           </div>
@@ -121,16 +140,16 @@ export default function TeamAnalysisCard({ team, teamColor }) {
       {/* Last 5 Games */}
       {team.last5 && team.last5.length > 0 && (
         <div className="mb-5">
-          <h4 className="text-sm font-bold text-fg/50 uppercase tracking-wider mb-2">Last 5 Games</h4>
+          <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider mb-2">Last 5 Games</h4>
           <div className="space-y-1">
             {team.last5.map((game, idx) => (
-              <div key={idx} className="flex items-center gap-2 text-sm py-1 border-b border-fg/5 last:border-0">
-                <span className={`font-bold w-4 text-center ${game.result === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
+              <div key={idx} className="flex items-center gap-2 md:gap-3 text-sm md:text-base py-1 md:py-1.5 border-b border-fg/5 last:border-0">
+                <span className={`font-bold w-4 md:w-5 text-center ${game.result === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
                   {game.result}
                 </span>
-                <span className="text-fg/30 w-4 text-center">{game.atVs}</span>
+                <span className="text-fg/30 w-4 md:w-5 text-center">{game.atVs}</span>
                 {game.opponent?.logo && (
-                  <img src={game.opponent.logo} alt="" className="w-4 h-4 object-contain" />
+                  <img src={game.opponent.logo} alt="" className="w-4 h-4 md:w-5 md:h-5 object-contain" />
                 )}
                 <span className="flex-1 text-fg/60 truncate">
                   {game.opponent?.rank && <span className="text-fg/40">#{game.opponent.rank} </span>}
@@ -146,7 +165,7 @@ export default function TeamAnalysisCard({ team, teamColor }) {
       {/* vs Top 25 */}
       {team.vsTop25 && (team.vsTop25.wins > 0 || team.vsTop25.losses > 0) && (
         <div className="mb-5">
-          <h4 className="text-sm font-bold text-fg/50 uppercase tracking-wider mb-2">
+          <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider mb-2">
             vs Ranked Teams
             <span className="ml-2 font-mono text-fg/40 normal-case">
               {team.vsTop25.wins}-{team.vsTop25.losses}
@@ -155,12 +174,12 @@ export default function TeamAnalysisCard({ team, teamColor }) {
           {team.vsTop25.games && team.vsTop25.games.length > 0 && (
             <div className="space-y-1">
               {(showAllGames ? team.vsTop25.games : team.vsTop25.games.slice(0, 3)).map((game, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-sm py-1 border-b border-fg/5 last:border-0">
-                  <span className={`font-bold w-4 text-center ${game.result === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
+                <div key={idx} className="flex items-center gap-2 md:gap-3 text-sm md:text-base py-1 md:py-1.5 border-b border-fg/5 last:border-0">
+                  <span className={`font-bold w-4 md:w-5 text-center ${game.result === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
                     {game.result}
                   </span>
-                  <span className="text-fg/30 w-4">{game.atVs}</span>
-                  {game.opponent?.logo && <img src={game.opponent.logo} alt="" className="w-4 h-4 object-contain" />}
+                  <span className="text-fg/30 w-4 md:w-5">{game.atVs}</span>
+                  {game.opponent?.logo && <img src={game.opponent.logo} alt="" className="w-4 h-4 md:w-5 md:h-5 object-contain" />}
                   <span className="flex-1 text-fg/60 truncate">
                     #{game.opponent?.rank} {game.opponent?.name}
                   </span>
@@ -170,9 +189,9 @@ export default function TeamAnalysisCard({ team, teamColor }) {
               {team.vsTop25.games.length > 3 && (
                 <button
                   onClick={() => setShowAllGames(!showAllGames)}
-                  className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 mt-1"
+                  className="text-xs md:text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1 mt-1"
                 >
-                  {showAllGames ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show all {team.vsTop25.games.length} games</>}
+                  {showAllGames ? <><ChevronUp className="w-3 h-3 md:w-4 md:h-4" /> Show less</> : <><ChevronDown className="w-3 h-3 md:w-4 md:h-4" /> Show all {team.vsTop25.games.length} games</>}
                 </button>
               )}
             </div>
@@ -183,23 +202,23 @@ export default function TeamAnalysisCard({ team, teamColor }) {
       {/* Team Summary */}
       {team.summary && (
         <div className="mb-5">
-          <h4 className="text-sm font-bold text-fg/50 uppercase tracking-wider mb-2">Scouting Report</h4>
-          <p className="text-sm text-fg/60 leading-relaxed">{team.summary}</p>
+          <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider mb-2">Scouting Report</h4>
+          <p className="text-sm md:text-base text-fg/60 leading-relaxed">{team.summary}</p>
         </div>
       )}
 
       {/* News Headlines */}
       {team.headlines && team.headlines.length > 0 && (
         <div>
-          <h4 className="text-sm font-bold text-fg/50 uppercase tracking-wider mb-2">Latest News</h4>
-          <div className="space-y-2">
+          <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider mb-2">Latest News</h4>
+          <div className="space-y-2 md:space-y-3">
             {team.headlines.map((article, idx) => (
               <div key={idx} className="group">
-                <div className="text-sm text-fg/70 group-hover:text-fg transition-colors">
+                <div className="text-sm md:text-base text-fg/70 group-hover:text-fg transition-colors">
                   {article.headline}
                 </div>
                 {article.description && (
-                  <div className="text-sm text-fg/40 mt-0.5 line-clamp-2">{article.description}</div>
+                  <div className="text-sm md:text-base text-fg/40 mt-0.5 line-clamp-2">{article.description}</div>
                 )}
               </div>
             ))}

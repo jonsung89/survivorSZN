@@ -75,7 +75,7 @@ export default function BracketRegion({
       <div
         key={roundData.round}
         className={`flex flex-col justify-around ${gapClasses} flex-shrink-0`}
-        style={{ minWidth: '200px' }}
+        style={{ width: '260px', minWidth: '260px' }}
       >
         {slots.map((slot) => {
           const { team1, team2 } = getTeamsForSlot(slot);
@@ -83,7 +83,7 @@ export default function BracketRegion({
           const pickedTeam = getPickedTeamForSlot(slot);
 
           return (
-            <div key={slot} className="relative flex items-center">
+            <div key={slot} className="relative flex items-center px-3">
               {/* Connector lines */}
               {roundIdx > 0 && side === 'left' && (
                 <div className="absolute -left-4 top-0 bottom-0 w-4 flex items-center">
@@ -118,14 +118,14 @@ export default function BracketRegion({
     <div>
       {/* Round column headers (shown on top regions only — above region name) */}
       {showRoundHeaders && (
-        <div className={`flex ${side === 'right' ? 'flex-row-reverse' : 'flex-row'} gap-3 mb-2`}>
+        <div className={`flex ${side === 'right' ? 'flex-row-reverse' : 'flex-row'} gap-6 mb-2`}>
           {rounds.map((roundData, roundIdx) => {
             const dateRange = getRoundDateRange(roundData.slots, tournamentData);
             return (
               <div
                 key={roundData.round}
                 className="text-center flex-shrink-0"
-                style={{ minWidth: '200px' }}
+                style={{ width: '260px', minWidth: '260px' }}
               >
                 <div className="text-sm font-bold text-fg/80">
                   {ROUND_NAMES[roundIdx] || roundData.name}
@@ -147,7 +147,7 @@ export default function BracketRegion({
       </div>
 
       {/* Bracket grid — flex-row-reverse flips right-side regions so R64 is on the far right */}
-      <div className={`flex ${side === 'right' ? 'flex-row-reverse' : 'flex-row'} gap-3 items-stretch`}>
+      <div className={`flex ${side === 'right' ? 'flex-row-reverse' : 'flex-row'} gap-6 items-stretch`}>
         {rounds.map((roundData, roundIdx) => renderRound(roundData, roundIdx))}
       </div>
     </div>

@@ -227,7 +227,7 @@ export default function JoinByInvite() {
 
         {/* Back Link */}
         <div className="text-center">
-          <Link to="/dashboard" className="text-fg/50 hover:text-fg text-sm">
+          <Link to="/dashboard" className="text-fg/70 hover:text-fg text-base font-medium">
             ← Back to Dashboard
           </Link>
         </div>

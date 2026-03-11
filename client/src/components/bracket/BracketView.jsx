@@ -108,8 +108,8 @@ export default function BracketView({
     );
 
     return (
-      <div className="hidden lg:block overflow-x-auto pb-4">
-        <div style={{ minWidth: '2100px' }} className="grid grid-cols-[1fr_auto_auto_auto_1fr] gap-y-6">
+      <div className="hidden md:block overflow-x-auto pb-4">
+        <div style={{ minWidth: '2300px' }} className="grid grid-cols-[1fr_auto_auto_auto_1fr] gap-y-6">
           {/* === Row 1 === */}
 
           {/* Top-left region */}
@@ -230,7 +230,7 @@ export default function BracketView({
 
   // Mobile layout: tabbed region view (uses BracketFinalFour for stacked vertical display)
   const renderMobile = () => (
-    <div className="lg:hidden">
+    <div className="md:hidden">
       {/* Region tabs */}
       <div className="sticky top-[66px] z-20 bg-surface/95 backdrop-blur-sm flex gap-1 mb-4 overflow-x-auto pb-2 pt-2 -mx-1 px-1">
         {regionTabs.map((tab, idx) => (
@@ -239,7 +239,7 @@ export default function BracketView({
             onClick={() => setMobileTab(idx)}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
               mobileTab === idx
-                ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
+                ? 'bg-fg/90 text-white border border-fg/80 shadow-sm'
                 : 'bg-fg/5 text-fg/50 border border-transparent hover:bg-fg/10'
             }`}
           >

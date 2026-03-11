@@ -94,7 +94,7 @@ export default function MobileBracketNav({
     <div className="flex flex-col">
       {/* Round header with dots */}
       <div className="px-4 pt-2 pb-3 text-center">
-        <p className="text-sm font-medium text-fg/60">
+        <p className="text-lg font-bold text-fg">
           {ROUND_NAMES[roundIdx] || currentRound.name}
         </p>
         {/* Round progress dots */}
@@ -104,9 +104,9 @@ export default function MobileBracketNav({
               key={i}
               className={`h-1.5 rounded-full transition-all duration-300 ${
                 i === roundIdx
-                  ? 'w-6 bg-violet-500'
+                  ? 'w-6 bg-fg/80'
                   : i < roundIdx
-                    ? 'w-1.5 bg-violet-500/40'
+                    ? 'w-1.5 bg-fg/40'
                     : 'w-1.5 bg-fg/15'
               }`}
             />

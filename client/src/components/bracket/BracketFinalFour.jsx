@@ -51,7 +51,7 @@ export default function BracketFinalFour({
       </h3>
 
       {/* Horizontal on desktop, vertical on mobile */}
-      <div className="flex flex-col lg:flex-row items-center lg:items-end gap-6">
+      <div className="flex flex-col md:flex-row items-center md:items-end gap-6">
         {/* Left semifinal */}
         {renderSemifinal(leftSemi, leftLabel)}
 

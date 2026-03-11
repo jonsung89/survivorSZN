@@ -75,7 +75,7 @@ export default function BracketRegion({
       <div
         key={roundData.round}
         className={`flex flex-col justify-around ${gapClasses} flex-shrink-0`}
-        style={{ minWidth: '180px' }}
+        style={{ minWidth: '200px' }}
       >
         {slots.map((slot) => {
           const { team1, team2 } = getTeamsForSlot(slot);
@@ -125,13 +125,13 @@ export default function BracketRegion({
               <div
                 key={roundData.round}
                 className="text-center flex-shrink-0"
-                style={{ minWidth: '180px' }}
+                style={{ minWidth: '200px' }}
               >
-                <div className="text-sm font-medium text-fg/50">
+                <div className="text-sm font-bold text-fg/80">
                   {ROUND_NAMES[roundIdx] || roundData.name}
                 </div>
                 {dateRange && (
-                  <div className="text-sm text-fg/30">{dateRange}</div>
+                  <div className="text-sm text-fg/60">{dateRange}</div>
                 )}
               </div>
             );
@@ -141,7 +141,7 @@ export default function BracketRegion({
 
       {/* Region header */}
       <div className="text-center mb-3">
-        <h3 className="text-base font-display font-bold text-fg/60 uppercase tracking-wider">
+        <h3 className="text-base font-display font-bold text-fg/80 uppercase tracking-wider">
           {region.name}
         </h3>
       </div>

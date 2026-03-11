@@ -117,6 +117,15 @@ export default function BracketFill() {
       const currentPick = prev[slot] || prev[String(slot)];
       let newPicks = { ...prev };
 
+      // Toggle off: clicking the already-selected team deselects it
+      if (currentPick && String(currentPick) === String(teamId)) {
+        newPicks = cascadeRemovePicks(newPicks, slot, String(teamId));
+        delete newPicks[slot];
+        delete newPicks[String(slot)];
+        debouncedSave(newPicks);
+        return newPicks;
+      }
+
       // If changing an existing pick, cascade-remove the old team from downstream
       if (currentPick && String(currentPick) !== String(teamId)) {
         newPicks = cascadeRemovePicks(newPicks, slot, String(currentPick));
@@ -219,9 +228,9 @@ export default function BracketFill() {
         <div>
           <Link
             to={`/league/${leagueId}/bracket`}
-            className="inline-flex items-center gap-1 text-fg/50 hover:text-fg text-sm mb-1 transition-colors"
+            className="inline-flex items-center gap-1.5 text-fg/70 hover:text-fg text-base font-medium mb-1 transition-colors"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-4 h-4" />
             Back
           </Link>
           {isEditingName ? (

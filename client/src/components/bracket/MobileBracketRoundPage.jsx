@@ -35,7 +35,7 @@ export default function MobileBracketRoundPage({
     <div className="flex flex-col gap-3 px-2">
       {/* Game count */}
       <div className="text-center pt-1 pb-1">
-        <span className="text-sm text-fg/30">
+        <span className="text-sm font-medium text-fg/60">
           {slots.length} {slots.length === 1 ? 'game' : 'games'}
         </span>
       </div>

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { bracketAPI } from '../../api';
 
 const STAT_DISPLAY = [
   { key: 'avgPoints', alt: 'points', label: 'PPG' },
@@ -28,8 +29,38 @@ const getRankColor = (rank, invert = false) => {
   return 'text-red-400';
 };
 
-export default function TeamAnalysisCard({ team, teamColor }) {
+export default function TeamAnalysisCard({ team, teamColor, season }) {
   const [showAllGames, setShowAllGames] = useState(false);
+  const [reportMode, setReportMode] = useState(() =>
+    localStorage.getItem('scoutingReportMode') || 'detailed'
+  );
+  const [conciseReport, setConciseReport] = useState(null);
+  const [loadingConcise, setLoadingConcise] = useState(false);
+
+  // Fetch concise report on-demand when user toggles to concise
+  useEffect(() => {
+    if (reportMode !== 'concise' || !team?.id || !season) return;
+    if (conciseReport?.teamId === team.id) return; // already loaded for this team
+
+    let cancelled = false;
+    setLoadingConcise(true);
+    bracketAPI.getConciseReport(season, team.id)
+      .then(data => {
+        if (!cancelled && data?.conciseReport) {
+          setConciseReport({ teamId: team.id, text: data.conciseReport });
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingConcise(false); });
+
+    return () => { cancelled = true; };
+  }, [reportMode, team?.id, season]);
+
+  const toggleReportMode = useCallback(() => {
+    const next = reportMode === 'detailed' ? 'concise' : 'detailed';
+    setReportMode(next);
+    localStorage.setItem('scoutingReportMode', next);
+  }, [reportMode]);
 
   if (!team) {
     return (
@@ -199,11 +230,101 @@ export default function TeamAnalysisCard({ team, teamColor }) {
         </div>
       )}
 
-      {/* Team Summary */}
+      {/* BPI Power Rating */}
+      {team.bpiData && (
+        <div className="mb-5">
+          <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider mb-2">Power Rating</h4>
+          {/* BPI scores */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            {[
+              { label: 'BPI', val: team.bpiData.bpi?.value, rank: team.bpiData.bpi?.rank },
+              { label: 'Offense', val: team.bpiData.bpiOffense?.value, rank: team.bpiData.bpiOffense?.rank },
+              { label: 'Defense', val: team.bpiData.bpiDefense?.value, rank: team.bpiData.bpiDefense?.rank },
+            ].map(({ label, val, rank }) => (
+              <div key={label} className="text-center py-2 rounded-lg bg-fg/5">
+                <div className="text-xs md:text-sm text-fg/35">{label}</div>
+                <div className="text-base md:text-xl font-mono font-bold text-fg/80">{val || '—'}</div>
+                {rank && <div className={`text-xs md:text-sm font-mono ${getRankColor(rank.replace(/\D/g, ''))}`}>#{rank.replace(/\D/g, '')}</div>}
+              </div>
+            ))}
+          </div>
+          {/* SOS + Quality Wins */}
+          <div className="flex items-center gap-4 text-xs md:text-sm mb-3">
+            {team.bpiData.sos?.rank && (
+              <span className="text-fg/50">
+                SOS: <span className="font-mono font-semibold text-fg/70">{team.bpiData.sos.rank}</span>
+              </span>
+            )}
+            {team.bpiData.qualityWins && (
+              <span className="text-fg/50">
+                vs Top 50 BPI: <span className="font-mono font-semibold text-fg/70">{team.bpiData.qualityWins.wins}-{team.bpiData.qualityWins.losses}</span>
+              </span>
+            )}
+            {team.bpiData.sor?.rank && (
+              <span className="text-fg/50">
+                SOR: <span className="font-mono font-semibold text-fg/70">{team.bpiData.sor.rank}</span>
+              </span>
+            )}
+          </div>
+          {/* Tournament Projections */}
+          {team.bpiData.projections && Object.values(team.bpiData.projections).some(v => v) && (
+            <div>
+              <div className="text-xs md:text-sm text-fg/35 mb-1.5">Tournament Projections</div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: 'Sweet 16', val: team.bpiData.projections.sweet16 },
+                  { label: 'Elite 8', val: team.bpiData.projections.elite8 },
+                  { label: 'Final Four', val: team.bpiData.projections.finalFour },
+                  { label: 'Title Game', val: team.bpiData.projections.championship },
+                  { label: 'Champion', val: team.bpiData.projections.titleWin },
+                ].filter(p => p.val).map(({ label, val }) => (
+                  <div key={label} className="px-2.5 py-1 rounded-full bg-fg/5 text-xs md:text-sm">
+                    <span className="text-fg/40">{label}</span>{' '}
+                    <span className="font-mono font-semibold text-fg/70">{val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Team Summary with Detailed/Concise Toggle */}
       {team.summary && (
         <div className="mb-5">
-          <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider mb-2">Scouting Report</h4>
-          <p className="text-sm md:text-base text-fg/60 leading-relaxed">{team.summary}</p>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider">Scouting Report</h4>
+            <button
+              onClick={toggleReportMode}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors bg-fg/10 text-fg/60 hover:bg-fg/15 hover:text-fg/80"
+            >
+              {reportMode === 'detailed' ? (
+                <>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h8m-8 6h16" /></svg>
+                  TL;DR
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-8 6h8" /></svg>
+                  Full Report
+                </>
+              )}
+            </button>
+          </div>
+          {reportMode === 'concise' ? (
+            loadingConcise ? (
+              <div className="flex items-center gap-2 text-sm text-fg/40 py-2">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                Generating concise report...
+              </div>
+            ) : conciseReport?.teamId === team.id ? (
+              <p className="text-sm md:text-base text-fg/60 leading-relaxed">{conciseReport.text}</p>
+            ) : (
+              <p className="text-sm md:text-base text-fg/60 leading-relaxed">{team.summary}</p>
+            )
+          ) : (
+            <p className="text-sm md:text-base text-fg/60 leading-relaxed">{team.summary}</p>
+          )}
         </div>
       )}
 

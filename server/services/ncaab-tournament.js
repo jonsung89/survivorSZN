@@ -3,13 +3,24 @@
 
 const { fetchWithCache } = require('./espn');
 const { SEED_MATCHUPS, REGIONS, getSlotRound, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const API_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball';
+const BPI_API_BASE = 'https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball';
 const ATHLETE_API_BASE = 'https://site.web.api.espn.com/apis/common/v3/sports/basketball/mens-college-basketball/athletes';
 const TOURNAMENT_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 const TEAM_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 const ROSTER_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 const PLAYER_STATS_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+const BPI_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+const AI_REPORT_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours
+
+// In-memory cache for AI reports (separate from ESPN fetch cache)
+const aiReportCache = new Map();
+
+// Top-level cache for full team breakdowns (serves all users from single fetch+AI call)
+const BREAKDOWN_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
+const breakdownCache = new Map();
 
 // Region name variants ESPN uses in notes
 const REGION_ALIASES = {
@@ -229,15 +240,177 @@ async function getTournamentBracket(season) {
 }
 
 /**
+ * Fetch ESPN BPI (Basketball Power Index) data for a team.
+ * Fetches the full power index list (cached 6h) and finds the team entry.
+ */
+async function fetchBpiData(teamId, season) {
+  try {
+    const data = await fetchWithCache(
+      `${BPI_API_BASE}/seasons/${season}/powerindex?limit=400`,
+      BPI_CACHE_TTL
+    );
+    const items = data?.items || [];
+    const teamEntry = items.find(item => {
+      const ref = item?.team?.$ref || '';
+      return ref.includes(`/teams/${teamId}?`) || ref.endsWith(`/teams/${teamId}`);
+    });
+    if (!teamEntry?.stats) return null;
+
+    const statsMap = {};
+    for (const s of teamEntry.stats) {
+      statsMap[s.name] = { value: s.displayValue || String(s.value || ''), raw: s.value };
+    }
+
+    return {
+      bpi: { value: statsMap.bpi?.value, rank: statsMap.bpirank?.value },
+      bpiOffense: { value: statsMap.bpioffense?.value, rank: statsMap.bpioffenserank?.value },
+      bpiDefense: { value: statsMap.bpidefense?.value, rank: statsMap.bpidefenserank?.value },
+      sos: { value: statsMap.sospast?.value, rank: statsMap.sospastrank?.value },
+      sor: { value: statsMap.sor?.value, rank: statsMap.sorrank?.value },
+      qualityWins: { wins: statsMap.top50bpiwins?.value || '0', losses: statsMap.top50bpilosses?.value || '0' },
+      projections: {
+        sweet16: statsMap.chancesweet16?.value || null,
+        elite8: statsMap.chanceelite8?.value || null,
+        finalFour: statsMap.chancefinal4?.value || null,
+        championship: statsMap.chancechampgame?.value || null,
+        titleWin: statsMap.chancencaachampion?.value || null,
+      },
+    };
+  } catch (err) {
+    console.warn(`[BPI] Failed to fetch for team ${teamId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Generate an AI-powered scouting report using Claude API.
+ * Caches results for 12 hours. Falls back to template summary on failure.
+ */
+async function generateAiScoutingReport(teamData, fallbackSummary) {
+  // Read API key from dotenv parsed result (dotenv may not override existing empty env vars)
+  const dotenvResult = require('dotenv').config();
+  const apiKey = dotenvResult.parsed?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return fallbackSummary;
+
+  const teamCacheKey = `ai-report-${teamData.id}`;
+  const cached = aiReportCache.get(teamCacheKey);
+  if (cached && Date.now() - cached.timestamp < AI_REPORT_CACHE_TTL) {
+    return cached.data;
+  }
+
+  try {
+    const client = new Anthropic({ apiKey });
+
+    // Build data context for Claude
+    const bpi = teamData.bpiData;
+    const players = (teamData.keyPlayers || []).slice(0, 5);
+    const playerLines = players.map(p => {
+      const s = p.stats || {};
+      return `  ${p.name} (${p.position}, ${p.year}): ${s.ppg || '?'} PPG, ${s.rpg || '?'} RPG, ${s.apg || '?'} APG, ${s.fgPct || '?'}% FG`;
+    }).join('\n');
+
+    const last5Lines = (teamData.last5 || []).map(g =>
+      `  ${g.result} ${g.atVs} ${g.opponent?.name || '?'} ${g.score}`
+    ).join('\n');
+
+    const vs25 = teamData.vsTop25 || {};
+    const stats = teamData.seasonStats || {};
+    const getStat = (key, alt) => stats[key]?.value || (alt && stats[alt]?.value) || '?';
+
+    const prompt = `You are an expert college basketball analyst. Write a concise but insightful scouting report for the following NCAA tournament team. Focus on playing style, key strengths, notable weaknesses, and tournament outlook. Be specific and analytical — avoid generic filler. Write 3-4 short paragraphs.
+
+TEAM: ${teamData.name} (${teamData.conference})
+Record: ${teamData.record} | Seed: #${teamData.seed || '?'} | Coach: ${teamData.coach || 'Unknown'}
+${bpi ? `BPI: ${bpi.bpi?.value} (${bpi.bpi?.rank}) | Offense: ${bpi.bpiOffense?.value} (${bpi.bpiOffense?.rank}) | Defense: ${bpi.bpiDefense?.value} (${bpi.bpiDefense?.rank})
+SOS: ${bpi.sos?.rank} | Quality Wins: ${bpi.qualityWins?.wins}-${bpi.qualityWins?.losses} vs Top 50 BPI` : ''}
+
+SEASON AVERAGES:
+  PPG: ${getStat('avgPoints', 'points')} | Opp PPG: ${getStat('avgPointsAgainst', 'pointsAgainst')} | RPG: ${getStat('avgRebounds', 'rebounds')}
+  APG: ${getStat('avgAssists', 'assists')} | FG%: ${getStat('fieldGoalPct')} | 3PT%: ${getStat('threePointFieldGoalPct', 'threePointPct')}
+  FT%: ${getStat('freeThrowPct')} | SPG: ${getStat('avgSteals', 'steals')} | BPG: ${getStat('avgBlocks', 'blocks')} | TPG: ${getStat('avgTurnovers', 'turnovers')}
+
+KEY PLAYERS:
+${playerLines || '  (No player data)'}
+
+LAST 5 GAMES:
+${last5Lines || '  (No recent games)'}
+
+VS RANKED: ${vs25.wins || 0}-${vs25.losses || 0}
+
+Write the scouting report now. No headers or bullet points — just flowing paragraphs.`;
+
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 500,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const report = message.content?.[0]?.text || fallbackSummary;
+    aiReportCache.set(teamCacheKey, { data: report, timestamp: Date.now() });
+    return report;
+  } catch (err) {
+    console.warn(`[AI Scouting] Failed for ${teamData.name}:`, err.message);
+    return fallbackSummary;
+  }
+}
+
+/**
+ * Generate a concise (TL;DR) version of a scouting report.
+ * Uses the detailed report as context so we don't re-fetch team data.
+ * Cached separately for 12 hours.
+ */
+async function generateConciseReport(teamId, teamName, detailedReport) {
+  const dotenvResult = require('dotenv').config();
+  const apiKey = dotenvResult.parsed?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || !detailedReport) return null;
+
+  const cacheKey = `ai-concise-${teamId}`;
+  const cached = aiReportCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < AI_REPORT_CACHE_TTL) {
+    return cached.data;
+  }
+
+  try {
+    const client = new Anthropic({ apiKey });
+
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 150,
+      messages: [{
+        role: 'user',
+        content: `Condense this scouting report into a punchy 2-3 sentence TL;DR. Keep the most important insights — playing style, biggest strength, biggest concern, and tournament outlook. Be direct and specific.\n\nTEAM: ${teamName}\n\nDETAILED REPORT:\n${detailedReport}`,
+      }],
+    });
+
+    const concise = message.content?.[0]?.text || null;
+    if (concise) {
+      aiReportCache.set(cacheKey, { data: concise, timestamp: Date.now() });
+    }
+    return concise;
+  } catch (err) {
+    console.warn(`[AI Concise] Failed for ${teamName}:`, err.message);
+    return null;
+  }
+}
+
+/**
  * Get comprehensive team breakdown for the matchup detail dialog
  */
 async function getTeamBreakdown(teamId, season) {
-  const [teamInfo, stats, schedule, roster, news] = await Promise.allSettled([
+  // Check top-level breakdown cache first (shared across all users)
+  const breakdownKey = `${teamId}-${season}`;
+  const cachedBreakdown = breakdownCache.get(breakdownKey);
+  if (cachedBreakdown && Date.now() - cachedBreakdown.timestamp < BREAKDOWN_CACHE_TTL) {
+    return cachedBreakdown.data;
+  }
+
+  const [teamInfo, stats, schedule, roster, news, bpiResult] = await Promise.allSettled([
     fetchWithCache(`${API_BASE}/teams/${teamId}`, TEAM_CACHE_TTL),
     fetchWithCache(`${API_BASE}/teams/${teamId}/statistics?season=${season}`, TEAM_CACHE_TTL),
     fetchWithCache(`${API_BASE}/teams/${teamId}/schedule?season=${season}`, TEAM_CACHE_TTL),
     fetchWithCache(`${API_BASE}/teams/${teamId}/roster`, ROSTER_CACHE_TTL),
     fetchWithCache(`${API_BASE}/news?team=${teamId}`, TEAM_CACHE_TTL),
+    fetchBpiData(teamId, season),
   ]);
 
   const team = teamInfo.status === 'fulfilled' ? teamInfo.value?.team : null;
@@ -245,6 +418,7 @@ async function getTeamBreakdown(teamId, season) {
   const scheduleData = schedule.status === 'fulfilled' ? schedule.value : null;
   const rosterData = roster.status === 'fulfilled' ? roster.value : null;
   const newsData = news.status === 'fulfilled' ? news.value : null;
+  const bpiData = bpiResult.status === 'fulfilled' ? bpiResult.value : null;
 
   // Parse basic team info
   const basic = {
@@ -281,12 +455,19 @@ async function getTeamBreakdown(teamId, season) {
   // Parse news headlines
   const headlines = parseNews(newsData);
 
-  // Generate stats-based summary
-  const summary = generateTeamSummary(basic, seasonStats);
+  // Generate template-based summary as fallback
+  const templateSummary = generateTeamSummary(basic, seasonStats);
 
-  return {
+  // Build full team data object for AI report generation
+  const fullTeamData = { ...basic, seasonStats, last5, vsTop25, keyPlayers, bpiData };
+
+  // Generate AI scouting report (uses cache, falls back to template on failure)
+  const summary = await generateAiScoutingReport(fullTeamData, templateSummary);
+
+  const result = {
     ...basic,
     seasonStats,
+    bpiData,
     last5,
     vsTop25,
     keyPlayers,
@@ -294,6 +475,11 @@ async function getTeamBreakdown(teamId, season) {
     summary,
     fullSchedule,
   };
+
+  // Cache the full breakdown so subsequent users get instant results
+  breakdownCache.set(breakdownKey, { data: result, timestamp: Date.now() });
+
+  return result;
 }
 
 function extractScore(score) {
@@ -668,4 +854,5 @@ module.exports = {
   getTournamentResults,
   fetchTournamentGames,
   getSelectionSundayDate,
+  generateConciseReport,
 };

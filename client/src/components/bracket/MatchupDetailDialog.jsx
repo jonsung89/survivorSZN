@@ -329,7 +329,7 @@ export default function MatchupDetailDialog({
                 </div>
               )}
 
-              <TeamAnalysisCard team={activeTeamData} teamColor={teamColor} />
+              <TeamAnalysisCard team={activeTeamData} teamColor={teamColor} season={season} />
             </div>
           )}
         </div>

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate } = require('../services/ncaab-tournament');
+const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, generateConciseReport } = require('../services/ncaab-tournament');
 const { SCORING_PRESETS, calculateBracketScore, calculatePotentialPoints, getSlotRound, countPicks } = require('../utils/bracket-slots');
 
 const getUser = async (req) => {
@@ -381,6 +381,30 @@ router.get('/tournament/:season/team/:teamId', async (req, res) => {
   } catch (error) {
     console.error('Error fetching team breakdown:', error);
     res.status(500).json({ error: 'Failed to fetch team breakdown' });
+  }
+});
+
+// Get concise scouting report for a team (on-demand, cached)
+router.get('/tournament/:season/team/:teamId/concise-report', async (req, res) => {
+  try {
+    const season = parseInt(req.params.season);
+    const teamId = req.params.teamId;
+
+    // Get the full breakdown (cached) to extract the detailed report
+    const breakdown = await getTeamBreakdown(teamId, season);
+    if (!breakdown?.summary) {
+      return res.status(404).json({ error: 'No scouting report available' });
+    }
+
+    const concise = await generateConciseReport(teamId, breakdown.name, breakdown.summary);
+    if (!concise) {
+      return res.status(500).json({ error: 'Failed to generate concise report' });
+    }
+
+    res.json({ conciseReport: concise });
+  } catch (error) {
+    console.error('Error generating concise report:', error);
+    res.status(500).json({ error: 'Failed to generate concise report' });
   }
 });
 

@@ -424,6 +424,10 @@ export const bracketAPI = {
     const res = await fetch(`${API_URL}/brackets/tournament/${season}/team/${teamId}`);
     return res.json();
   },
+  getConciseReport: async (season, teamId) => {
+    const res = await fetch(`${API_URL}/brackets/tournament/${season}/team/${teamId}/concise-report`);
+    return res.json();
+  },
   getMatchupPrediction: async (season, eventId) => {
     const res = await fetch(`${API_URL}/brackets/tournament/${season}/matchup/${eventId}`);
     return res.json();

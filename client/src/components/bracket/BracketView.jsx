@@ -111,7 +111,7 @@ export default function BracketView({
     const wrapper = mobileWrapperRef.current;
     if (!grid || !wrapper) return;
     wrapper.style.height = `${grid.scrollHeight * mobileScale}px`;
-    wrapper.style.width = `${4800 * mobileScale}px`;
+    wrapper.style.width = `${grid.scrollWidth * mobileScale}px`;
   }, [mobileScale]);
 
   // Derive region tabs from structure (data-driven) — no separate Final Four tab
@@ -199,8 +199,11 @@ export default function BracketView({
   );
   const champDateRange = getRoundDateRange([champSlot], tournamentData);
 
-  const renderSemifinalCell = (semi, id, large = false) => (
-    <div id={id} className="row-span-2 flex flex-col flex-shrink-0" style={colW}>
+  const renderSemifinalCell = (semi, id, large = false) => {
+    const cellStyle = large ? { width: '380px', minWidth: '380px' } : colW;
+    const matchWidth = large ? '340px' : '234px';
+    return (
+    <div id={id} className="row-span-2 flex flex-col flex-shrink-0" style={cellStyle}>
       <div className="text-center mb-4">
         <div className={`${large ? 'text-2xl' : 'text-base'} font-bold text-fg/80`}>Final Four</div>
         {f4DateRange && (
@@ -208,7 +211,7 @@ export default function BracketView({
         )}
       </div>
       <div className="flex-1 flex items-center justify-center px-3">
-        <div style={{ width: '234px' }}>
+        <div style={{ width: matchWidth }}>
           <BracketMatchup
             slot={semi.slot}
             team1={teamsFor(semi.slot).team1}
@@ -222,7 +225,7 @@ export default function BracketView({
         </div>
       </div>
     </div>
-  );
+  );};
 
   // Map region names to their DOM id for scrolling
   const getRegionId = (idx) => {
@@ -722,31 +725,38 @@ export default function BracketView({
               </button>
             </div>
           </div>
+          {(() => {
+            // Shared sizing for mobile full bracket — single source of truth
+            const mCellW = 380;
+            const mGridW = 4800;
+            const mCenterCol = `${mCellW}px`;
+            const mMatchW = `${mCellW - 40}px`;
+            const mCenterStyle = { width: mCenterCol, minWidth: mCenterCol };
+            return (
           <div className="overflow-auto -mx-3 pb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
             <div ref={(el) => {
               mobileWrapperRef.current = el;
-              // Auto-size the container height to match the scaled grid
               if (el) {
                 const grid = el.firstElementChild;
                 if (grid) {
                   requestAnimationFrame(() => {
                     el.style.height = `${grid.scrollHeight * mobileScale}px`;
-                    el.style.width = `${4800 * mobileScale}px`;
+                    el.style.width = `${mGridW * mobileScale}px`;
                   });
                 }
               }
             }}>
               <div
                 ref={mobileGridRef}
-                className="grid grid-cols-[1fr_310px_310px_310px_1fr] gap-y-6 pt-4"
-                style={{ width: '4800px', transform: `scale(${mobileScale})`, transformOrigin: 'top left' }}
+                className={`grid gap-y-6 pt-4`}
+                style={{ width: `${mGridW}px`, gridTemplateColumns: `1fr ${mCenterCol} ${mCenterCol} ${mCenterCol} 1fr`, transform: `scale(${mobileScale})`, transformOrigin: 'top left' }}
               >
                 {/* Row 1 */}
                 <div id={`mobile-full-region-${structure.regions.indexOf(topLeft)}`}>
-                  <BracketRegion region={topLeft} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" showRoundHeaders cellWidth={380} largeHeaders />
+                  <BracketRegion region={topLeft} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" showRoundHeaders cellWidth={mCellW} largeHeaders />
                 </div>
                 {renderSemifinalCell(leftSemi, undefined, true)}
-                <div className="row-span-2 flex flex-col flex-shrink-0" style={colW}>
+                <div className="row-span-2 flex flex-col flex-shrink-0" style={mCenterStyle}>
                   <div className="text-center mb-4">
                     <div className="text-2xl font-bold text-fg/80">Championship</div>
                     {champDateRange && (
@@ -754,7 +764,7 @@ export default function BracketView({
                     )}
                   </div>
                   <div className="flex-1 flex items-center justify-center px-3">
-                    <div className="flex flex-col items-center gap-4" style={{ width: '234px' }}>
+                    <div className="flex flex-col items-center gap-4" style={{ width: mMatchW }}>
                       <div className="w-full">
                         <BracketMatchup
                           slot={champSlot}
@@ -775,18 +785,20 @@ export default function BracketView({
                 </div>
                 {renderSemifinalCell(rightSemi, undefined, true)}
                 <div id={`mobile-full-region-${structure.regions.indexOf(topRight)}`}>
-                  <BracketRegion region={topRight} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" showRoundHeaders cellWidth={380} largeHeaders />
+                  <BracketRegion region={topRight} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" showRoundHeaders cellWidth={mCellW} largeHeaders />
                 </div>
                 {/* Row 2 — cols 2-4 already occupied by row-span-2 items above */}
                 <div id={`mobile-full-region-${structure.regions.indexOf(bottomLeft)}`}>
-                  <BracketRegion region={bottomLeft} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" cellWidth={380} />
+                  <BracketRegion region={bottomLeft} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" cellWidth={mCellW} />
                 </div>
                 <div id={`mobile-full-region-${structure.regions.indexOf(bottomRight)}`}>
-                  <BracketRegion region={bottomRight} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" cellWidth={380} />
+                  <BracketRegion region={bottomRight} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" cellWidth={mCellW} />
                 </div>
               </div>
             </div>
           </div>
+            );
+          })()}
         </div>
       ) : (
         <>

@@ -7,7 +7,7 @@ import MobileBracketNav from './MobileBracketNav';
 import TiebreakerInput from './TiebreakerInput';
 import ChampionCard from './ChampionCard';
 import useBracketKeyboard from '../../hooks/useBracketKeyboard';
-import { Focus, ZoomIn, ZoomOut, RotateCcw, Keyboard, Maximize2, Smartphone } from 'lucide-react';
+import { Focus, ZoomIn, ZoomOut, Keyboard, Maximize2, Smartphone } from 'lucide-react';
 
 const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25];
 
@@ -30,6 +30,8 @@ export default function BracketView({
   const [showMiniMap, setShowMiniMap] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [mobileScale, setMobileScale] = useState(0.55);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeoutRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const zoomWrapperRef = useRef(null);
   const bracketGridRef = useRef(null);
@@ -70,7 +72,29 @@ export default function BracketView({
     return () => ro.disconnect();
   }, [zoomLevel]);
 
+  // Hide zoom controls while scrolling (vertical page scroll + horizontal bracket scroll)
+  useEffect(() => {
+    if (!mobileFullView) return;
+    const onScroll = () => {
+      setIsScrolling(true);
+      clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 300);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    // Also listen for horizontal scroll on the bracket container
+    const container = mobileWrapperRef.current?.parentElement;
+    if (container) container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (container) container.removeEventListener('scroll', onScroll);
+      clearTimeout(scrollTimeoutRef.current);
+    };
+  }, [mobileFullView]);
+
   // Pinch-to-zoom for mobile full bracket view
+  const mobileScaleRef = useRef(mobileScale);
+  mobileScaleRef.current = mobileScale;
+
   useEffect(() => {
     const container = mobileWrapperRef.current;
     if (!container || !mobileFullView) return;
@@ -78,16 +102,18 @@ export default function BracketView({
     const getDistance = (t1, t2) =>
       Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
 
+    let isPinching = false;
+
     const onTouchStart = (e) => {
       if (e.touches.length === 2) {
-        e.preventDefault();
+        isPinching = true;
         pinchRef.current.startDist = getDistance(e.touches[0], e.touches[1]);
-        pinchRef.current.startScale = mobileScale;
+        pinchRef.current.startScale = mobileScaleRef.current;
       }
     };
 
     const onTouchMove = (e) => {
-      if (e.touches.length === 2) {
+      if (e.touches.length === 2 && isPinching) {
         e.preventDefault();
         const dist = getDistance(e.touches[0], e.touches[1]);
         const ratio = dist / pinchRef.current.startDist;
@@ -96,21 +122,28 @@ export default function BracketView({
       }
     };
 
-    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    const onTouchEnd = () => {
+      isPinching = false;
+    };
+
+    // Only preventDefault on touchmove (not touchstart) so single-finger scrolling works
+    container.addEventListener('touchstart', onTouchStart, { passive: true });
     container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd, { passive: true });
 
     return () => {
       container.removeEventListener('touchstart', onTouchStart);
       container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
     };
-  }, [mobileFullView, mobileScale]);
+  }, [mobileFullView]);
 
   // Update mobile wrapper height when scale changes
   useEffect(() => {
     const grid = mobileGridRef.current;
     const wrapper = mobileWrapperRef.current;
     if (!grid || !wrapper) return;
-    wrapper.style.height = `${grid.scrollHeight * mobileScale}px`;
+    wrapper.style.height = `${grid.offsetHeight * mobileScale}px`;
     wrapper.style.width = `${grid.scrollWidth * mobileScale}px`;
   }, [mobileScale]);
 
@@ -675,53 +708,69 @@ export default function BracketView({
       {mobileFullView ? (
         <div className="md:hidden">
           {/* Sticky region tabs for full bracket view */}
-          <div className="sticky z-20 bg-surface flex items-center gap-1 -mx-3 px-3 pt-2 pb-2" style={{ top: 'var(--navbar-height, 65px)' }}>
-            {regionTabs.map((tab, idx) => (
-              <button
-                key={tab}
-                onClick={() => {
-                  // Scroll to the region in the full bracket
-                  // Regions layout: topLeft(0)=row1-left, topRight(2)=row1-right, bottomLeft(1)=row2-left, bottomRight(3)=row2-right
-                  const regionEl = document.getElementById(`mobile-full-region-${idx}`);
-                  const scrollContainer = regionEl?.closest('.overflow-auto');
-                  if (regionEl && scrollContainer) {
-                    const navbarH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--navbar-height')) || 65;
-                    const tabBarH = 50;
-                    // The element rect is already in viewport coords (scale applied by browser)
-                    const rect = regionEl.getBoundingClientRect();
-                    const scrollY = rect.top + window.scrollY - navbarH - tabBarH;
-                    window.scrollTo({ top: Math.max(0, scrollY), behavior: 'smooth' });
-                    // Also scroll horizontally: right-side regions need to scroll right
-                    const isRightSide = regionEl === document.getElementById(`mobile-full-region-${structure.regions.indexOf(topRight)}`) ||
-                                        regionEl === document.getElementById(`mobile-full-region-${structure.regions.indexOf(bottomRight)}`);
-                    if (isRightSide) {
-                      scrollContainer.scrollTo({ left: scrollContainer.scrollWidth, behavior: 'smooth' });
-                    } else {
-                      scrollContainer.scrollTo({ left: 0, behavior: 'smooth' });
-                    }
-                  }
-                }}
-                className="px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 bg-fg/10 text-fg/70 border border-fg/10 hover:bg-fg/15 active:scale-95"
-              >
-                {tab}
-              </button>
-            ))}
-            <div className="ml-auto flex items-center gap-1">
-              {mobileScale !== 0.55 && (
+          <div className="sticky z-20 bg-surface -mx-3 px-3 pt-2 pb-2" style={{ top: 'var(--navbar-height, 65px)' }}>
+            <div className="flex items-center gap-1">
+              {regionTabs.map((tab, idx) => (
                 <button
-                  onClick={() => setMobileScale(0.55)}
-                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-fg/10 text-fg/50 text-xs font-mono active:scale-95 transition-transform whitespace-nowrap"
+                  key={tab}
+                  onClick={() => {
+                    const regionEl = document.getElementById(`mobile-full-region-${idx}`);
+                    const scrollContainer = regionEl?.closest('.overflow-x-auto');
+                    if (regionEl && scrollContainer) {
+                      const navbarH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--navbar-height')) || 65;
+                      const tabBarH = 80;
+                      const rect = regionEl.getBoundingClientRect();
+                      const scrollY = rect.top + window.scrollY - navbarH - tabBarH;
+                      window.scrollTo({ top: Math.max(0, scrollY), behavior: 'smooth' });
+                      const isRightSide = regionEl === document.getElementById(`mobile-full-region-${structure.regions.indexOf(topRight)}`) ||
+                                          regionEl === document.getElementById(`mobile-full-region-${structure.regions.indexOf(bottomRight)}`);
+                      if (isRightSide) {
+                        scrollContainer.scrollTo({ left: scrollContainer.scrollWidth, behavior: 'smooth' });
+                      } else {
+                        scrollContainer.scrollTo({ left: 0, behavior: 'smooth' });
+                      }
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 bg-fg/10 text-fg/70 border border-fg/10 hover:bg-fg/15 active:scale-95"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                  {Math.round(mobileScale * 100)}%
+                  {tab}
                 </button>
-              )}
+              ))}
               <button
                 onClick={() => setMobileFullView(false)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-fg/10 text-fg/70 text-xs font-semibold border border-fg/10 active:scale-95 transition-transform whitespace-nowrap"
+                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-fg/10 text-fg/70 text-xs font-semibold border border-fg/10 active:scale-95 transition-transform whitespace-nowrap"
               >
                 <Smartphone className="w-3.5 h-3.5" />
                 Mobile View
+              </button>
+            </div>
+            {/* Inline zoom controls */}
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <button
+                onClick={() => setMobileScale(s => Math.max(0.3, +(s - 0.1).toFixed(2)))}
+                className="flex items-center justify-center w-8 h-8 rounded-md bg-fg/10 border border-fg/10 text-fg/60 active:scale-90 transition-transform disabled:opacity-30"
+                disabled={mobileScale <= 0.3}
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+              <div className="flex-1 relative h-1.5 bg-fg/10 rounded-full overflow-hidden">
+                <div
+                  className="absolute inset-y-0 left-0 bg-violet-500/60 rounded-full transition-all"
+                  style={{ width: `${((mobileScale - 0.3) / 0.7) * 100}%` }}
+                />
+              </div>
+              <button
+                onClick={() => setMobileScale(s => Math.min(1.0, +(s + 0.1).toFixed(2)))}
+                className="flex items-center justify-center w-8 h-8 rounded-md bg-fg/10 border border-fg/10 text-fg/60 active:scale-90 transition-transform disabled:opacity-30"
+                disabled={mobileScale >= 1.0}
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setMobileScale(0.55)}
+                className="flex items-center justify-center h-8 px-2 rounded-md bg-fg/10 border border-fg/10 text-fg/50 text-xs font-mono active:scale-90 transition-transform"
+              >
+                {Math.round(mobileScale * 100)}%
               </button>
             </div>
           </div>
@@ -733,14 +782,14 @@ export default function BracketView({
             const mMatchW = `${mCellW - 40}px`;
             const mCenterStyle = { width: mCenterCol, minWidth: mCenterCol };
             return (
-          <div className="overflow-auto -mx-3 pb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="overflow-x-auto overflow-y-hidden -mx-3 pb-40" style={{ WebkitOverflowScrolling: 'touch' }}>
             <div ref={(el) => {
               mobileWrapperRef.current = el;
               if (el) {
                 const grid = el.firstElementChild;
                 if (grid) {
                   requestAnimationFrame(() => {
-                    el.style.height = `${grid.scrollHeight * mobileScale}px`;
+                    el.style.height = `${grid.offsetHeight * mobileScale}px`;
                     el.style.width = `${mGridW * mobileScale}px`;
                   });
                 }

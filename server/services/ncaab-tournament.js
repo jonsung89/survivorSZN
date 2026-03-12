@@ -4,6 +4,7 @@
 const { fetchWithCache } = require('./espn');
 const { SEED_MATCHUPS, REGIONS, getSlotRound, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
 const Anthropic = require('@anthropic-ai/sdk');
+const { db } = require('../db/supabase');
 
 const API_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball';
 const BPI_API_BASE = 'https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball';
@@ -394,6 +395,137 @@ async function generateConciseReport(teamId, teamName, detailedReport) {
 }
 
 /**
+ * Get a pre-generated scouting report from the database.
+ */
+async function getStoredReport(teamId, season) {
+  try {
+    const row = await db.getOne(
+      'SELECT report, concise_report, generated_at FROM scouting_reports WHERE team_id = $1 AND season = $2',
+      [String(teamId), season]
+    );
+    if (!row) return null;
+    return { report: row.report, conciseReport: row.concise_report, generatedAt: row.generated_at };
+  } catch (err) {
+    console.warn(`[Scouting] DB lookup failed for team ${teamId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Pre-generate AI scouting reports for all tournament teams and persist to DB.
+ * Processes teams sequentially to avoid API rate limits.
+ * Options:
+ *   teamId — generate for a single team only
+ *   force  — regenerate even if a report already exists
+ */
+async function generateAllReports(season, { teamId: singleTeamId, force = false } = {}) {
+  const bracket = await getTournamentBracket(season);
+  if (!bracket?.teams || Object.keys(bracket.teams).length === 0) {
+    throw new Error(`No tournament data available for season ${season}`);
+  }
+
+  const teamIds = singleTeamId ? [String(singleTeamId)] : Object.keys(bracket.teams);
+  const total = teamIds.length;
+  let generated = 0;
+  let skipped = 0;
+  const errors = [];
+
+  for (let i = 0; i < teamIds.length; i++) {
+    const tid = teamIds[i];
+    const teamMeta = bracket.teams[tid];
+    const label = `${teamMeta?.name || tid} (${i + 1}/${total})`;
+
+    try {
+      // Skip if report already exists (unless force)
+      if (!force) {
+        const existing = await getStoredReport(tid, season);
+        if (existing) {
+          console.log(`[Scouting] Skipping ${label} — report exists`);
+          skipped++;
+          continue;
+        }
+      }
+
+      console.log(`[Scouting] Generating report for ${label}...`);
+
+      // Fetch ESPN data (same as getTeamBreakdown)
+      const [teamInfo, stats, schedule, roster, news, bpiResult] = await Promise.allSettled([
+        fetchWithCache(`${API_BASE}/teams/${tid}`, TEAM_CACHE_TTL),
+        fetchWithCache(`${API_BASE}/teams/${tid}/statistics?season=${season}`, TEAM_CACHE_TTL),
+        fetchWithCache(`${API_BASE}/teams/${tid}/schedule?season=${season}`, TEAM_CACHE_TTL),
+        fetchWithCache(`${API_BASE}/teams/${tid}/roster`, ROSTER_CACHE_TTL),
+        fetchWithCache(`${API_BASE}/news?team=${tid}`, TEAM_CACHE_TTL),
+        fetchBpiData(tid, season),
+      ]);
+
+      const team = teamInfo.status === 'fulfilled' ? teamInfo.value?.team : null;
+      const statsData = stats.status === 'fulfilled' ? stats.value : null;
+      const scheduleData = schedule.status === 'fulfilled' ? schedule.value : null;
+      const rosterData = roster.status === 'fulfilled' ? roster.value : null;
+      const bpiData = bpiResult.status === 'fulfilled' ? bpiResult.value : null;
+
+      const basic = {
+        id: String(tid),
+        name: team?.displayName || teamMeta?.name || '',
+        abbreviation: team?.abbreviation || '',
+        logo: team?.logos?.[0]?.href || '',
+        color: team?.color ? `#${team.color}` : '#666',
+        record: team?.record?.items?.[0]?.summary || '',
+        conference: extractConference(team?.standingSummary) || '',
+        coach: parseCoachName(rosterData),
+        seed: teamMeta?.seed || null,
+      };
+
+      const seasonStats = parseTeamStatistics(statsData);
+      const recordStats = team?.record?.items?.[0]?.stats || [];
+      for (const rs of recordStats) {
+        if (rs.name && rs.value !== undefined && !seasonStats[rs.name]) {
+          seasonStats[rs.name] = { value: String(Number(rs.value).toFixed(1)), rank: null };
+        }
+      }
+
+      const { last5, vsTop25 } = parseTeamSchedule(scheduleData, tid);
+      const rawPlayers = parseKeyPlayers(rosterData, statsData);
+      const keyPlayers = await enrichPlayersWithStats(rawPlayers, 5);
+
+      const templateSummary = generateTeamSummary(basic, seasonStats);
+      const fullTeamData = { ...basic, seasonStats, last5, vsTop25, keyPlayers, bpiData };
+
+      // Generate AI reports
+      const report = await generateAiScoutingReport(fullTeamData, templateSummary);
+      const conciseReport = await generateConciseReport(tid, basic.name, report);
+
+      // Upsert to DB
+      await db.query(
+        `INSERT INTO scouting_reports (team_id, season, report, concise_report, generated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (team_id, season) DO UPDATE SET
+           report = EXCLUDED.report,
+           concise_report = EXCLUDED.concise_report,
+           generated_at = NOW()`,
+        [String(tid), season, report, conciseReport]
+      );
+
+      // Also populate the in-memory cache so immediate requests are fast
+      aiReportCache.set(`ai-report-${tid}`, { data: report, timestamp: Date.now() });
+      if (conciseReport) {
+        aiReportCache.set(`ai-concise-${tid}`, { data: conciseReport, timestamp: Date.now() });
+      }
+
+      generated++;
+      console.log(`[Scouting] ✅ ${label} done`);
+    } catch (err) {
+      console.error(`[Scouting] ❌ Failed ${label}:`, err.message);
+      errors.push({ teamId: tid, name: teamMeta?.name, error: err.message });
+    }
+  }
+
+  const summary = { total, generated, skipped, failed: errors.length, errors };
+  console.log(`[Scouting] Complete: ${generated} generated, ${skipped} skipped, ${errors.length} failed out of ${total}`);
+  return summary;
+}
+
+/**
  * Get comprehensive team breakdown for the matchup detail dialog
  */
 async function getTeamBreakdown(teamId, season) {
@@ -458,11 +590,9 @@ async function getTeamBreakdown(teamId, season) {
   // Generate template-based summary as fallback
   const templateSummary = generateTeamSummary(basic, seasonStats);
 
-  // Build full team data object for AI report generation
-  const fullTeamData = { ...basic, seasonStats, last5, vsTop25, keyPlayers, bpiData };
-
-  // Generate AI scouting report (uses cache, falls back to template on failure)
-  const summary = await generateAiScoutingReport(fullTeamData, templateSummary);
+  // Check for pre-generated AI report in DB first (instant), fall back to template
+  const stored = await getStoredReport(teamId, season);
+  const summary = stored?.report || templateSummary;
 
   const result = {
     ...basic,
@@ -855,4 +985,6 @@ module.exports = {
   fetchTournamentGames,
   getSelectionSundayDate,
   generateConciseReport,
+  generateAllReports,
+  getStoredReport,
 };

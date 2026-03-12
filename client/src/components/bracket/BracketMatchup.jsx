@@ -28,6 +28,7 @@ export default function BracketMatchup({
   onDetailClick,
   isReadOnly,
   compact = false,
+  side = 'left',
 }) {
   const { isDark } = useTheme();
   const isDecided = result?.status === 'final';
@@ -116,9 +117,19 @@ export default function BracketMatchup({
 
     return (
       <div className={rowClasses} onClick={handleClick} style={rowStyle}>
+        {/* Dark gradient overlay — covers full colored background */}
+        {team.color && !isGrayedOut && !isCorrect && !isWrong && (
+          <div
+            className="pointer-events-none absolute inset-0 z-[1]"
+            style={{
+              background: 'linear-gradient(to right, rgba(0,0,0,0.15) 0%, transparent 100%)',
+            }}
+          />
+        )}
+
         {/* Seed — solid white block flush to left edge, bigger + rounded on mobile */}
         <span className="absolute left-0 top-0 bottom-0 w-10 md:w-8 flex items-center justify-center
-          bg-white/90 text-black/80 text-base md:text-sm font-bold flex-shrink-0 rounded-none">
+          bg-white/90 text-black/80 text-base md:text-sm font-bold flex-shrink-0 rounded-none z-[2]">
           {team.seed || '—'}
         </span>
         {/* Spacer to account for absolute-positioned seed block */}
@@ -126,39 +137,42 @@ export default function BracketMatchup({
 
         {/* Logo — white variant on team color bg, normal + faded on grayed out */}
         {team.logo ? (
-          <img src={teamLogo} alt="" className={`w-8 h-8 flex-shrink-0 object-contain ${isGrayedOut ? 'opacity-40' : ''}`} />
+          <img src={teamLogo} alt="" className={`w-8 h-8 flex-shrink-0 object-contain relative z-[2] ${isGrayedOut ? 'opacity-40' : ''}`} />
         ) : (
-          <div className="w-8 h-8 flex-shrink-0 rounded-full bg-fg/10" />
+          <div className="w-8 h-8 flex-shrink-0 rounded-full bg-fg/10 relative z-[2]" />
         )}
 
         {/* Team name + record */}
-        <span className={`text-sm font-semibold flex-1 truncate ${isEliminated ? 'line-through text-white/40' : textColorClass}`}>
+        <span className={`text-sm font-semibold flex-1 truncate relative z-[2] ${isEliminated ? 'line-through text-white/40' : textColorClass}`}>
           {compact
             ? (team.abbreviation || team.shortName || team.name)
             : (team.shortName || team.name || team.abbreviation)}
         </span>
         {team.record && (
-          <span className={`text-xs font-mono flex-shrink-0 ${isGrayedOut ? 'text-fg/40' : 'text-white/80'}`}>
+          <span className={`text-xs font-mono flex-shrink-0 relative z-[2] ${isGrayedOut ? 'text-fg/40' : 'text-white/80'}`}>
             {team.record}
           </span>
         )}
 
         {/* Score (live/final) */}
         {(isLive || isDecided) && team.score !== null && team.score !== undefined && (
-          <span className={`text-sm font-mono font-bold flex-shrink-0 ${isActualWinner ? 'text-white' : 'text-white/50'}`}>
+          <span className={`text-sm font-mono font-bold flex-shrink-0 relative z-[2] ${isActualWinner ? 'text-white' : 'text-white/50'}`}>
             {team.score}
           </span>
         )}
 
         {/* Status icons */}
-        {isCorrect && <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
-        {isWrong && <X className="w-4 h-4 text-red-400 flex-shrink-0" />}
-        {isSelected && !isDecided && !isLive && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0" />}
+        {isCorrect && <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 relative z-[2]" />}
+        {isWrong && <X className="w-4 h-4 text-red-400 flex-shrink-0 relative z-[2]" />}
+        {isSelected && !isDecided && !isLive && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0 relative z-[2]" />}
       </div>
     );
   };
 
-  const showInfoButton = team1 && team2 && onDetailClick;
+  // Show info button when at least one team is known (not both TBD)
+  const showInfoButton = (team1 || team2) && onDetailClick;
+  // Always reserve mobile spacer when onDetailClick exists (keeps cards aligned)
+  const showMobileSpacer = !!onDetailClick;
 
   return (
     <div className="relative flex items-center gap-1.5 md:gap-0 group w-full">
@@ -178,22 +192,24 @@ export default function BracketMatchup({
         {renderTeamRow(team2, 'bottom')}
       </div>
 
-      {/* Mobile: info button outside the card on the right */}
-      {showInfoButton && (
+      {/* Mobile: info button outside the card on the right (or invisible spacer to keep alignment) */}
+      {showInfoButton ? (
         <button
           onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
           className="flex-shrink-0 p-1.5 rounded-full bg-fg/10 text-fg/40 active:bg-fg/20 md:hidden"
         >
           <Info className="w-4 h-4" />
         </button>
-      )}
+      ) : showMobileSpacer ? (
+        <div className="flex-shrink-0 w-7 md:hidden" />
+      ) : null}
 
       {/* Desktop: always-visible info button centered in the gap between columns */}
       {showInfoButton && (
         <button
           onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
           className="absolute top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full text-fg/50 hover:text-fg/80 hover:bg-fg/15 transition-colors hidden md:flex items-center justify-center"
-          style={{ right: '-36px' }}
+          style={side === 'right' ? { left: '-36px' } : { right: '-36px' }}
         >
           <Info className="w-4 h-4" />
         </button>

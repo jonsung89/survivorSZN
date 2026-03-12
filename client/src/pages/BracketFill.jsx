@@ -15,6 +15,8 @@ import {
   getNextSlot,
   getSiblingSlot,
   getMatchupTeams,
+  getChildSlots,
+  getSlotRound,
   cascadeRemovePicks,
   calculateBracketScore,
   calculatePotentialPoints,
@@ -40,6 +42,7 @@ export default function BracketFill() {
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
+  const [chatCollapsed, setChatCollapsed] = useState(true);
 
   const saveTimeoutRef = useRef(null);
   const lastSavedPicksRef = useRef('{}');
@@ -140,11 +143,34 @@ export default function BracketFill() {
     });
   }, [isReadOnly, debouncedSave]);
 
+  // Resolve the two possible teams that could emerge from a child slot
+  const getPossibleTeams = useCallback((childSlot) => {
+    const { team1, team2 } = getMatchupTeams(childSlot, picks, tournamentData);
+    return { team1, team2 };
+  }, [picks, tournamentData]);
+
   const handleMatchupClick = useCallback((slot) => {
     const { team1, team2 } = getMatchupTeams(slot, picks, tournamentData);
     if (!team1 && !team2) return;
-    setMatchupDialog({ slot, team1, team2 });
-  }, [picks, tournamentData]);
+
+    // For TBD teams in later rounds, resolve which two teams could fill that spot
+    let team1Possible = null;
+    let team2Possible = null;
+    const round = getSlotRound(slot);
+    if (round > 0) {
+      const children = getChildSlots(slot);
+      if (children) {
+        if (!team1) {
+          team1Possible = getPossibleTeams(children[0]);
+        }
+        if (!team2) {
+          team2Possible = getPossibleTeams(children[1]);
+        }
+      }
+    }
+
+    setMatchupDialog({ slot, team1, team2, team1Possible, team2Possible });
+  }, [picks, tournamentData, getPossibleTeams]);
 
   const handleDialogPick = useCallback((teamId) => {
     if (matchupDialog) {
@@ -223,9 +249,11 @@ export default function BracketFill() {
   const isComplete = pickCount >= 63;
 
   return (
-    <div className="max-w-[1400px] mx-auto px-3 sm:px-4 py-4 sm:py-6">
+    <div className={`max-w-[1400px] mx-auto px-3 sm:px-4 py-4 sm:py-6 transition-[padding] duration-300 lg:mx-0 lg:max-w-none lg:pl-6 ${
+      chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
+    }`}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mt-2 mb-6">
         <div>
           <Link
             to={`/league/${leagueId}/bracket`}
@@ -245,10 +273,10 @@ export default function BracketFill() {
                 if (e.key === 'Escape') setIsEditingName(false);
               }}
               maxLength={40}
-              className="text-xl font-display font-bold text-fg bg-transparent border-b-2 border-violet-500 outline-none w-full"
+              className="text-3xl font-display font-bold text-fg bg-transparent border-b-2 border-violet-500 outline-none w-full"
             />
           ) : (
-            <h1 className="text-xl font-display font-bold text-fg flex items-center gap-2">
+            <h1 className="text-3xl font-display font-bold text-fg flex items-center gap-2">
               {bracket.name || `Bracket ${bracket.bracket_number}`}
               {isOwner && !isReadOnly && (
                 <button
@@ -294,18 +322,20 @@ export default function BracketFill() {
       )}
 
       {/* Bracket */}
-      <BracketView
-        tournamentData={tournamentData}
-        picks={picks}
-        results={results}
-        onPick={handlePick}
-        onMatchupClick={handleMatchupClick}
-        isReadOnly={isReadOnly}
-      />
+      <div className="-mx-3 sm:-mx-4 px-3 sm:px-4 py-4 bg-fg/[0.03] rounded-xl">
+        <BracketView
+          tournamentData={tournamentData}
+          picks={picks}
+          results={results}
+          onPick={handlePick}
+          onMatchupClick={handleMatchupClick}
+          isReadOnly={isReadOnly}
+        />
+      </div>
 
       {/* Bottom bar (for filling) */}
       {!isReadOnly && isOwner && (
-        <div className="sticky bottom-0 mt-4 py-3 px-4 -mx-3 sm:-mx-4 bg-canvas/95 backdrop-blur border-t border-fg/10 pb-safe">
+        <div className="sticky bottom-0 z-30 mt-4 py-3 px-4 -mx-3 sm:-mx-4 bg-canvas/95 backdrop-blur border-t border-fg/10 pb-safe">
           <div className="max-w-[1400px] mx-auto">
             {/* Progress */}
             <div className="flex items-center justify-between mb-3">
@@ -361,6 +391,8 @@ export default function BracketFill() {
           slot={matchupDialog.slot}
           team1Info={matchupDialog.team1}
           team2Info={matchupDialog.team2}
+          team1Possible={matchupDialog.team1Possible}
+          team2Possible={matchupDialog.team2Possible}
           season={challenge?.season}
           onPick={isReadOnly ? null : handleDialogPick}
           onClose={() => setMatchupDialog(null)}
@@ -373,6 +405,7 @@ export default function BracketFill() {
       {leagueId && (
         <ChatWidget
           leagueId={leagueId}
+          onCollapsedChange={setChatCollapsed}
         />
       )}
 

@@ -728,10 +728,10 @@ export default function LeagueDetail() {
   ).filter(w => w !== 22); // Skip Pro Bowl week
 
   return (
-    <div className={`transition-all duration-300 ${isChatCollapsed ? 'lg:pr-16' : 'lg:pr-96 xl:pr-[420px]'}`}>
+    <div className={`transition-[padding] duration-300 ${isChatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'}`}>
       {/* Main content - scrolls naturally, with padding for fixed chat sidebar */}
       {/* pb-32 on mobile/tablet for chat bar, normal padding on lg+ where chat is sidebar */}
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 pt-4 sm:pt-8 pb-32 lg:pb-8">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 pt-4 sm:pt-8 pb-32 lg:pb-8 lg:max-w-6xl lg:px-6">
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6 sm:mb-8">
         <Link

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, generateConciseReport } = require('../services/ncaab-tournament');
+const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, generateConciseReport, generateAllReports, getStoredReport } = require('../services/ncaab-tournament');
 const { SCORING_PRESETS, calculateBracketScore, calculatePotentialPoints, getSlotRound, countPicks } = require('../utils/bracket-slots');
 
 const getUser = async (req) => {
@@ -390,7 +390,13 @@ router.get('/tournament/:season/team/:teamId/concise-report', async (req, res) =
     const season = parseInt(req.params.season);
     const teamId = req.params.teamId;
 
-    // Get the full breakdown (cached) to extract the detailed report
+    // Check pre-generated report in DB first
+    const stored = await getStoredReport(teamId, season);
+    if (stored?.conciseReport) {
+      return res.json({ conciseReport: stored.conciseReport });
+    }
+
+    // Fallback: generate on-demand from full breakdown
     const breakdown = await getTeamBreakdown(teamId, season);
     if (!breakdown?.summary) {
       return res.status(404).json({ error: 'No scouting report available' });
@@ -405,6 +411,22 @@ router.get('/tournament/:season/team/:teamId/concise-report', async (req, res) =
   } catch (error) {
     console.error('Error generating concise report:', error);
     res.status(500).json({ error: 'Failed to generate concise report' });
+  }
+});
+
+// ─── Admin: Pre-generate AI Scouting Reports ────────────────────────────────
+
+// Generate/regenerate AI scouting reports for all tournament teams
+router.post('/admin/generate-reports', async (req, res) => {
+  try {
+    const { season = new Date().getFullYear(), teamId, force = false } = req.body;
+    console.log(`[Admin] Generating scouting reports for season ${season}${teamId ? ` (team ${teamId})` : ''}${force ? ' (force)' : ''}`);
+
+    const result = await generateAllReports(season, { teamId, force });
+    res.json(result);
+  } catch (error) {
+    console.error('Error generating reports:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate reports' });
   }
 });
 

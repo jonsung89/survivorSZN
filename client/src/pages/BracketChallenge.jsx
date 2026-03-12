@@ -33,6 +33,7 @@ export default function BracketChallenge() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
   const [togglingPayment, setTogglingPayment] = useState(null);
+  const [chatCollapsed, setChatCollapsed] = useState(true);
 
   const isCommissioner = league?.commissionerId === user?.id || league?.commissioner_id === user?.id;
   const entryFee = parseFloat(challenge?.entry_fee) || 0;
@@ -182,7 +183,9 @@ export default function BracketChallenge() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className={`max-w-4xl mx-auto px-4 py-6 transition-[padding] duration-300 lg:max-w-6xl lg:px-6 ${
+      chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
+    }`}>
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex items-center gap-3">
@@ -563,6 +566,7 @@ export default function BracketChallenge() {
           leagueName={league.name}
           commissionerId={league.commissionerId || league.commissioner_id}
           members={members}
+          onCollapsedChange={setChatCollapsed}
         />
       )}
     </div>

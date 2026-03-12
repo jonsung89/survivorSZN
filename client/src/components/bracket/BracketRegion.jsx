@@ -4,7 +4,7 @@ import { getNextSlot, getChildSlots, getMatchupTeams } from '../../utils/bracket
 const ROUND_NAMES = ['First Round', 'Second Round', 'Sweet 16', 'Elite Eight'];
 
 // Compute a formatted date range from slot start dates
-function getRoundDateRange(slots, tournamentData) {
+export function getRoundDateRange(slots, tournamentData) {
   if (!tournamentData?.slots) return null;
 
   const dates = slots
@@ -106,6 +106,7 @@ export default function BracketRegion({
                 onDetailClick={() => onMatchupClick?.(slot)}
                 isReadOnly={isReadOnly}
                 compact={false}
+                side={side}
               />
             </div>
           );
@@ -118,7 +119,7 @@ export default function BracketRegion({
     <div>
       {/* Round column headers (shown on top regions only — above region name) */}
       {showRoundHeaders && (
-        <div className={`flex ${side === 'right' ? 'flex-row-reverse' : 'flex-row'} gap-6 mb-2`}>
+        <div className={`flex ${side === 'right' ? 'flex-row-reverse' : 'flex-row'} gap-6 mb-4`}>
           {rounds.map((roundData, roundIdx) => {
             const dateRange = getRoundDateRange(roundData.slots, tournamentData);
             return (
@@ -127,11 +128,11 @@ export default function BracketRegion({
                 className="text-center flex-shrink-0"
                 style={{ width: '260px', minWidth: '260px' }}
               >
-                <div className="text-sm font-bold text-fg/80">
+                <div className="text-base font-bold text-fg/80">
                   {ROUND_NAMES[roundIdx] || roundData.name}
                 </div>
                 {dateRange && (
-                  <div className="text-sm text-fg/60">{dateRange}</div>
+                  <div className="text-sm text-fg/60 mt-0.5">{dateRange}</div>
                 )}
               </div>
             );
@@ -140,8 +141,8 @@ export default function BracketRegion({
       )}
 
       {/* Region header */}
-      <div className="text-center mb-3">
-        <h3 className="text-base font-display font-bold text-fg/80 uppercase tracking-wider">
+      <div className="text-center mb-5">
+        <h3 className="text-2xl font-display font-bold text-fg/80 uppercase tracking-wider">
           {region.name}
         </h3>
       </div>

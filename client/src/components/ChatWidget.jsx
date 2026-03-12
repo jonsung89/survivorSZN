@@ -115,7 +115,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     }
     return 700;
   });
-  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(true); // Start collapsed on smaller desktops
+  const [isXLScreen, setIsXLScreen] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth >= 1280
+  );
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(() =>
+    typeof window === 'undefined' || window.innerWidth < 1280
+  );
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
@@ -123,14 +128,6 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const [hasMore, setHasMore] = useState(true);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [hasNewMessage, setHasNewMessage] = useState(false);
-  
-  // Desktop collapsed state (persisted in localStorage)
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('chatCollapsed') === 'true';
-    }
-    return false;
-  });
   
   // Enhanced chat features
   const [replyingTo, setReplyingTo] = useState(null);
@@ -175,14 +172,6 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   // Derive sheetSize from height for feature gating (full = > 50% viewport, half = smaller)
   const sheetSize = typeof window !== 'undefined' && sheetHeight > window.innerHeight * 0.5 ? 'full' : 'half';
 
-  // Toggle desktop chat collapsed state
-  const toggleCollapsed = () => {
-    setIsCollapsed(prev => {
-      const newValue = !prev;
-      localStorage.setItem('chatCollapsed', String(newValue));
-      return newValue;
-    });
-  };
 
   // Join league room when widget mounts
   useEffect(() => {
@@ -192,16 +181,17 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     }
   }, [leagueId, connected, joinLeague, leaveLeague]);
 
-  // Auto-expand chat on xl screens, collapse on smaller
+  // Track xl breakpoint — xl+: always expanded, lg-xl: collapsible (starts collapsed)
   useEffect(() => {
     const handleResize = () => {
-      const isXL = window.innerWidth >= 1280;
-      setIsDesktopCollapsed(!isXL);
+      const xl = window.innerWidth >= 1280;
+      setIsXLScreen(xl);
+      if (xl) {
+        setIsDesktopCollapsed(false); // xl+: force expanded
+      }
+      // lg-to-xl: don't auto-change — user controls via toggle
     };
-    
-    // Set initial state
     handleResize();
-    
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -209,9 +199,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   // Notify parent when collapsed state changes
   useEffect(() => {
     if (onCollapsedChange) {
-      onCollapsedChange(isDesktopCollapsed);
+      onCollapsedChange(isXLScreen ? false : isDesktopCollapsed);
     }
-  }, [isDesktopCollapsed, onCollapsedChange]);
+  }, [isDesktopCollapsed, isXLScreen, onCollapsedChange]);
 
   // Load initial messages when chat opens (mobile) or on mount (desktop)
   // Also load a few messages initially for the preview bar
@@ -1238,10 +1228,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
   return (
     <>
-      {/* Desktop: Collapsible sidebar */}
+      {/* Desktop: Sidebar — collapsible at lg-xl, always visible at xl+ */}
       <div className="hidden lg:block">
-        {/* Collapsed state - slim bar */}
-        <div 
+        {/* Collapsed state - slim bar (only at lg-xl, never at xl+) */}
+        {!isXLScreen && (
+        <div
           className={`fixed top-16 right-0 bottom-0 w-14 bg-canvas border-l border-fg/10 flex flex-col items-center py-4 transition-all duration-300 z-40 ${
             isDesktopCollapsed ? 'translate-x-0' : 'translate-x-full'
           }`}
@@ -1276,11 +1267,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             </div>
           )}
         </div>
+        )}
 
         {/* Expanded state - full chat */}
-        <div 
+        <div
           className={`fixed top-16 right-0 bottom-0 w-96 xl:w-[420px] bg-canvas border-l border-fg/10 flex flex-col transition-all duration-300 z-40 ${
-            isDesktopCollapsed ? 'translate-x-full' : 'translate-x-0'
+            isXLScreen ? 'translate-x-0' : (isDesktopCollapsed ? 'translate-x-full' : 'translate-x-0')
           }`}
         >
           {/* Profile Panel (overlay) */}
@@ -1314,13 +1306,15 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 </p>
               )}
             </div>
-            <button
-              onClick={() => setIsDesktopCollapsed(true)}
-              className="p-2 hover:bg-fg/10 rounded-lg transition-colors"
-              title="Collapse Chat"
-            >
-              <PanelRightClose className="w-5 h-5 text-fg/60" />
-            </button>
+            {!isXLScreen && (
+              <button
+                onClick={() => setIsDesktopCollapsed(true)}
+                className="p-2 hover:bg-fg/10 rounded-lg transition-colors"
+                title="Collapse Chat"
+              >
+                <PanelRightClose className="w-5 h-5 text-fg/60" />
+              </button>
+            )}
           </div>
 
           {/* Messages */}

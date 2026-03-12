@@ -1,10 +1,14 @@
-import { useState, useMemo } from 'react';
-import { getBracketStructure, getMatchupTeams } from '../../utils/bracketSlots';
-import BracketRegion from './BracketRegion';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { getBracketStructure, getMatchupTeams, getRegionForSlot, REGIONS } from '../../utils/bracketSlots';
+import BracketRegion, { getRoundDateRange } from './BracketRegion';
 import BracketFinalFour from './BracketFinalFour';
 import BracketMatchup from './BracketMatchup';
+import BracketMiniMap from './BracketMiniMap';
 import MobileBracketNav from './MobileBracketNav';
-import { Trophy } from 'lucide-react';
+import useBracketKeyboard from '../../hooks/useBracketKeyboard';
+import { Trophy, Focus, ZoomIn, ZoomOut, RotateCcw, Keyboard } from 'lucide-react';
+
+const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25];
 
 export default function BracketView({
   tournamentData,
@@ -15,7 +19,31 @@ export default function BracketView({
   isReadOnly,
 }) {
   const [mobileTab, setMobileTab] = useState(0);
+  const [desktopTab, setDesktopTab] = useState(null); // null = show all (scroll mode)
+  const [focusMode, setFocusMode] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [showMiniMap, setShowMiniMap] = useState(true);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const scrollContainerRef = useRef(null);
+  const zoomWrapperRef = useRef(null);
+  const bracketGridRef = useRef(null);
   const structure = getBracketStructure();
+
+  // Sync zoom wrapper height to match the scaled grid height
+  useEffect(() => {
+    const grid = bracketGridRef.current;
+    const wrapper = zoomWrapperRef.current;
+    if (!grid || !wrapper) return;
+
+    const syncHeight = () => {
+      wrapper.style.height = `${grid.scrollHeight * zoomLevel}px`;
+    };
+    syncHeight();
+
+    const ro = new ResizeObserver(syncHeight);
+    ro.observe(grid);
+    return () => ro.disconnect();
+  }, [zoomLevel]);
 
   // Derive region tabs from structure (data-driven)
   const regionTabs = useMemo(
@@ -24,9 +52,6 @@ export default function BracketView({
   );
 
   // Desktop layout positions derived from Final Four semifinal pairings.
-  // Paired regions share the same side so the visual flow is correct:
-  //   Left semifinal's regions → left column (top + bottom)
-  //   Right semifinal's regions → right column (top + bottom)
   const desktopLayout = useMemo(() => {
     const { semifinalRegions } = structure.finalFour;
     const findRegion = (name) => structure.regions.find(r => r.name === name);
@@ -42,40 +67,107 @@ export default function BracketView({
     };
   }, [structure]);
 
-  // Compute per-region completion for tab dots
-  const regionCompletion = useMemo(() => {
-    if (!picks) return Array(structure.regions.length + 1).fill(false);
-
+  // Compute per-region pick counts and totals for progress tracker
+  const regionProgress = useMemo(() => {
     const regionCount = structure.regions.length;
     const counts = new Array(regionCount + 1).fill(0);
-    const totals = [...structure.regions.map(() => 15), 3]; // 15 per region, 3 for F4
+    const totals = [...structure.regions.map(() => 15), 3];
 
-    // Count picks per region (slots 1–60)
-    for (let slot = 1; slot <= 60; slot++) {
-      if (picks[slot] || picks[String(slot)]) {
-        const regionIdx = Math.floor((slot - 1) / 15);
-        if (regionIdx >= 0 && regionIdx < regionCount) counts[regionIdx]++;
+    if (picks) {
+      for (let slot = 1; slot <= 60; slot++) {
+        if (picks[slot] || picks[String(slot)]) {
+          const regionName = getRegionForSlot(slot);
+          const regionIdx = REGIONS.indexOf(regionName);
+          if (regionIdx >= 0 && regionIdx < regionCount) counts[regionIdx]++;
+        }
+      }
+      for (const slot of [...structure.finalFour.semifinals, structure.finalFour.championship]) {
+        if (picks[slot] || picks[String(slot)]) counts[regionCount]++;
       }
     }
-    // Final Four + Championship
-    for (const slot of [...structure.finalFour.semifinals, structure.finalFour.championship]) {
-      if (picks[slot] || picks[String(slot)]) counts[regionCount]++;
-    }
 
-    return counts.map((c, i) => c >= totals[i]);
+    return { counts, totals };
   }, [picks, structure]);
+
+  const regionCompletion = useMemo(
+    () => regionProgress.counts.map((c, i) => c >= regionProgress.totals[i]),
+    [regionProgress]
+  );
 
   // Slot helpers for desktop Final Four rendering
   const teamsFor = (slot) => getMatchupTeams(slot, picks, tournamentData);
   const resultFor = (slot) => results?.[slot] || results?.[String(slot)] || null;
   const pickedFor = (slot) => picks?.[slot] || picks?.[String(slot)] || null;
 
-  // Desktop layout: 5-column grid — regions on the outside, Final Four cells in the center
-  // The semifinal cells align directly with the E8 (final round) of their feeder regions.
-  //
-  // Grid columns: [Left Region] [Left Semi] [Championship] [Right Semi] [Right Region]
-  // Row 1:         top-left       ↕ row-span   ↕ row-span    ↕ row-span   top-right
-  // Row 2:         bottom-left                                             bottom-right
+  // Map region names to their DOM id for scrolling
+  const getRegionId = (idx) => {
+    if (idx < structure.regions.length) {
+      return `region-${structure.regions[idx].name.toLowerCase().replace(/\s+/g, '-')}`;
+    }
+    return 'region-final-four';
+  };
+
+  // Scroll to a region in the bracket
+  const scrollToRegion = useCallback((idx) => {
+    const id = getRegionId(idx);
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [structure]);
+
+  // Handle region tab click
+  const handleDesktopTabClick = useCallback((idx) => {
+    if (focusMode) {
+      setDesktopTab(idx);
+    } else {
+      scrollToRegion(idx);
+    }
+  }, [focusMode, scrollToRegion]);
+
+  // Toggle focus mode
+  const toggleFocusMode = useCallback(() => {
+    setFocusMode(prev => {
+      if (!prev) {
+        // Entering focus mode — default to first region
+        setDesktopTab(0);
+      } else {
+        setDesktopTab(null);
+      }
+      return !prev;
+    });
+  }, []);
+
+  // Zoom helpers
+  const zoomIn = useCallback(() => {
+    setZoomLevel(prev => {
+      const idx = ZOOM_LEVELS.indexOf(prev);
+      return idx < ZOOM_LEVELS.length - 1 ? ZOOM_LEVELS[idx + 1] : prev;
+    });
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setZoomLevel(prev => {
+      const idx = ZOOM_LEVELS.indexOf(prev);
+      return idx > 0 ? ZOOM_LEVELS[idx - 1] : prev;
+    });
+  }, []);
+
+  const zoomReset = useCallback(() => setZoomLevel(1.0), []);
+
+  // Keyboard shortcuts
+  useBracketKeyboard({
+    regionCount: structure.regions.length,
+    onRegionSelect: handleDesktopTabClick,
+    onFinalFour: () => handleDesktopTabClick(structure.regions.length),
+    onToggleFocusMode: toggleFocusMode,
+    onToggleMiniMap: () => setShowMiniMap(prev => !prev),
+    onZoomIn: zoomIn,
+    onZoomOut: zoomOut,
+    onZoomReset: zoomReset,
+  });
+
+  // Desktop layout: 5-column grid
   const renderDesktop = () => {
     const { topLeft, bottomLeft, topRight, bottomRight } = desktopLayout;
     const { semifinalRegions, championship: champSlot } = structure.finalFour;
@@ -87,33 +179,138 @@ export default function BracketView({
       ? (tournamentData?.teams?.[champPick] || { id: champPick })
       : null;
 
-    const renderSemifinalCell = (semi) => (
-      <div className="row-span-2 flex items-center justify-center px-3">
-        <div>
-          <div className="text-sm text-fg/40 text-center mb-1">
-            {semi.regions.join(' vs ')}
+    const colW = { width: '310px', minWidth: '310px' };
+
+    const f4DateRange = getRoundDateRange(
+      semifinalRegions.map(s => s.slot),
+      tournamentData,
+    );
+    const champDateRange = getRoundDateRange([champSlot], tournamentData);
+
+    const renderSemifinalCell = (semi, id) => (
+      <div id={id} className="row-span-2 flex flex-col flex-shrink-0" style={colW}>
+        <div className="text-center mb-4">
+          <div className="text-base font-bold text-fg/80">Final Four</div>
+          {f4DateRange && (
+            <div className="text-sm text-fg/60 mt-0.5">{f4DateRange}</div>
+          )}
+        </div>
+        <div className="flex-1 flex items-center justify-center px-3">
+          <div style={{ width: '234px' }}>
+            <BracketMatchup
+              slot={semi.slot}
+              team1={teamsFor(semi.slot).team1}
+              team2={teamsFor(semi.slot).team2}
+              pickedTeamId={pickedFor(semi.slot)}
+              result={resultFor(semi.slot)}
+              onPick={(teamId) => onPick?.(semi.slot, teamId)}
+              onDetailClick={() => onMatchupClick?.(semi.slot)}
+              isReadOnly={isReadOnly}
+            />
           </div>
-          <BracketMatchup
-            slot={semi.slot}
-            team1={teamsFor(semi.slot).team1}
-            team2={teamsFor(semi.slot).team2}
-            pickedTeamId={pickedFor(semi.slot)}
-            result={resultFor(semi.slot)}
-            onPick={(teamId) => onPick?.(semi.slot, teamId)}
-            onDetailClick={() => onMatchupClick?.(semi.slot)}
-            isReadOnly={isReadOnly}
-          />
         </div>
       </div>
     );
 
+    // In focus mode, render only the selected region
+    if (focusMode && desktopTab !== null) {
+      const isFinalFour = desktopTab >= structure.regions.length;
+
+      if (isFinalFour) {
+        return (
+          <div className="hidden md:block pb-4 animate-fade-in">
+            <div className="flex justify-center gap-6">
+              {renderSemifinalCell(leftSemi)}
+
+              <div className="flex flex-col flex-shrink-0" style={colW}>
+                <div className="text-center mb-4">
+                  <div className="text-base font-bold text-fg/80">Championship</div>
+                  {champDateRange && (
+                    <div className="text-sm text-fg/60 mt-0.5">{champDateRange}</div>
+                  )}
+                </div>
+                <div className="flex-1 flex items-center px-3">
+                  <div className="w-full flex flex-col items-center gap-4">
+                    <div className="w-full">
+                      <BracketMatchup
+                        slot={champSlot}
+                        team1={teamsFor(champSlot).team1}
+                        team2={teamsFor(champSlot).team2}
+                        pickedTeamId={pickedFor(champSlot)}
+                        result={resultFor(champSlot)}
+                        onPick={(teamId) => onPick?.(champSlot, teamId)}
+                        onDetailClick={() => onMatchupClick?.(champSlot)}
+                        isReadOnly={isReadOnly}
+                      />
+                    </div>
+                    {champTeam && (
+                      <div className="text-center animate-in">
+                        <div className="text-sm text-amber-400 font-bold uppercase tracking-wider mb-2">Champion</div>
+                        <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-xl bg-amber-400/10 border border-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.15)] animate-champion-glow">
+                          <Trophy className="w-6 h-6 text-amber-400" />
+                          {champTeam.logo && (
+                            <img src={champTeam.logo} alt="" className="w-14 h-14 object-contain" />
+                          )}
+                          <span className="text-lg font-display font-bold text-fg">
+                            {champTeam.name || champTeam.abbreviation || 'Champion'}
+                          </span>
+                          {champTeam.seed && (
+                            <span className="text-sm text-fg/40">#{champTeam.seed} seed</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {renderSemifinalCell(rightSemi)}
+            </div>
+          </div>
+        );
+      }
+
+      // Single region focus
+      const regionData = structure.regions[desktopTab];
+      const regionIdx = structure.regions.indexOf(regionData);
+      // Determine side from layout
+      const isRightSide = regionData === topRight || regionData === bottomRight;
+
+      return (
+        <div className="hidden md:block overflow-x-auto pb-4 animate-fade-in">
+          <BracketRegion
+            region={regionData}
+            picks={picks}
+            results={results}
+            tournamentData={tournamentData}
+            onPick={onPick}
+            onMatchupClick={onMatchupClick}
+            isReadOnly={isReadOnly}
+            side={isRightSide ? 'right' : 'left'}
+            showRoundHeaders
+          />
+        </div>
+      );
+    }
+
+    // Full bracket view (scroll mode)
     return (
-      <div className="hidden md:block overflow-x-auto pb-4">
-        <div style={{ minWidth: '2800px' }} className="grid grid-cols-[1fr_auto_auto_auto_1fr] gap-y-6">
+      <div ref={scrollContainerRef} className="hidden md:block overflow-x-auto pb-4">
+        {/* Zoom wrapper — scales the grid visually while adjusting scrollable area */}
+        <div ref={zoomWrapperRef} style={{ width: `${2950 * zoomLevel}px` }}>
+          <div
+            ref={bracketGridRef}
+            style={{
+              width: '2950px',
+              transform: zoomLevel !== 1 ? `scale(${zoomLevel})` : undefined,
+              transformOrigin: 'top left',
+            }}
+            className="grid grid-cols-[1fr_310px_310px_310px_1fr] gap-y-6"
+          >
           {/* === Row 1 === */}
 
           {/* Top-left region */}
-          <div>
+          <div id={getRegionId(structure.regions.indexOf(topLeft))}>
             <BracketRegion
               region={topLeft}
               picks={picks}
@@ -127,58 +324,59 @@ export default function BracketView({
             />
           </div>
 
-          {/* Left semifinal (row-span-2, vertically centered with both feeder regions) */}
-          {renderSemifinalCell(leftSemi)}
+          {/* Left semifinal (row-span-2, vertically centered) */}
+          {renderSemifinalCell(leftSemi, 'region-final-four')}
 
-          {/* Championship + Champion (row-span-2, dead center of the bracket) */}
-          <div className="row-span-2 flex items-center justify-center px-3">
-            <div className="flex flex-col items-center gap-4">
-              <h3 className="text-base font-display font-bold text-fg/50 uppercase tracking-wider">
-                Final Four
-              </h3>
-              <div>
-                <div className="text-sm text-amber-400 font-bold text-center mb-1 flex items-center justify-center gap-1 uppercase tracking-wider">
-                  <Trophy className="w-4 h-4 text-amber-400" />
-                  Championship
-                </div>
-                <BracketMatchup
-                  slot={champSlot}
-                  team1={teamsFor(champSlot).team1}
-                  team2={teamsFor(champSlot).team2}
-                  pickedTeamId={pickedFor(champSlot)}
-                  result={resultFor(champSlot)}
-                  onPick={(teamId) => onPick?.(champSlot, teamId)}
-                  onDetailClick={() => onMatchupClick?.(champSlot)}
-                  isReadOnly={isReadOnly}
-                />
-              </div>
-
-              {/* Champion Display */}
-              {champTeam && (
-                <div className="text-center animate-in">
-                  <div className="text-sm text-amber-400 font-bold uppercase tracking-wider mb-2">Champion</div>
-                  <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-xl bg-amber-400/10 border border-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.15)] animate-champion-glow">
-                    <Trophy className="w-6 h-6 text-amber-400" />
-                    {champTeam.logo && (
-                      <img src={champTeam.logo} alt="" className="w-14 h-14 object-contain" />
-                    )}
-                    <span className="text-lg font-display font-bold text-fg">
-                      {champTeam.name || champTeam.abbreviation || 'Champion'}
-                    </span>
-                    {champTeam.seed && (
-                      <span className="text-sm text-fg/40">#{champTeam.seed} seed</span>
-                    )}
-                  </div>
-                </div>
+          {/* Championship (row-span-2, dead center of the bracket) */}
+          <div className="row-span-2 flex flex-col flex-shrink-0" style={colW}>
+            <div className="text-center mb-4">
+              <div className="text-base font-bold text-fg/80">Championship</div>
+              {champDateRange && (
+                <div className="text-sm text-fg/60 mt-0.5">{champDateRange}</div>
               )}
+            </div>
+            <div className="flex-1 flex items-center justify-center px-3">
+              <div className="flex flex-col items-center gap-4" style={{ width: '234px' }}>
+                <div className="w-full">
+                  <BracketMatchup
+                    slot={champSlot}
+                    team1={teamsFor(champSlot).team1}
+                    team2={teamsFor(champSlot).team2}
+                    pickedTeamId={pickedFor(champSlot)}
+                    result={resultFor(champSlot)}
+                    onPick={(teamId) => onPick?.(champSlot, teamId)}
+                    onDetailClick={() => onMatchupClick?.(champSlot)}
+                    isReadOnly={isReadOnly}
+                  />
+                </div>
+
+                {/* Champion Display */}
+                {champTeam && (
+                  <div className="text-center animate-in">
+                    <div className="text-sm text-amber-400 font-bold uppercase tracking-wider mb-2">Champion</div>
+                    <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-xl bg-amber-400/10 border border-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.15)] animate-champion-glow">
+                      <Trophy className="w-6 h-6 text-amber-400" />
+                      {champTeam.logo && (
+                        <img src={champTeam.logo} alt="" className="w-14 h-14 object-contain" />
+                      )}
+                      <span className="text-lg font-display font-bold text-fg">
+                        {champTeam.name || champTeam.abbreviation || 'Champion'}
+                      </span>
+                      {champTeam.seed && (
+                        <span className="text-sm text-fg/40">#{champTeam.seed} seed</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Right semifinal (row-span-2, vertically centered with both feeder regions) */}
+          {/* Right semifinal (row-span-2, vertically centered) */}
           {renderSemifinalCell(rightSemi)}
 
           {/* Top-right region */}
-          <div>
+          <div id={getRegionId(structure.regions.indexOf(topRight))}>
             <BracketRegion
               region={topRight}
               picks={picks}
@@ -195,7 +393,7 @@ export default function BracketView({
           {/* === Row 2 === */}
 
           {/* Bottom-left region */}
-          <div>
+          <div id={getRegionId(structure.regions.indexOf(bottomLeft))}>
             <BracketRegion
               region={bottomLeft}
               picks={picks}
@@ -211,7 +409,7 @@ export default function BracketView({
           {/* Center 3 cells are row-span-2 from Row 1, so they auto-span here */}
 
           {/* Bottom-right region */}
-          <div>
+          <div id={getRegionId(structure.regions.indexOf(bottomRight))}>
             <BracketRegion
               region={bottomRight}
               picks={picks}
@@ -224,11 +422,121 @@ export default function BracketView({
             />
           </div>
         </div>
+        </div>
       </div>
     );
   };
 
-  // Mobile layout: tabbed region view (uses BracketFinalFour for stacked vertical display)
+  // Desktop nav bar with region tabs, progress, focus mode, zoom
+  const renderDesktopNav = () => (
+    <div className="hidden md:flex items-center gap-2 sticky top-0 z-20 bg-surface/95 backdrop-blur-sm py-2 px-1 mb-4 rounded-lg border border-fg/5">
+      {/* Region tabs with progress */}
+      <div className="flex gap-1 flex-1">
+        {regionTabs.map((tab, idx) => {
+          const isActive = focusMode ? desktopTab === idx : false;
+          const count = regionProgress.counts[idx];
+          const total = regionProgress.totals[idx];
+          const isComplete = regionCompletion[idx];
+
+          return (
+            <button
+              key={tab}
+              onClick={() => handleDesktopTabClick(idx)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 ${
+                isActive
+                  ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white shadow-sm'
+                  : 'text-fg/60 hover:text-fg hover:bg-fg/5'
+              }`}
+            >
+              <span className="text-xs text-fg/30 font-mono w-3">{idx + 1}</span>
+              {tab}
+              {/* Progress indicator */}
+              <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                isComplete
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : isActive
+                    ? 'bg-white/20 text-white/80'
+                    : 'bg-fg/5 text-fg/40'
+              }`}>
+                {count}/{total}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-1 border-l border-fg/10 pl-2">
+        {/* Focus mode toggle */}
+        <button
+          onClick={toggleFocusMode}
+          className={`p-1.5 rounded-md transition-colors ${
+            focusMode ? 'bg-violet-500/20 text-violet-400' : 'text-fg/40 hover:text-fg/70 hover:bg-fg/5'
+          }`}
+          title={focusMode ? 'Exit focus mode (Esc)' : 'Focus mode (Esc)'}
+        >
+          <Focus className="w-4 h-4" />
+        </button>
+
+        {/* Zoom controls */}
+        {!focusMode && (
+          <>
+            <button
+              onClick={zoomOut}
+              className="p-1.5 rounded-md text-fg/40 hover:text-fg/70 hover:bg-fg/5 transition-colors"
+              title="Zoom out (Cmd -)"
+              disabled={zoomLevel <= ZOOM_LEVELS[0]}
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button
+              onClick={zoomReset}
+              className="px-1.5 py-0.5 rounded-md text-xs font-mono text-fg/40 hover:text-fg/70 hover:bg-fg/5 transition-colors min-w-[36px] text-center"
+              title="Reset zoom (Cmd 0)"
+            >
+              {Math.round(zoomLevel * 100)}%
+            </button>
+            <button
+              onClick={zoomIn}
+              className="p-1.5 rounded-md text-fg/40 hover:text-fg/70 hover:bg-fg/5 transition-colors"
+              title="Zoom in (Cmd +)"
+              disabled={zoomLevel >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+          </>
+        )}
+
+        {/* Keyboard shortcuts help */}
+        <div className="relative">
+          <button
+            onClick={() => setShowShortcuts(prev => !prev)}
+            className={`p-1.5 rounded-md transition-colors ${
+              showShortcuts ? 'bg-fg/10 text-fg/70' : 'text-fg/30 hover:text-fg/50 hover:bg-fg/5'
+            }`}
+            title="Keyboard shortcuts"
+          >
+            <Keyboard className="w-4 h-4" />
+          </button>
+          {showShortcuts && (
+            <div className="absolute top-full right-0 mt-2 w-56 bg-elevated border border-fg/10 rounded-lg shadow-xl p-3 text-xs z-50 animate-fade-in">
+              <div className="font-bold text-fg/70 mb-2">Keyboard Shortcuts</div>
+              <div className="space-y-1 text-fg/50">
+                <div className="flex justify-between"><span>Jump to region</span><kbd className="bg-fg/10 px-1.5 py-0.5 rounded text-fg/60">1-4</kbd></div>
+                <div className="flex justify-between"><span>Final Four</span><kbd className="bg-fg/10 px-1.5 py-0.5 rounded text-fg/60">5 / F</kbd></div>
+                <div className="flex justify-between"><span>Focus mode</span><kbd className="bg-fg/10 px-1.5 py-0.5 rounded text-fg/60">Esc</kbd></div>
+                <div className="flex justify-between"><span>Mini-map</span><kbd className="bg-fg/10 px-1.5 py-0.5 rounded text-fg/60">M</kbd></div>
+                <div className="flex justify-between"><span>Zoom in/out</span><kbd className="bg-fg/10 px-1.5 py-0.5 rounded text-fg/60">Cmd +/-</kbd></div>
+                <div className="flex justify-between"><span>Reset zoom</span><kbd className="bg-fg/10 px-1.5 py-0.5 rounded text-fg/60">Cmd 0</kbd></div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Mobile layout: tabbed region view
   const renderMobile = () => (
     <div className="md:hidden">
       {/* Region tabs */}
@@ -280,7 +588,21 @@ export default function BracketView({
 
   return (
     <div>
+      {renderDesktopNav()}
       {renderDesktop()}
+
+      {/* Mini-map (desktop only, scroll mode only) */}
+      {!focusMode && (
+        <BracketMiniMap
+          regions={structure.regions}
+          regionCompletion={regionCompletion}
+          scrollContainerRef={scrollContainerRef}
+          onRegionClick={handleDesktopTabClick}
+          visible={showMiniMap}
+          onToggle={() => setShowMiniMap(prev => !prev)}
+        />
+      )}
+
       {renderMobile()}
     </div>
   );

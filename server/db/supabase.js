@@ -165,6 +165,19 @@ async function initDb() {
       )
     `);
 
+    // Pre-generated AI scouting reports (persisted across restarts)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS scouting_reports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        team_id TEXT NOT NULL,
+        season INTEGER NOT NULL,
+        report TEXT NOT NULL,
+        concise_report TEXT,
+        generated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(team_id, season)
+      )
+    `);
+
     // Create indexes for better performance
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_league_members_user ON league_members(user_id)`);
@@ -176,6 +189,7 @@ async function initDb() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_brackets_user ON brackets(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_brackets_challenge_score ON brackets(challenge_id, total_score DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_bracket_results_challenge ON bracket_results(challenge_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_scouting_reports_team_season ON scouting_reports(team_id, season)`);
 
     console.log('✅ Supabase database initialized successfully');
   } catch (error) {

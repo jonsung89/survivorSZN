@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil } from 'lucide-react';
+import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil, Save } from 'lucide-react';
 import { bracketAPI } from '../api';
 import { ROUND_BOUNDARIES } from '../utils/bracketSlots';
 import { useAuth } from '../context/AuthContext';
@@ -251,11 +251,11 @@ export default function BracketFill() {
   const isComplete = pickCount >= TOTAL_GAMES;
 
   return (
-    <div className={`max-w-[1400px] mx-auto px-3 sm:px-4 py-4 sm:py-6 transition-[padding] duration-300 lg:mx-0 lg:max-w-none lg:pl-6 ${
+    <div className={`max-w-[1400px] mx-auto px-3 sm:px-4 -mt-4 md:mt-0 pb-4 md:py-4 sm:py-6 transition-[padding] duration-300 lg:mx-0 lg:max-w-none lg:pl-6 ${
       chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
     }`}>
       {/* Header */}
-      <div className="flex items-center justify-between mt-2 mb-6">
+      <div className="flex items-center justify-between -mx-3 px-3 sm:-mx-4 sm:px-4 pt-4 pb-3 md:py-3 bg-surface md:rounded-xl md:border md:border-fg/10">
         <div>
           <Link
             to={`/league/${leagueId}/bracket`}
@@ -324,7 +324,7 @@ export default function BracketFill() {
       )}
 
       {/* Bracket */}
-      <div className="-mx-3 sm:-mx-4 px-3 sm:px-4 py-4 pb-40 md:pb-4 bg-fg/[0.03] rounded-xl">
+      <div className="-mx-3 sm:-mx-4 px-3 sm:px-4 pt-0 pb-40 md:py-4 md:pb-4 bg-surface md:bg-fg/[0.03] md:rounded-xl">
         <BracketView
           tournamentData={tournamentData}
           picks={picks}
@@ -363,17 +363,33 @@ export default function BracketFill() {
               </div>
             </div>
 
-            {/* Submit */}
-            <button
-              onClick={() => setShowSubmitConfirm(true)}
-              disabled={pickCount < TOTAL_GAMES || (challenge?.tiebreaker_type === 'total_score' && !tiebreakerValue)}
-              className={`btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed ${
-                isComplete ? 'shadow-[0_0_16px_rgba(139,92,246,0.3)]' : ''
-              }`}
-            >
-              <Send className="w-4 h-4" />
-              Submit Bracket
-            </button>
+            {/* Submit — hidden on mobile when not ready */}
+            {isComplete ? (
+              <button
+                onClick={() => setShowSubmitConfirm(true)}
+                disabled={challenge?.tiebreaker_type === 'total_score' && !tiebreakerValue}
+                className="btn-primary w-full flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(139,92,246,0.3)] disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Send className="w-4 h-4" />
+                Submit Bracket
+              </button>
+            ) : (
+              <button
+                disabled
+                className="btn-primary w-full hidden md:flex items-center justify-center gap-2 opacity-30 cursor-not-allowed"
+              >
+                <Send className="w-4 h-4" />
+                Submit Bracket
+              </button>
+            )}
+
+            {/* Auto-save hint — mobile only, when not complete */}
+            {!isComplete && (
+              <p className="md:hidden text-center text-xs text-fg/40 mt-1 flex items-center justify-center gap-1">
+                <Save className="w-3 h-3" />
+                Picks are saved automatically — come back anytime to finish
+              </p>
+            )}
           </div>
         </div>
       )}

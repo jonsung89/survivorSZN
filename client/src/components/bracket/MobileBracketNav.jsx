@@ -53,6 +53,11 @@ export default function MobileBracketNav({
     setDirection(dir ?? (targetIdx > roundIdx ? 'left' : 'right'));
     setIsAnimating(true);
     setRoundIdx(targetIdx);
+    // Scroll to top of the bracket content area
+    const navbarH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--navbar-height')) || 65;
+    const regionH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--region-tabs-height')) || 52;
+    const targetScroll = (contentRef.current?.closest('.md\\:hidden')?.offsetTop || 0) - navbarH - regionH;
+    window.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
   }, [totalRounds, isAnimating, roundIdx]);
 
   const goNext = useCallback(() => navigateTo(roundIdx + 1, 'left'), [navigateTo, roundIdx]);
@@ -94,7 +99,7 @@ export default function MobileBracketNav({
   return (
     <div className="flex flex-col">
       {/* Round selector tabs — sticky below region tabs */}
-      <div className="sticky top-[110px] z-10 bg-surface/95 backdrop-blur-sm px-3 pt-2 pb-2">
+      <div className="sticky z-10 bg-surface -mx-3 px-3 pt-0 pb-2" style={{ top: 'calc(var(--navbar-height, 65px) + var(--region-tabs-height, 52px))' }}>
         <div className="flex gap-1 overflow-x-auto no-scrollbar">
           {rounds.map((r, i) => (
             <button
@@ -103,18 +108,14 @@ export default function MobileBracketNav({
               disabled={isAnimating}
               className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
                 i === roundIdx
-                  ? 'bg-fg/15 text-fg border border-fg/15'
-                  : 'bg-fg/[0.04] text-fg/40 border border-transparent active:scale-95'
+                  ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white shadow-sm'
+                  : 'bg-fg/10 text-fg/60 border border-fg/10 active:scale-95'
               }`}
             >
-              {r.shortName || r.name}
+              {i === roundIdx ? r.name : (r.shortName || r.name)}
             </button>
           ))}
         </div>
-        {/* Round name */}
-        <p className="text-lg font-bold text-fg text-center mt-2">
-          {currentRound.name}
-        </p>
       </div>
 
       {/* Swipeable content area */}

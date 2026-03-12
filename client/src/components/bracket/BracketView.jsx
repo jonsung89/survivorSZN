@@ -7,7 +7,7 @@ import MobileBracketNav from './MobileBracketNav';
 import TiebreakerInput from './TiebreakerInput';
 import ChampionCard from './ChampionCard';
 import useBracketKeyboard from '../../hooks/useBracketKeyboard';
-import { Focus, ZoomIn, ZoomOut, RotateCcw, Keyboard } from 'lucide-react';
+import { Focus, ZoomIn, ZoomOut, RotateCcw, Keyboard, Maximize2, Smartphone } from 'lucide-react';
 
 const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25];
 
@@ -23,17 +23,36 @@ export default function BracketView({
   onTiebreakerChange,
 }) {
   const [mobileTab, setMobileTab] = useState(0);
+  const [mobileFullView, setMobileFullView] = useState(false);
   const [desktopTab, setDesktopTab] = useState(null); // null = show all (scroll mode)
   const [focusMode, setFocusMode] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const [showMiniMap, setShowMiniMap] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [mobileScale, setMobileScale] = useState(0.55);
   const scrollContainerRef = useRef(null);
   const zoomWrapperRef = useRef(null);
   const bracketGridRef = useRef(null);
+  const regionTabsRef = useRef(null);
+  const mobileGridRef = useRef(null);
+  const mobileWrapperRef = useRef(null);
+  const pinchRef = useRef({ startDist: 0, startScale: 0.55 });
   // Use data-driven regions from tournament data, fall back to defaults
   const regions = tournamentData?.regions?.length ? tournamentData.regions : DEFAULT_REGIONS;
   const structure = getBracketStructure(regions);
+
+  // Expose region tabs height as CSS variable for round tabs positioning
+  useEffect(() => {
+    const el = regionTabsRef.current;
+    if (!el) return;
+    const update = () => {
+      document.documentElement.style.setProperty('--region-tabs-height', `${el.offsetHeight}px`);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Sync zoom wrapper height to match the scaled grid height
   useEffect(() => {
@@ -50,6 +69,50 @@ export default function BracketView({
     ro.observe(grid);
     return () => ro.disconnect();
   }, [zoomLevel]);
+
+  // Pinch-to-zoom for mobile full bracket view
+  useEffect(() => {
+    const container = mobileWrapperRef.current;
+    if (!container || !mobileFullView) return;
+
+    const getDistance = (t1, t2) =>
+      Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+    const onTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        pinchRef.current.startDist = getDistance(e.touches[0], e.touches[1]);
+        pinchRef.current.startScale = mobileScale;
+      }
+    };
+
+    const onTouchMove = (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const dist = getDistance(e.touches[0], e.touches[1]);
+        const ratio = dist / pinchRef.current.startDist;
+        const newScale = Math.min(1.0, Math.max(0.3, pinchRef.current.startScale * ratio));
+        setMobileScale(newScale);
+      }
+    };
+
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+    };
+  }, [mobileFullView, mobileScale]);
+
+  // Update mobile wrapper height when scale changes
+  useEffect(() => {
+    const grid = mobileGridRef.current;
+    const wrapper = mobileWrapperRef.current;
+    if (!grid || !wrapper) return;
+    wrapper.style.height = `${grid.scrollHeight * mobileScale}px`;
+    wrapper.style.width = `${4800 * mobileScale}px`;
+  }, [mobileScale]);
 
   // Derive region tabs from structure (data-driven) — no separate Final Four tab
   const regionTabs = useMemo(
@@ -123,6 +186,44 @@ export default function BracketView({
   const resultFor = (slot) => results?.[slot] || results?.[String(slot)] || null;
   const pickedFor = (slot) => picks?.[slot] || picks?.[String(slot)] || null;
 
+  // Shared layout data (used by desktop render + mobile full bracket view)
+  const { topLeft, bottomLeft, topRight, bottomRight } = desktopLayout;
+  const { semifinalRegions, championship: champSlot } = structure.finalFour;
+  const leftSemi = semifinalRegions[0];
+  const rightSemi = semifinalRegions[1];
+  const colW = { width: '310px', minWidth: '310px' };
+
+  const f4DateRange = getRoundDateRange(
+    semifinalRegions.map(s => s.slot),
+    tournamentData,
+  );
+  const champDateRange = getRoundDateRange([champSlot], tournamentData);
+
+  const renderSemifinalCell = (semi, id, large = false) => (
+    <div id={id} className="row-span-2 flex flex-col flex-shrink-0" style={colW}>
+      <div className="text-center mb-4">
+        <div className={`${large ? 'text-2xl' : 'text-base'} font-bold text-fg/80`}>Final Four</div>
+        {f4DateRange && (
+          <div className={`${large ? 'text-lg' : 'text-sm'} text-fg/60 mt-0.5`}>{f4DateRange}</div>
+        )}
+      </div>
+      <div className="flex-1 flex items-center justify-center px-3">
+        <div style={{ width: '234px' }}>
+          <BracketMatchup
+            slot={semi.slot}
+            team1={teamsFor(semi.slot).team1}
+            team2={teamsFor(semi.slot).team2}
+            pickedTeamId={pickedFor(semi.slot)}
+            result={resultFor(semi.slot)}
+            onPick={(teamId) => onPick?.(semi.slot, teamId)}
+            onDetailClick={() => onMatchupClick?.(semi.slot)}
+            isReadOnly={isReadOnly}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
   // Map region names to their DOM id for scrolling
   const getRegionId = (idx) => {
     if (idx < structure.regions.length) {
@@ -193,48 +294,10 @@ export default function BracketView({
 
   // Desktop layout: 5-column grid
   const renderDesktop = () => {
-    const { topLeft, bottomLeft, topRight, bottomRight } = desktopLayout;
-    const { semifinalRegions, championship: champSlot } = structure.finalFour;
-    const leftSemi = semifinalRegions[0];
-    const rightSemi = semifinalRegions[1];
-
     const champPick = pickedFor(champSlot);
     const champTeam = champPick
       ? (tournamentData?.teams?.[champPick] || { id: champPick })
       : null;
-
-    const colW = { width: '310px', minWidth: '310px' };
-
-    const f4DateRange = getRoundDateRange(
-      semifinalRegions.map(s => s.slot),
-      tournamentData,
-    );
-    const champDateRange = getRoundDateRange([champSlot], tournamentData);
-
-    const renderSemifinalCell = (semi, id) => (
-      <div id={id} className="row-span-2 flex flex-col flex-shrink-0" style={colW}>
-        <div className="text-center mb-4">
-          <div className="text-base font-bold text-fg/80">Final Four</div>
-          {f4DateRange && (
-            <div className="text-sm text-fg/60 mt-0.5">{f4DateRange}</div>
-          )}
-        </div>
-        <div className="flex-1 flex items-center justify-center px-3">
-          <div style={{ width: '234px' }}>
-            <BracketMatchup
-              slot={semi.slot}
-              team1={teamsFor(semi.slot).team1}
-              team2={teamsFor(semi.slot).team2}
-              pickedTeamId={pickedFor(semi.slot)}
-              result={resultFor(semi.slot)}
-              onPick={(teamId) => onPick?.(semi.slot, teamId)}
-              onDetailClick={() => onMatchupClick?.(semi.slot)}
-              isReadOnly={isReadOnly}
-            />
-          </div>
-        </div>
-      </div>
-    );
 
     // In focus mode, render only the selected region + FF + Championship
     if (focusMode && desktopTab !== null && desktopTab < structure.regions.length) {
@@ -547,7 +610,7 @@ export default function BracketView({
   const renderMobile = () => (
     <div className="md:hidden">
       {/* Region tabs */}
-      <div className="sticky top-[66px] z-20 bg-surface/95 backdrop-blur-sm flex gap-1 mb-4 overflow-x-auto pb-2 pt-2 -mx-1 px-1">
+      <div ref={regionTabsRef} className="sticky z-20 bg-surface flex gap-1 overflow-x-auto pb-2 pt-2 -mx-3 px-3" style={{ top: 'var(--navbar-height, 65px)' }}>
         {regionTabs.map((tab, idx) => (
           <button
             key={tab}
@@ -555,7 +618,7 @@ export default function BracketView({
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
               mobileTab === idx
                 ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white shadow-sm'
-                : 'bg-fg/5 text-fg/50 border border-transparent hover:bg-fg/10'
+                : 'bg-fg/10 text-fg/70 border border-fg/10 hover:bg-fg/15'
             }`}
           >
             {tab}
@@ -605,7 +668,141 @@ export default function BracketView({
         />
       )}
 
-      {renderMobile()}
+      {/* Mobile: full bracket view toggle */}
+      {mobileFullView ? (
+        <div className="md:hidden">
+          {/* Sticky region tabs for full bracket view */}
+          <div className="sticky z-20 bg-surface flex items-center gap-1 -mx-3 px-3 pt-2 pb-2" style={{ top: 'var(--navbar-height, 65px)' }}>
+            {regionTabs.map((tab, idx) => (
+              <button
+                key={tab}
+                onClick={() => {
+                  // Scroll to the region in the full bracket
+                  // Regions layout: topLeft(0)=row1-left, topRight(2)=row1-right, bottomLeft(1)=row2-left, bottomRight(3)=row2-right
+                  const regionEl = document.getElementById(`mobile-full-region-${idx}`);
+                  const scrollContainer = regionEl?.closest('.overflow-auto');
+                  if (regionEl && scrollContainer) {
+                    const navbarH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--navbar-height')) || 65;
+                    const tabBarH = 50;
+                    // The element rect is already in viewport coords (scale applied by browser)
+                    const rect = regionEl.getBoundingClientRect();
+                    const scrollY = rect.top + window.scrollY - navbarH - tabBarH;
+                    window.scrollTo({ top: Math.max(0, scrollY), behavior: 'smooth' });
+                    // Also scroll horizontally: right-side regions need to scroll right
+                    const isRightSide = regionEl === document.getElementById(`mobile-full-region-${structure.regions.indexOf(topRight)}`) ||
+                                        regionEl === document.getElementById(`mobile-full-region-${structure.regions.indexOf(bottomRight)}`);
+                    if (isRightSide) {
+                      scrollContainer.scrollTo({ left: scrollContainer.scrollWidth, behavior: 'smooth' });
+                    } else {
+                      scrollContainer.scrollTo({ left: 0, behavior: 'smooth' });
+                    }
+                  }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 bg-fg/10 text-fg/70 border border-fg/10 hover:bg-fg/15 active:scale-95"
+              >
+                {tab}
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-1">
+              {mobileScale !== 0.55 && (
+                <button
+                  onClick={() => setMobileScale(0.55)}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-fg/10 text-fg/50 text-xs font-mono active:scale-95 transition-transform whitespace-nowrap"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  {Math.round(mobileScale * 100)}%
+                </button>
+              )}
+              <button
+                onClick={() => setMobileFullView(false)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-fg/10 text-fg/70 text-xs font-semibold border border-fg/10 active:scale-95 transition-transform whitespace-nowrap"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                Mobile View
+              </button>
+            </div>
+          </div>
+          <div className="overflow-auto -mx-3 pb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div ref={(el) => {
+              mobileWrapperRef.current = el;
+              // Auto-size the container height to match the scaled grid
+              if (el) {
+                const grid = el.firstElementChild;
+                if (grid) {
+                  requestAnimationFrame(() => {
+                    el.style.height = `${grid.scrollHeight * mobileScale}px`;
+                    el.style.width = `${4800 * mobileScale}px`;
+                  });
+                }
+              }
+            }}>
+              <div
+                ref={mobileGridRef}
+                className="grid grid-cols-[1fr_310px_310px_310px_1fr] gap-y-6 pt-4"
+                style={{ width: '4800px', transform: `scale(${mobileScale})`, transformOrigin: 'top left' }}
+              >
+                {/* Row 1 */}
+                <div id={`mobile-full-region-${structure.regions.indexOf(topLeft)}`}>
+                  <BracketRegion region={topLeft} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" showRoundHeaders cellWidth={380} largeHeaders />
+                </div>
+                {renderSemifinalCell(leftSemi, undefined, true)}
+                <div className="row-span-2 flex flex-col flex-shrink-0" style={colW}>
+                  <div className="text-center mb-4">
+                    <div className="text-2xl font-bold text-fg/80">Championship</div>
+                    {champDateRange && (
+                      <div className="text-lg text-fg/60 mt-0.5">{champDateRange}</div>
+                    )}
+                  </div>
+                  <div className="flex-1 flex items-center justify-center px-3">
+                    <div className="flex flex-col items-center gap-4" style={{ width: '234px' }}>
+                      <div className="w-full">
+                        <BracketMatchup
+                          slot={champSlot}
+                          team1={teamsFor(champSlot).team1}
+                          team2={teamsFor(champSlot).team2}
+                          pickedTeamId={pickedFor(champSlot)}
+                          result={resultFor(champSlot)}
+                          onPick={(teamId) => onPick?.(champSlot, teamId)}
+                          onDetailClick={() => onMatchupClick?.(champSlot)}
+                          isReadOnly={isReadOnly}
+                        />
+                      </div>
+                      {pickedFor(champSlot) && (
+                        <ChampionCard team={tournamentData?.teams?.[pickedFor(champSlot)]} />
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {renderSemifinalCell(rightSemi, undefined, true)}
+                <div id={`mobile-full-region-${structure.regions.indexOf(topRight)}`}>
+                  <BracketRegion region={topRight} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" showRoundHeaders cellWidth={380} largeHeaders />
+                </div>
+                {/* Row 2 — cols 2-4 already occupied by row-span-2 items above */}
+                <div id={`mobile-full-region-${structure.regions.indexOf(bottomLeft)}`}>
+                  <BracketRegion region={bottomLeft} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" cellWidth={380} />
+                </div>
+                <div id={`mobile-full-region-${structure.regions.indexOf(bottomRight)}`}>
+                  <BracketRegion region={bottomRight} picks={picks} results={results} tournamentData={tournamentData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" cellWidth={380} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* View full bracket button — mobile only, above region tabs */}
+          <div className="md:hidden flex justify-end -mx-3 px-3 pb-1 bg-surface">
+            <button
+              onClick={() => setMobileFullView(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-fg/10 text-fg/70 text-xs font-semibold border border-fg/10 active:scale-95 transition-transform"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              View Full Bracket
+            </button>
+          </div>
+          {renderMobile()}
+        </>
+      )}
     </div>
   );
 }

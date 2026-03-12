@@ -35,6 +35,20 @@ export default function Navbar() {
   const [saving, setSaving] = useState(false);
   
   const dropdownRef = useRef(null);
+  const navRef = useRef(null);
+
+  // Expose navbar height as CSS variable for sticky elements below
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const update = () => {
+      document.documentElement.style.setProperty('--navbar-height', `${el.offsetHeight}px`);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -89,7 +103,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="glass-card sticky top-0 z-50">
+      <nav ref={navRef} className="bg-surface sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}

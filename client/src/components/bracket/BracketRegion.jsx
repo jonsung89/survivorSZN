@@ -33,6 +33,8 @@ export default function BracketRegion({
   isReadOnly,
   side = 'left', // 'left' or 'right' — controls bracket connector direction
   showRoundHeaders = false,
+  cellWidth = 260, // px width of each match cell
+  largeHeaders = false, // larger font sizes for scaled-down views
 }) {
   // Rounds within a region: R64 (8 games), R32 (4), S16 (2), E8 (1)
   const rounds = region.rounds;
@@ -73,7 +75,7 @@ export default function BracketRegion({
       <div
         key={roundData.round}
         className={`flex flex-col justify-around ${gapClasses} flex-shrink-0`}
-        style={{ width: '260px', minWidth: '260px' }}
+        style={{ width: `${cellWidth}px`, minWidth: `${cellWidth}px` }}
       >
         {slots.map((slot) => {
           const { team1, team2 } = getTeamsForSlot(slot);
@@ -124,13 +126,13 @@ export default function BracketRegion({
               <div
                 key={roundData.round}
                 className="text-center flex-shrink-0"
-                style={{ width: '260px', minWidth: '260px' }}
+                style={{ width: `${cellWidth}px`, minWidth: `${cellWidth}px` }}
               >
-                <div className="text-base font-bold text-fg/80">
+                <div className={`${largeHeaders ? 'text-2xl' : 'text-base'} font-bold text-fg/80`}>
                   {roundData.name}
                 </div>
                 {dateRange && (
-                  <div className="text-sm text-fg/60 mt-0.5">{dateRange}</div>
+                  <div className={`${largeHeaders ? 'text-lg' : 'text-sm'} text-fg/60 mt-0.5`}>{dateRange}</div>
                 )}
               </div>
             );
@@ -140,7 +142,7 @@ export default function BracketRegion({
 
       {/* Region header */}
       <div className="text-center mb-5">
-        <h3 className="text-2xl font-display font-bold text-fg/80 uppercase tracking-wider">
+        <h3 className={`${largeHeaders ? 'text-4xl' : 'text-2xl'} font-display font-bold text-fg/80 uppercase tracking-wider`}>
           {region.name}
         </h3>
       </div>

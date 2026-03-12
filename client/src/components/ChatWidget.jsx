@@ -303,17 +303,27 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     }
   }, [messages]);
 
-  // Measure bottom bar height and expose as CSS variable
+  // Measure bottom bar height and expose as CSS variable (ResizeObserver for dynamic viewport)
   useEffect(() => {
-    if (bottomBarRef.current) {
-      const h = bottomBarRef.current.offsetHeight;
+    const el = bottomBarRef.current;
+    if (!el) return;
+    const update = () => {
+      const h = el.offsetHeight;
       setBottomBarHeight(h);
       document.documentElement.style.setProperty('--chat-bar-height', `${h}px`);
-    }
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    // Also update on visualViewport resize (Chrome bottom bar show/hide)
+    const vv = window.visualViewport;
+    if (vv) vv.addEventListener('resize', update);
     return () => {
+      ro.disconnect();
+      if (vv) vv.removeEventListener('resize', update);
       document.documentElement.style.removeProperty('--chat-bar-height');
     };
-  });
+  }, []);
 
   // Scroll to bottom when resizing sheet
   useEffect(() => {

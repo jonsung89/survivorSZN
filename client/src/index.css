@@ -89,7 +89,7 @@ body {
 
 /* Bracket submit bar - sits above the chat widget on mobile */
 .bracket-submit-bar {
-  bottom: var(--chat-bar-height, 101px);
+  bottom: calc(var(--chat-bar-height, 101px) + 4px);
 }
 @media (min-width: 768px) {
   .bracket-submit-bar {

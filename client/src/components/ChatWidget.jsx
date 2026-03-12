@@ -303,11 +303,16 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     }
   }, [messages]);
 
-  // Measure bottom bar height
+  // Measure bottom bar height and expose as CSS variable
   useEffect(() => {
     if (bottomBarRef.current) {
-      setBottomBarHeight(bottomBarRef.current.offsetHeight);
+      const h = bottomBarRef.current.offsetHeight;
+      setBottomBarHeight(h);
+      document.documentElement.style.setProperty('--chat-bar-height', `${h}px`);
     }
+    return () => {
+      document.documentElement.style.removeProperty('--chat-bar-height');
+    };
   });
 
   // Scroll to bottom when resizing sheet

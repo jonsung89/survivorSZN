@@ -68,7 +68,11 @@ body {
     rgb(var(--color-body-via)) 50%,
     rgb(var(--color-body-to)) 100%
   );
-  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: 100vh; /* fallback for older browsers */
+  @supports (min-height: 100dvh) {
+    min-height: 100dvh;
+  }
   color: rgb(var(--color-text-primary));
 }
 
@@ -80,6 +84,16 @@ body {
   
   .pb-safe {
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Bracket submit bar - sits above the chat widget on mobile */
+.bracket-submit-bar {
+  bottom: var(--chat-bar-height, 101px);
+}
+@media (min-width: 768px) {
+  .bracket-submit-bar {
+    bottom: 0;
   }
 }
 

@@ -340,7 +340,7 @@ export default function BracketFill() {
 
       {/* Bottom bar (for filling) */}
       {!isReadOnly && isOwner && (
-        <div className="fixed bottom-[101px] left-0 right-0 z-50 py-2 px-4 bg-canvas/95 backdrop-blur border-t border-fg/10 md:sticky md:bottom-0 md:z-30 md:left-auto md:right-auto md:mt-4 md:-mx-4 md:py-3 md:pb-safe">
+        <div className="bracket-submit-bar fixed left-0 right-0 z-50 py-2 px-4 bg-canvas/95 backdrop-blur border-t border-fg/10 md:sticky md:!bottom-0 md:z-30 md:left-auto md:right-auto md:mt-4 md:-mx-4 md:py-3 md:pb-safe">
           <div className="max-w-[1400px] mx-auto">
             {/* Progress */}
             <div className="flex items-center justify-between mb-3">

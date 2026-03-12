@@ -13,6 +13,9 @@ export default {
   secondaryGradient: 'from-gray-800/20 to-gray-950/20',
   borderColor: 'border-gray-600/30',
   badgeClasses: 'bg-slate-400/15 text-slate-400',
+  logo: '/logos/nhl.png',
+  logoHeight: 28,
+  logoDarkClass: 'dark:brightness-[1.6]',
   accentColor: '#000000',
 
   // Sport-specific config

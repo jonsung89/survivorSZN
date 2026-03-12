@@ -3,7 +3,10 @@ const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
 const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, generateConciseReport, generateAllReports, getStoredReport } = require('../services/ncaab-tournament');
-const { SCORING_PRESETS, calculateBracketScore, calculatePotentialPoints, getSlotRound, countPicks } = require('../utils/bracket-slots');
+const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, countPicks } = require('../utils/bracket-slots');
+
+// Total games in the bracket (derived from round boundaries)
+const TOTAL_BRACKET_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
 
 const getUser = async (req) => {
   return db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
@@ -283,10 +286,10 @@ router.post('/:bracketId/submit', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Entry deadline has passed' });
     }
 
-    // Validate all 63 picks are filled
+    // Validate all picks are filled
     const pickCount = countPicks(bracket.picks || {});
-    if (pickCount < 63) {
-      return res.status(400).json({ error: `Bracket is incomplete. ${pickCount}/63 picks made.` });
+    if (pickCount < TOTAL_BRACKET_GAMES) {
+      return res.status(400).json({ error: `Bracket is incomplete. ${pickCount}/${TOTAL_BRACKET_GAMES} picks made.` });
     }
 
     // Validate tiebreaker

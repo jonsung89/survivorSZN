@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Settings, Trophy, Clock, Hash, ChevronDown, DollarSign } from 'lucide-react';
-import { SCORING_PRESETS, TIEBREAKER_TYPES } from '../../utils/bracketSlots';
+import { SCORING_PRESETS, TIEBREAKER_TYPES, ROUND_BOUNDARIES } from '../../utils/bracketSlots';
 
-const ROUND_LABELS = ['R64', 'R32', 'Sweet 16', 'Elite 8', 'Final Four', 'Championship'];
+const ROUND_LABELS = ROUND_BOUNDARIES.map(rb => rb.shortName);
 
 export default function BracketSetup({ config, onChange }) {
   const [showCustomScoring, setShowCustomScoring] = useState(config.scoringPreset === 'custom');
@@ -12,7 +12,7 @@ export default function BracketSetup({ config, onChange }) {
     if (field === 'scoringPreset') {
       if (value === 'custom') {
         setShowCustomScoring(true);
-        updated.customScoring = config.customScoring || [1, 2, 4, 8, 16, 32];
+        updated.customScoring = config.customScoring || SCORING_PRESETS.standard.points;
       } else {
         setShowCustomScoring(false);
         updated.customScoring = null;
@@ -22,7 +22,7 @@ export default function BracketSetup({ config, onChange }) {
   };
 
   const handleCustomScoringChange = (roundIdx, value) => {
-    const scoring = [...(config.customScoring || [1, 2, 4, 8, 16, 32])];
+    const scoring = [...(config.customScoring || SCORING_PRESETS.standard.points)];
     scoring[roundIdx] = parseInt(value) || 0;
     handleChange('customScoring', scoring);
     // Also keep preset as custom
@@ -89,7 +89,7 @@ export default function BracketSetup({ config, onChange }) {
         <div className="mt-3 grid grid-cols-6 gap-1.5">
           {ROUND_LABELS.map((label, idx) => {
             const points = showCustomScoring
-              ? (config.customScoring || [1, 2, 4, 8, 16, 32])[idx]
+              ? (config.customScoring || SCORING_PRESETS.standard.points)[idx]
               : (SCORING_PRESETS[config.scoringPreset]?.points || SCORING_PRESETS.standard.points)[idx];
             return (
               <div key={label} className="text-center">

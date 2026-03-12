@@ -13,6 +13,7 @@
     "seed": "node server/seed.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^9.4.3",
     "cors": "^2.8.5",

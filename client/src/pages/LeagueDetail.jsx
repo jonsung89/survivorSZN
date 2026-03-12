@@ -17,6 +17,7 @@ import Avatar from '../components/Avatar';
 import { getSportModule } from '../sports';
 import { useThemedLogo } from '../utils/logo';
 import AppIcon from '../components/AppIcon';
+import CommishBadge from '../components/CommishBadge';
 
 export default function LeagueDetail() {
   const { leagueId } = useParams();
@@ -748,12 +749,7 @@ export default function LeagueDetail() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="font-display text-xl sm:text-3xl font-bold text-fg truncate">{league.name}</h1>
-              {isCommissioner && (
-                <span className="badge badge-active text-xs flex items-center gap-1">
-                  <Crown className="w-3 h-3" />
-                  Commish
-                </span>
-              )}
+              {isCommissioner && <CommishBadge />}
             </div>
             <p className="text-fg/60 text-sm sm:text-base">
               {league.members?.length || 0} members • {league.maxStrikes} strike{league.maxStrikes !== 1 ? 's' : ''} max

@@ -13,6 +13,8 @@ export default {
   secondaryGradient: 'from-blue-800/20 to-blue-950/20',
   borderColor: 'border-mlb-blue/30',
   badgeClasses: 'bg-red-400/15 text-red-400',
+  logo: '/logos/mlb.png',
+  logoHeight: 24,
   accentColor: '#002D72',
 
   // Sport-specific config

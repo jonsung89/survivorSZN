@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil } from 'lucide-react';
 import { bracketAPI } from '../api';
+import { ROUND_BOUNDARIES } from '../utils/bracketSlots';
 import { useAuth } from '../context/AuthContext';
+
+const TOTAL_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
 import BracketView from '../components/bracket/BracketView';
 import BracketScoreHeader from '../components/bracket/BracketScoreHeader';
 import MatchupDetailDialog from '../components/bracket/MatchupDetailDialog';
-import TiebreakerInput from '../components/bracket/TiebreakerInput';
 import ChatWidget from '../components/ChatWidget';
 import {
   countPicks,
@@ -197,8 +199,8 @@ export default function BracketFill() {
   };
 
   const handleSubmit = async () => {
-    if (pickCount < 63) {
-      showToast(`Complete all picks first (${pickCount}/63)`, 'error');
+    if (pickCount < TOTAL_GAMES) {
+      showToast(`Complete all picks first (${pickCount}/${TOTAL_GAMES})`, 'error');
       return;
     }
     if (challenge?.tiebreaker_type === 'total_score' && !tiebreakerValue) {
@@ -245,8 +247,8 @@ export default function BracketFill() {
     ? calculatePotentialPoints(picks, results, scoringSystem)
     : null;
 
-  const progressPct = Math.round((pickCount / 63) * 100);
-  const isComplete = pickCount >= 63;
+  const progressPct = Math.round((pickCount / TOTAL_GAMES) * 100);
+  const isComplete = pickCount >= TOTAL_GAMES;
 
   return (
     <div className={`max-w-[1400px] mx-auto px-3 sm:px-4 py-4 sm:py-6 transition-[padding] duration-300 lg:mx-0 lg:max-w-none lg:pl-6 ${
@@ -322,7 +324,7 @@ export default function BracketFill() {
       )}
 
       {/* Bracket */}
-      <div className="-mx-3 sm:-mx-4 px-3 sm:px-4 py-4 bg-fg/[0.03] rounded-xl">
+      <div className="-mx-3 sm:-mx-4 px-3 sm:px-4 py-4 pb-40 md:pb-4 bg-fg/[0.03] rounded-xl">
         <BracketView
           tournamentData={tournamentData}
           picks={picks}
@@ -330,18 +332,21 @@ export default function BracketFill() {
           onPick={handlePick}
           onMatchupClick={handleMatchupClick}
           isReadOnly={isReadOnly}
+          tiebreakerType={challenge?.tiebreaker_type}
+          tiebreakerValue={tiebreakerValue}
+          onTiebreakerChange={handleTiebreakerChange}
         />
       </div>
 
       {/* Bottom bar (for filling) */}
       {!isReadOnly && isOwner && (
-        <div className="sticky bottom-0 z-30 mt-4 py-3 px-4 -mx-3 sm:-mx-4 bg-canvas/95 backdrop-blur border-t border-fg/10 pb-safe">
+        <div className="fixed bottom-[101px] left-0 right-0 z-50 py-2 px-4 bg-canvas/95 backdrop-blur border-t border-fg/10 md:sticky md:bottom-0 md:z-30 md:left-auto md:right-auto md:mt-4 md:-mx-4 md:py-3 md:pb-safe">
           <div className="max-w-[1400px] mx-auto">
             {/* Progress */}
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm text-fg/60">
                 <span className="font-mono font-bold text-fg">{pickCount}</span>
-                <span>/63 picks</span>
+                <span>/{TOTAL_GAMES} picks</span>
               </div>
               <div className="flex-1 mx-4 h-2 rounded-full bg-fg/10 overflow-hidden">
                 <div
@@ -358,22 +363,10 @@ export default function BracketFill() {
               </div>
             </div>
 
-            {/* Tiebreaker */}
-            {isComplete && challenge?.tiebreaker_type === 'total_score' && (
-              <div className="mb-3">
-                <TiebreakerInput
-                  type={challenge.tiebreaker_type}
-                  value={tiebreakerValue}
-                  onChange={handleTiebreakerChange}
-                  disabled={isReadOnly}
-                />
-              </div>
-            )}
-
             {/* Submit */}
             <button
               onClick={() => setShowSubmitConfirm(true)}
-              disabled={pickCount < 63 || (challenge?.tiebreaker_type === 'total_score' && !tiebreakerValue)}
+              disabled={pickCount < TOTAL_GAMES || (challenge?.tiebreaker_type === 'total_score' && !tiebreakerValue)}
               className={`btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed ${
                 isComplete ? 'shadow-[0_0_16px_rgba(139,92,246,0.3)]' : ''
               }`}

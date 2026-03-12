@@ -1,4 +1,6 @@
 import BracketMatchup from './BracketMatchup';
+import TiebreakerInput from './TiebreakerInput';
+import ChampionCard from './ChampionCard';
 import { getMatchupTeams } from '../../utils/bracketSlots';
 
 /**
@@ -13,6 +15,10 @@ export default function MobileBracketRoundPage({
   onPick,
   onMatchupClick,
   isReadOnly,
+  champTeam,
+  tiebreakerType,
+  tiebreakerValue,
+  onTiebreakerChange,
 }) {
   const getTeamsForSlot = (slot) => getMatchupTeams(slot, picks, tournamentData);
 
@@ -30,6 +36,9 @@ export default function MobileBracketRoundPage({
     if (comp) return { ...team, score: comp.score };
     return team;
   };
+
+  // Check if this is the Championship round (slot 63)
+  const isChampionshipRound = slots.length === 1 && slots[0] === 63;
 
   return (
     <div className="flex flex-col gap-3 px-2">
@@ -60,6 +69,27 @@ export default function MobileBracketRoundPage({
           />
         );
       })}
+
+      {/* Championship extras: Tiebreaker + Champion */}
+      {isChampionshipRound && (
+        <>
+          {tiebreakerType === 'total_score' && (
+            <div className="mt-2">
+              <TiebreakerInput
+                type={tiebreakerType}
+                value={tiebreakerValue}
+                onChange={onTiebreakerChange}
+                disabled={isReadOnly}
+                picks={picks}
+                tournamentData={tournamentData}
+              />
+            </div>
+          )}
+          <div className="mt-2 mx-auto max-w-xs w-full">
+            <ChampionCard team={champTeam} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

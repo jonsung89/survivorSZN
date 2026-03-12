@@ -21,6 +21,12 @@ import Schedule from './pages/Schedule';
 import Loading from './components/Loading';
 import Onboarding from './components/Onboarding';
 import EmailPrompt from './components/EmailPrompt';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminLeagues from './pages/admin/AdminLeagues';
+import AdminReports from './pages/admin/AdminReports';
+import AdminBracketTest from './pages/admin/AdminBracketTest';
 
 // Protected route wrapper
 function ProtectedRoute({ children }) {
@@ -82,6 +88,14 @@ function AppLayout({ children, hideFooterMobile = false }) {
       </div>
     </div>
   );
+}
+
+// Admin route wrapper — requires admin role
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <Loading fullScreen />;
+  if (!user || !user.isAdmin) return <Navigate to="/dashboard" replace />;
+  return children;
 }
 
 // Redirect root based on auth state
@@ -177,6 +191,15 @@ function AppRoutes() {
         </AppLayout>
       } />
       
+      {/* Admin panel */}
+      <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+        <Route index element={<AdminDashboard />} />
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="leagues" element={<AdminLeagues />} />
+        <Route path="reports" element={<AdminReports />} />
+        <Route path="bracket-test" element={<AdminBracketTest />} />
+      </Route>
+
       {/* Redirect root to dashboard (logged in) or schedule (public) */}
       <Route path="/" element={<RootRedirect />} />
       

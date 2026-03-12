@@ -106,6 +106,11 @@ export const leagueAPI = {
     return res.json();
   },
 
+  getMembersSummary: async (leagueId) => {
+    const res = await authFetch(`/leagues/${leagueId}/members-summary`);
+    return res.json();
+  },
+
   updateSettings: async (leagueId, settings) => {
     const res = await authFetch(`/leagues/${leagueId}/settings`, {
       method: 'PUT',
@@ -446,6 +451,68 @@ export const bracketAPI = {
   },
 };
 
+// Admin API
+export const adminAPI = {
+  getStats: async () => {
+    const res = await authFetch('/admin/stats');
+    return res.json();
+  },
+  getUsers: async (params = {}) => {
+    const res = await authFetch(`/admin/users?${new URLSearchParams(params)}`);
+    return res.json();
+  },
+  getUser: async (id) => {
+    const res = await authFetch(`/admin/users/${id}`);
+    return res.json();
+  },
+  getLeagues: async (params = {}) => {
+    const res = await authFetch(`/admin/leagues?${new URLSearchParams(params)}`);
+    return res.json();
+  },
+  getLeague: async (id) => {
+    const res = await authFetch(`/admin/leagues/${id}`);
+    return res.json();
+  },
+  getReports: async (season) => {
+    const res = await authFetch(`/admin/reports?season=${season}`);
+    return res.json();
+  },
+  getReport: async (teamId, season) => {
+    const res = await authFetch(`/admin/reports/${teamId}?season=${season}`);
+    return res.json();
+  },
+  generateReports: async (body = {}) => {
+    const res = await authFetch('/admin/reports/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  },
+  getChallenges: async () => {
+    const res = await authFetch('/admin/challenges');
+    return res.json();
+  },
+  getChallenge: async (id) => {
+    const res = await authFetch(`/admin/challenges/${id}`);
+    return res.json();
+  },
+  setResult: async (challengeId, body) => {
+    const res = await authFetch(`/admin/challenges/${challengeId}/set-result`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  },
+  deleteLeague: async (id) => {
+    const res = await authFetch(`/admin/leagues/${id}`, { method: 'DELETE' });
+    return res.json();
+  },
+  deleteChallenge: async (id) => {
+    const res = await authFetch(`/admin/challenges/${id}`, { method: 'DELETE' });
+    return res.json();
+  },
+};
+
 export default {
   auth: authAPI,
   league: leagueAPI,
@@ -455,5 +522,6 @@ export default {
   user: userAPI,
   notification: notificationAPI,
   sports: sportsAPI,
-  bracket: bracketAPI
+  bracket: bracketAPI,
+  admin: adminAPI,
 };

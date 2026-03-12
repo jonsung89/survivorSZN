@@ -1,12 +1,13 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { getBracketStructure, getMatchupTeams, getRegionForSlot, REGIONS } from '../../utils/bracketSlots';
+import { getBracketStructure, getMatchupTeams, getRegionForSlot, DEFAULT_REGIONS } from '../../utils/bracketSlots';
 import BracketRegion, { getRoundDateRange } from './BracketRegion';
-import BracketFinalFour from './BracketFinalFour';
 import BracketMatchup from './BracketMatchup';
 import BracketMiniMap from './BracketMiniMap';
 import MobileBracketNav from './MobileBracketNav';
+import TiebreakerInput from './TiebreakerInput';
+import ChampionCard from './ChampionCard';
 import useBracketKeyboard from '../../hooks/useBracketKeyboard';
-import { Trophy, Focus, ZoomIn, ZoomOut, RotateCcw, Keyboard } from 'lucide-react';
+import { Focus, ZoomIn, ZoomOut, RotateCcw, Keyboard } from 'lucide-react';
 
 const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25];
 
@@ -17,6 +18,9 @@ export default function BracketView({
   onPick,
   onMatchupClick,
   isReadOnly,
+  tiebreakerType,
+  tiebreakerValue,
+  onTiebreakerChange,
 }) {
   const [mobileTab, setMobileTab] = useState(0);
   const [desktopTab, setDesktopTab] = useState(null); // null = show all (scroll mode)
@@ -27,7 +31,9 @@ export default function BracketView({
   const scrollContainerRef = useRef(null);
   const zoomWrapperRef = useRef(null);
   const bracketGridRef = useRef(null);
-  const structure = getBracketStructure();
+  // Use data-driven regions from tournament data, fall back to defaults
+  const regions = tournamentData?.regions?.length ? tournamentData.regions : DEFAULT_REGIONS;
+  const structure = getBracketStructure(regions);
 
   // Sync zoom wrapper height to match the scaled grid height
   useEffect(() => {
@@ -45,9 +51,22 @@ export default function BracketView({
     return () => ro.disconnect();
   }, [zoomLevel]);
 
-  // Derive region tabs from structure (data-driven)
+  // Derive region tabs from structure (data-driven) — no separate Final Four tab
   const regionTabs = useMemo(
-    () => [...structure.regions.map(r => r.name), 'Final Four'],
+    () => structure.regions.map(r => r.name),
+    [structure]
+  );
+
+  // Build enhanced regions with Final Four + Championship appended as swipeable rounds
+  const enhancedRegions = useMemo(
+    () => structure.regions.map(r => ({
+      ...r,
+      rounds: [
+        ...r.rounds,
+        { round: 4, name: 'Final Four', shortName: 'F4', slots: [...structure.finalFour.semifinals] },
+        { round: 5, name: 'Championship', shortName: 'CHAMP', slots: [structure.finalFour.championship] },
+      ],
+    })),
     [structure]
   );
 
@@ -68,22 +87,27 @@ export default function BracketView({
   }, [structure]);
 
   // Compute per-region pick counts and totals for progress tracker
+  // Each region has 15 regional picks + 3 FF/Championship picks = 18 total
   const regionProgress = useMemo(() => {
     const regionCount = structure.regions.length;
-    const counts = new Array(regionCount + 1).fill(0);
-    const totals = [...structure.regions.map(() => 15), 3];
+    const ffSlots = [...structure.finalFour.semifinals, structure.finalFour.championship];
+    const counts = new Array(regionCount).fill(0);
+    const totals = structure.regions.map(() => 15 + ffSlots.length); // 15 + 3 = 18
 
     if (picks) {
       for (let slot = 1; slot <= 60; slot++) {
         if (picks[slot] || picks[String(slot)]) {
           const regionName = getRegionForSlot(slot);
-          const regionIdx = REGIONS.indexOf(regionName);
+          const regionIdx = regions.indexOf(regionName);
           if (regionIdx >= 0 && regionIdx < regionCount) counts[regionIdx]++;
         }
       }
-      for (const slot of [...structure.finalFour.semifinals, structure.finalFour.championship]) {
-        if (picks[slot] || picks[String(slot)]) counts[regionCount]++;
+      // Count FF/Championship picks in every region (they're shared)
+      let ffCount = 0;
+      for (const slot of ffSlots) {
+        if (picks[slot] || picks[String(slot)]) ffCount++;
       }
+      for (let i = 0; i < regionCount; i++) counts[i] += ffCount;
     }
 
     return { counts, totals };
@@ -212,67 +236,9 @@ export default function BracketView({
       </div>
     );
 
-    // In focus mode, render only the selected region
-    if (focusMode && desktopTab !== null) {
-      const isFinalFour = desktopTab >= structure.regions.length;
-
-      if (isFinalFour) {
-        return (
-          <div className="hidden md:block pb-4 animate-fade-in">
-            <div className="flex justify-center gap-6">
-              {renderSemifinalCell(leftSemi)}
-
-              <div className="flex flex-col flex-shrink-0" style={colW}>
-                <div className="text-center mb-4">
-                  <div className="text-base font-bold text-fg/80">Championship</div>
-                  {champDateRange && (
-                    <div className="text-sm text-fg/60 mt-0.5">{champDateRange}</div>
-                  )}
-                </div>
-                <div className="flex-1 flex items-center px-3">
-                  <div className="w-full flex flex-col items-center gap-4">
-                    <div className="w-full">
-                      <BracketMatchup
-                        slot={champSlot}
-                        team1={teamsFor(champSlot).team1}
-                        team2={teamsFor(champSlot).team2}
-                        pickedTeamId={pickedFor(champSlot)}
-                        result={resultFor(champSlot)}
-                        onPick={(teamId) => onPick?.(champSlot, teamId)}
-                        onDetailClick={() => onMatchupClick?.(champSlot)}
-                        isReadOnly={isReadOnly}
-                      />
-                    </div>
-                    {champTeam && (
-                      <div className="text-center animate-in">
-                        <div className="text-sm text-amber-400 font-bold uppercase tracking-wider mb-2">Champion</div>
-                        <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-xl bg-amber-400/10 border border-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.15)] animate-champion-glow">
-                          <Trophy className="w-6 h-6 text-amber-400" />
-                          {champTeam.logo && (
-                            <img src={champTeam.logo} alt="" className="w-14 h-14 object-contain" />
-                          )}
-                          <span className="text-lg font-display font-bold text-fg">
-                            {champTeam.name || champTeam.abbreviation || 'Champion'}
-                          </span>
-                          {champTeam.seed && (
-                            <span className="text-sm text-fg/40">#{champTeam.seed} seed</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {renderSemifinalCell(rightSemi)}
-            </div>
-          </div>
-        );
-      }
-
-      // Single region focus
+    // In focus mode, render only the selected region + FF + Championship
+    if (focusMode && desktopTab !== null && desktopTab < structure.regions.length) {
       const regionData = structure.regions[desktopTab];
-      const regionIdx = structure.regions.indexOf(regionData);
       // Determine side from layout
       const isRightSide = regionData === topRight || regionData === bottomRight;
 
@@ -289,6 +255,51 @@ export default function BracketView({
             side={isRightSide ? 'right' : 'left'}
             showRoundHeaders
           />
+
+          {/* Final Four + Championship after region in focus mode */}
+          <div className="flex justify-center gap-6 mt-8">
+            {renderSemifinalCell(leftSemi)}
+
+            <div className="flex flex-col flex-shrink-0" style={colW}>
+              <div className="text-center mb-4">
+                <div className="text-base font-bold text-fg/80">Championship</div>
+                {champDateRange && (
+                  <div className="text-sm text-fg/60 mt-0.5">{champDateRange}</div>
+                )}
+              </div>
+              <div className="flex-1 flex items-center justify-center px-3">
+                <div className="flex flex-col items-center gap-4" style={{ width: '234px' }}>
+                  <div className="w-full">
+                    <BracketMatchup
+                      slot={champSlot}
+                      team1={teamsFor(champSlot).team1}
+                      team2={teamsFor(champSlot).team2}
+                      pickedTeamId={pickedFor(champSlot)}
+                      result={resultFor(champSlot)}
+                      onPick={(teamId) => onPick?.(champSlot, teamId)}
+                      onDetailClick={() => onMatchupClick?.(champSlot)}
+                      isReadOnly={isReadOnly}
+                    />
+                  </div>
+                  {tiebreakerType === 'total_score' && (
+                    <div className="w-full">
+                      <TiebreakerInput
+                        type={tiebreakerType}
+                        value={tiebreakerValue}
+                        onChange={onTiebreakerChange}
+                        disabled={isReadOnly}
+                        picks={picks}
+                        tournamentData={tournamentData}
+                      />
+                    </div>
+                  )}
+                  <ChampionCard team={champTeam} />
+                </div>
+              </div>
+            </div>
+
+            {renderSemifinalCell(rightSemi)}
+          </div>
         </div>
       );
     }
@@ -350,24 +361,20 @@ export default function BracketView({
                   />
                 </div>
 
-                {/* Champion Display */}
-                {champTeam && (
-                  <div className="text-center animate-in">
-                    <div className="text-sm text-amber-400 font-bold uppercase tracking-wider mb-2">Champion</div>
-                    <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-xl bg-amber-400/10 border border-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.15)] animate-champion-glow">
-                      <Trophy className="w-6 h-6 text-amber-400" />
-                      {champTeam.logo && (
-                        <img src={champTeam.logo} alt="" className="w-14 h-14 object-contain" />
-                      )}
-                      <span className="text-lg font-display font-bold text-fg">
-                        {champTeam.name || champTeam.abbreviation || 'Champion'}
-                      </span>
-                      {champTeam.seed && (
-                        <span className="text-sm text-fg/40">#{champTeam.seed} seed</span>
-                      )}
-                    </div>
+                {/* Tiebreaker + Champion */}
+                {tiebreakerType === 'total_score' && (
+                  <div className="w-full">
+                    <TiebreakerInput
+                      type={tiebreakerType}
+                      value={tiebreakerValue}
+                      onChange={onTiebreakerChange}
+                      disabled={isReadOnly}
+                      picks={picks}
+                      tournamentData={tournamentData}
+                    />
                   </div>
                 )}
+                <ChampionCard team={champTeam} />
               </div>
             </div>
           </div>
@@ -561,27 +568,22 @@ export default function BracketView({
 
       {/* Active region content */}
       <div key={mobileTab} className="pb-4 animate-fade-in">
-        {mobileTab < structure.regions.length ? (
-          <MobileBracketNav
-            region={structure.regions[mobileTab]}
-            picks={picks}
-            results={results}
-            tournamentData={tournamentData}
-            onPick={onPick}
-            onMatchupClick={onMatchupClick}
-            isReadOnly={isReadOnly}
-          />
-        ) : (
-          <BracketFinalFour
-            picks={picks}
-            results={results}
-            tournamentData={tournamentData}
-            onPick={onPick}
-            onMatchupClick={onMatchupClick}
-            isReadOnly={isReadOnly}
-            finalFour={structure.finalFour}
-          />
-        )}
+        <MobileBracketNav
+          region={enhancedRegions[mobileTab]}
+          picks={picks}
+          results={results}
+          tournamentData={tournamentData}
+          onPick={onPick}
+          onMatchupClick={onMatchupClick}
+          isReadOnly={isReadOnly}
+          champTeam={(() => {
+            const champPick = pickedFor(structure.finalFour.championship);
+            return champPick ? (tournamentData?.teams?.[champPick] || { id: champPick }) : null;
+          })()}
+          tiebreakerType={tiebreakerType}
+          tiebreakerValue={tiebreakerValue}
+          onTiebreakerChange={onTiebreakerChange}
+        />
       </div>
     </div>
   );

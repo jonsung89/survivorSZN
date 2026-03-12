@@ -1,9 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useSwipe from '../../hooks/useSwipe';
 import MobileBracketRoundPage from './MobileBracketRoundPage';
-
-const ROUND_NAMES = ['First Round', 'Second Round', 'Sweet 16', 'Elite Eight'];
 
 export default function MobileBracketNav({
   region,
@@ -13,6 +10,10 @@ export default function MobileBracketNav({
   onPick,
   onMatchupClick,
   isReadOnly,
+  champTeam,
+  tiebreakerType,
+  tiebreakerValue,
+  onTiebreakerChange,
 }) {
   const [roundIdx, setRoundIdx] = useState(0);
   const [direction, setDirection] = useState(null); // 'left' | 'right'
@@ -47,9 +48,9 @@ export default function MobileBracketNav({
   }, [roundIdx, isAnimating, region?.name]);
 
   const navigateTo = useCallback((targetIdx, dir) => {
-    if (targetIdx < 0 || targetIdx >= totalRounds || isAnimating) return;
+    if (targetIdx < 0 || targetIdx >= totalRounds || isAnimating || targetIdx === roundIdx) return;
     setPrevRoundIdx(roundIdx);
-    setDirection(dir);
+    setDirection(dir ?? (targetIdx > roundIdx ? 'left' : 'right'));
     setIsAnimating(true);
     setRoundIdx(targetIdx);
   }, [totalRounds, isAnimating, roundIdx]);
@@ -92,26 +93,28 @@ export default function MobileBracketNav({
 
   return (
     <div className="flex flex-col">
-      {/* Round header with dots */}
-      <div className="px-4 pt-2 pb-3 text-center">
-        <p className="text-lg font-bold text-fg">
-          {ROUND_NAMES[roundIdx] || currentRound.name}
-        </p>
-        {/* Round progress dots */}
-        <div className="flex justify-center gap-2 mt-2">
-          {rounds.map((_, i) => (
-            <div
+      {/* Round selector tabs — sticky below region tabs */}
+      <div className="sticky top-[110px] z-10 bg-surface/95 backdrop-blur-sm px-3 pt-2 pb-2">
+        <div className="flex gap-1 overflow-x-auto no-scrollbar">
+          {rounds.map((r, i) => (
+            <button
               key={i}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
+              onClick={() => navigateTo(i)}
+              disabled={isAnimating}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
                 i === roundIdx
-                  ? 'w-6 bg-fg/80'
-                  : i < roundIdx
-                    ? 'w-1.5 bg-fg/40'
-                    : 'w-1.5 bg-fg/15'
+                  ? 'bg-fg/15 text-fg border border-fg/15'
+                  : 'bg-fg/[0.04] text-fg/40 border border-transparent active:scale-95'
               }`}
-            />
+            >
+              {r.shortName || r.name}
+            </button>
           ))}
         </div>
+        {/* Round name */}
+        <p className="text-lg font-bold text-fg text-center mt-2">
+          {currentRound.name}
+        </p>
       </div>
 
       {/* Swipeable content area */}
@@ -132,6 +135,10 @@ export default function MobileBracketNav({
               onPick={onPick}
               onMatchupClick={onMatchupClick}
               isReadOnly={isReadOnly}
+              champTeam={champTeam}
+              tiebreakerType={tiebreakerType}
+              tiebreakerValue={tiebreakerValue}
+              onTiebreakerChange={onTiebreakerChange}
             />
           </div>
         )}
@@ -150,32 +157,14 @@ export default function MobileBracketNav({
             onPick={onPick}
             onMatchupClick={onMatchupClick}
             isReadOnly={isReadOnly}
+            champTeam={champTeam}
+            tiebreakerType={tiebreakerType}
+            tiebreakerValue={tiebreakerValue}
+            onTiebreakerChange={onTiebreakerChange}
           />
         </div>
       </div>
 
-      {/* Bottom nav bar */}
-      <div className="flex items-center justify-between px-4 py-3 mt-2">
-        <button
-          onClick={goPrev}
-          disabled={roundIdx === 0 || isAnimating}
-          className="p-2 rounded-xl bg-fg/5 text-fg/50 disabled:opacity-20 active:scale-95 transition-all"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-
-        <span className="text-sm text-fg/40 font-medium">
-          {roundIdx + 1} of {totalRounds}
-        </span>
-
-        <button
-          onClick={goNext}
-          disabled={roundIdx === totalRounds - 1 || isAnimating}
-          className="p-2 rounded-xl bg-fg/5 text-fg/50 disabled:opacity-20 active:scale-95 transition-all"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
-      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Trophy,
   AlertTriangle,
+  AlertCircle,
   ChevronRight,
   Plus,
   Users,
@@ -16,6 +17,9 @@ import AppIcon from '../components/AppIcon';
 import { BROADCAST_NETWORKS } from '../sports/nfl/constants';
 import { getWeekLabel } from '../sports/nfl/weekUtils';
 import { getSportModule, getSportGradient, getSportBadgeClasses } from '../sports';
+import SportBadge from '../components/SportBadge';
+import CommishBadge from '../components/CommishBadge';
+import LeagueMembersDialog from '../components/LeagueMembersDialog';
 import { useThemedLogo } from '../utils/logo';
 
 // Network broadcast info lookup
@@ -46,6 +50,8 @@ export default function Dashboard() {
   const [weekStarted, setWeekStarted] = useState(false);
   const [gameDetails, setGameDetails] = useState({});
   const [winnersDialog, setWinnersDialog] = useState({ open: false, leagueName: '', winners: [], prizePool: 0 });
+  const [bracketDialog, setBracketDialog] = useState({ open: false, leagueName: '', brackets: [], totalSubmitted: 0 });
+  const [membersDialog, setMembersDialog] = useState({ open: false, leagueId: null, leagueName: '', defaultTab: 'winners' });
   // BroadcastIcon component (same as Schedule.jsx)
   const BroadcastIcon = ({ broadcast }) => {
     const [imgError, setImgError] = useState(false);
@@ -590,8 +596,11 @@ export default function Dashboard() {
                   i !== 0 ? 'border-t border-fg/5' : ''
                 }`}
               >
-                {/* League icon */}
-                <div className="relative flex-shrink-0">
+                {/* League icon — clickable to open members dialog */}
+                <button
+                  className="relative flex-shrink-0 hover:scale-105 transition-transform"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMembersDialog({ open: true, leagueId: league.id, leagueName: league.name, defaultTab: 'winners' }); }}
+                >
                   <AppIcon
                     className="w-10 h-10"
                     color={league.memberStatus === 'eliminated' && !isWinner
@@ -607,34 +616,18 @@ export default function Dashboard() {
                       <X className="w-3 h-3 text-white" strokeWidth={3} />
                     </div>
                   )}
-                </div>
+                </button>
 
                 {/* League name and status */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <h3 className="font-semibold text-fg text-sm sm:text-base truncate max-w-[60vw] sm:max-w-none">{league.name}</h3>
-                    {league.isCommissioner && (
-                      <span className="relative group/commish">
-                        <button
-                          onMouseDown={(e) => { if (document.activeElement === e.currentTarget) { e.preventDefault(); e.currentTarget.blur(); } }}
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                          className="text-sm leading-none focus:outline-none"
-                        >⭐</button>
-                        <div className="pointer-events-none opacity-0 group-focus-within/commish:opacity-100 transition-opacity duration-150 absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1 rounded bg-neutral-800 text-white text-xs font-medium whitespace-nowrap z-50 shadow-lg">
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-neutral-800" />
-                          Commissioner
-                        </div>
-                      </span>
-                    )}
-                    <span className={`text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded ${getSportBadgeClasses(league.sportId)}`}>{sportMod.name}</span>
+                    {league.isCommissioner && <CommishBadge />}
+                    <SportBadge sportId={league.sportId} />
                   </div>
-                  {/* Mobile-only status row */}
+                  {/* Mobile-only status row (non-bracket only — bracket info moved to right side) */}
                   <div className="flex items-center gap-2 text-sm sm:hidden">
-                    {isPast ? null : isBracketLeague ? (
-                      <span className="text-violet-400">
-                        {league.memberCount} member{league.memberCount !== 1 ? 's' : ''}
-                      </span>
-                    ) : (
+                    {isBracketLeague ? null : isPast ? null : (
                       <>
                         <span className={league.memberStatus === 'active' ? 'text-green-500' : 'text-red-500'}>
                           {league.memberStatus === 'active' ? 'Active' : 'Eliminated'}
@@ -650,11 +643,24 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2 sm:gap-3">
                   {/* Desktop-only status */}
                   <div className="hidden sm:flex items-center gap-2 text-sm">
-                    {isPast ? null : isBracketLeague ? (
-                      <span className="text-violet-400">
-                        {league.memberCount} member{league.memberCount !== 1 ? 's' : ''}
-                      </span>
-                    ) : (
+                    {isBracketLeague ? (() => {
+                      const bs = league.bracketStats;
+                      if (!bs || bs.brackets.length === 0) return <span className="text-fg/40">No bracket</span>;
+                      const best = bs.brackets.find(b => b.isSubmitted) || bs.brackets[0];
+                      return best.isSubmitted ? (
+                        <>
+                          <span className="text-violet-400 font-semibold">{best.score} pts</span>
+                          {best.rank && bs.totalSubmitted > 1 && (
+                            <>
+                              <span className="text-fg/30">•</span>
+                              <span className="text-fg/50">#{best.rank} of {bs.totalSubmitted}</span>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-fg/60">{best.name || `Bracket ${best.bracketNumber}`}{best.pickCount < best.totalPicks ? ` · ${best.pickCount}/${best.totalPicks} picks` : ''}</span>
+                      );
+                    })() : isPast ? null : (
                       <>
                         <span className={league.memberStatus === 'active' ? 'text-green-500' : 'text-red-500'}>
                           {league.memberStatus === 'active' ? 'Active' : 'Eliminated'}
@@ -666,7 +672,58 @@ export default function Dashboard() {
                   </div>
 
                   {isBracketLeague ? (
-                    null
+                    league.bracketStats?.brackets?.length > 0 ? (() => {
+                      const bs = league.bracketStats;
+                      const hasSubmitted = bs.brackets.some(b => b.isSubmitted);
+                      const best = bs.brackets.find(b => b.isSubmitted) || bs.brackets[0];
+                      const bestUnsubmitted = bs.brackets.find(b => !b.isSubmitted);
+                      const allPicksDone = bestUnsubmitted && bestUnsubmitted.pickCount >= bestUnsubmitted.totalPicks;
+                      return (
+                        <>
+                          {/* Desktop: full badge */}
+                          <span className={`hidden sm:inline text-xs font-medium px-2 py-0.5 rounded ${
+                            hasSubmitted
+                              ? 'bg-green-500/15 text-green-500'
+                              : allPicksDone
+                                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                                : 'bg-fg/[0.06] text-fg/50'
+                          }`}>
+                            {hasSubmitted ? `${best.score} pts` : allPicksDone ? 'Not submitted' : 'Incomplete'}
+                          </span>
+                          {/* Mobile: score badge or progress ring — tappable */}
+                          <button
+                            className="sm:hidden"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setBracketDialog({ open: true, leagueName: league.name, brackets: bs.brackets, totalSubmitted: bs.totalSubmitted });
+                            }}
+                          >
+                            {hasSubmitted ? (
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-green-500/15 text-green-500">
+                                {best.score} pts
+                              </span>
+                            ) : allPicksDone ? (
+                              <AlertCircle className="w-6 h-6 text-rose-500" />
+                            ) : (() => {
+                              const pct = best.pickCount / best.totalPicks;
+                              const r = 10; const circ = 2 * Math.PI * r;
+                              return (
+                                <svg width="28" height="28" viewBox="0 0 28 28" className="block">
+                                  <circle cx="14" cy="14" r={r} fill="none" className="stroke-neutral-200 dark:stroke-neutral-600" strokeWidth="3" />
+                                  <circle cx="14" cy="14" r={r} fill="none" className="stroke-neutral-500 dark:stroke-neutral-300" strokeWidth="3"
+                                    strokeLinecap="round"
+                                    strokeDasharray={circ}
+                                    strokeDashoffset={circ * (1 - pct)}
+                                    transform="rotate(-90 14 14)"
+                                  />
+                                </svg>
+                              );
+                            })()}
+                          </button>
+                        </>
+                      );
+                    })() : null
                   ) : !isPast && league.memberStatus === 'active' && league.currentPickTeamId ? (
                     <div className="flex items-center gap-2">
                       {(() => {
@@ -805,6 +862,70 @@ export default function Dashboard() {
           </div>
         );
       })()}
+
+      {/* Bracket Status Dialog */}
+      {bracketDialog.open && (() => {
+        const { brackets, totalSubmitted } = bracketDialog;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setBracketDialog({ open: false, leagueName: '', brackets: [], totalSubmitted: 0 })}>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+            <div className="bg-elevated border border-fg/10 rounded-2xl p-6 max-w-sm w-full relative z-10 animate-in shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-fg">{bracketDialog.leagueName}</h3>
+                <button onClick={() => setBracketDialog({ open: false, leagueName: '', brackets: [], totalSubmitted: 0 })} className="text-fg/40 hover:text-fg/60 transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 max-h-72 overflow-y-auto">
+                {brackets.map((b, i) => (
+                  <div key={i} className="p-3 rounded-xl bg-fg/[0.03] border border-fg/5">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-medium text-fg">{b.name || `Bracket ${b.bracketNumber}`}</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                        b.isSubmitted
+                          ? 'bg-green-500/15 text-green-500'
+                          : b.pickCount >= b.totalPicks
+                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                            : 'bg-fg/[0.06] text-fg/50'
+                      }`}>
+                        {b.isSubmitted ? 'Submitted' : b.pickCount >= b.totalPicks ? 'Not submitted' : 'Incomplete'}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="h-1.5 rounded-full bg-fg/10 mb-1.5">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          b.isSubmitted ? 'bg-green-500' : b.pickCount >= b.totalPicks ? 'bg-rose-500' : 'bg-fg/30'
+                        }`}
+                        style={{ width: `${(b.pickCount / b.totalPicks) * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-fg/50">
+                      <span>{b.pickCount}/{b.totalPicks} picks</span>
+                      {b.isSubmitted && (
+                        <span className="font-semibold text-fg/80">
+                          {b.score} pts{b.rank && totalSubmitted > 1 && ` · #${b.rank} of ${totalSubmitted}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Members Status Dialog */}
+      {membersDialog.open && (
+        <LeagueMembersDialog
+          leagueId={membersDialog.leagueId}
+          leagueName={membersDialog.leagueName}
+          defaultTab={membersDialog.defaultTab}
+          onClose={() => setMembersDialog({ open: false, leagueId: null, leagueName: '', defaultTab: 'winners' })}
+        />
+      )}
     </div>
   );
 }

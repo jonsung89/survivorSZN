@@ -18,7 +18,10 @@ const ROUND_BOUNDARIES = [
   { round: 5, name: 'Championship', shortName: 'CHAMP', start: 63, end: 63, gamesPerRegion: 0 },
 ];
 
-const REGIONS = ['East', 'West', 'South', 'Midwest'];
+// Default region names — used as fallback when tournament data isn't available.
+// Actual region names should come from tournament data (data-driven).
+const DEFAULT_REGIONS = ['East', 'West', 'South', 'Midwest'];
+const REGIONS = DEFAULT_REGIONS;
 
 // Standard bracket seed matchups for R64 (1v16, 8v9, 5v12, 4v13, 6v11, 3v14, 7v10, 2v15)
 const SEED_MATCHUPS = [
@@ -73,13 +76,13 @@ function getChildSlots(slot) {
   return [prevRound.start + offset * 2, prevRound.start + offset * 2 + 1];
 }
 
-function getRegionForSlot(slot) {
+function getRegionForSlot(slot, regions = DEFAULT_REGIONS) {
   const round = getSlotRound(slot);
   if (round >= 4) return null; // Final Four and Championship are cross-region
   const currentRound = ROUND_BOUNDARIES[round];
   const offset = slot - currentRound.start;
   const regionIndex = Math.floor(offset / currentRound.gamesPerRegion);
-  return REGIONS[regionIndex] || null;
+  return regions[regionIndex] || null;
 }
 
 function getRegionSlots(regionIndex, round) {
@@ -93,9 +96,9 @@ function getRegionSlots(regionIndex, round) {
 }
 
 // Get all 63 slots organized by region for display
-function getBracketStructure() {
+function getBracketStructure(regions = DEFAULT_REGIONS) {
   const structure = {
-    regions: REGIONS.map((name, idx) => ({
+    regions: regions.map((name, idx) => ({
       name,
       index: idx,
       rounds: [0, 1, 2, 3].map(round => ({
@@ -107,11 +110,11 @@ function getBracketStructure() {
     finalFour: {
       semifinals: [61, 62],
       championship: 63,
-      // Slot 61: East (region 0) E8 winner vs West (region 1) E8 winner
-      // Slot 62: South (region 2) E8 winner vs Midwest (region 3) E8 winner
+      // Slot 61: region 0 E8 winner vs region 1 E8 winner
+      // Slot 62: region 2 E8 winner vs region 3 E8 winner
       semifinalRegions: [
-        { slot: 61, regions: ['East', 'West'] },
-        { slot: 62, regions: ['South', 'Midwest'] },
+        { slot: 61, regions: [regions[0] || 'Region 1', regions[1] || 'Region 2'] },
+        { slot: 62, regions: [regions[2] || 'Region 3', regions[3] || 'Region 4'] },
       ],
     },
   };
@@ -212,6 +215,7 @@ function countPicks(picks) {
 module.exports = {
   ROUND_BOUNDARIES,
   REGIONS,
+  DEFAULT_REGIONS,
   SEED_MATCHUPS,
   SCORING_PRESETS,
   TIEBREAKER_TYPES,

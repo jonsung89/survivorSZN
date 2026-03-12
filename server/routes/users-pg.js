@@ -16,7 +16,7 @@ router.post('/sync', authMiddleware, async (req, res) => {
     
     if (user) {
       // Update existing user - DON'T overwrite display_name or email if already set
-      const updates = ['updated_at = NOW()'];
+      const updates = ['updated_at = NOW()', 'last_login_at = NOW()'];
       const values = [];
       let paramCount = 0;
       
@@ -55,8 +55,8 @@ router.post('/sync', authMiddleware, async (req, res) => {
       isNewUser = true;
       const id = uuidv4();
       await db.run(`
-        INSERT INTO users (id, firebase_uid, phone, email, display_name)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO users (id, firebase_uid, phone, email, display_name, last_login_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
       `, [id, firebaseUid, phone, email, displayName]);
       
       user = await db.getOne('SELECT * FROM users WHERE id = $1', [id]);
@@ -68,6 +68,7 @@ router.post('/sync', authMiddleware, async (req, res) => {
       email: user.email,
       displayName: user.display_name,
       createdAt: user.created_at,
+      isAdmin: user.is_admin || false,
       isNewUser
     });
   } catch (error) {

@@ -5,6 +5,10 @@ import { leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import Loading from '../components/Loading';
 import { getSportModule, getSportGradient, getSportBadgeClasses } from '../sports';
+import SportBadge from '../components/SportBadge';
+import CommishBadge from '../components/CommishBadge';
+import AppIcon from '../components/AppIcon';
+import LeagueMembersDialog from '../components/LeagueMembersDialog';
 
 export default function Leagues() {
   const { user } = useAuth();
@@ -12,6 +16,8 @@ export default function Leagues() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [winnersDialog, setWinnersDialog] = useState({ open: false, leagueName: '', winners: [], prizePool: 0 });
+  const [bracketDialog, setBracketDialog] = useState({ open: false, leagueName: '', brackets: [], totalSubmitted: 0 });
+  const [membersDialog, setMembersDialog] = useState({ open: false, leagueId: null, leagueName: '', defaultTab: 'winners' });
 
   useEffect(() => {
     let cancelled = false;
@@ -70,25 +76,36 @@ export default function Leagues() {
         className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 block hover:bg-fg/10 active:bg-fg/15 transition-all group"
       >
         <div className="flex items-center gap-3 sm:gap-4">
-          <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 ${
-            isWinner
-              ? 'bg-gradient-to-br from-violet-500 to-indigo-600'
-              : `bg-gradient-to-br ${getSportGradient(league.sportId)}`
-          } ${league.memberStatus === 'eliminated' && !isWinner ? 'opacity-40' : ''}`}>
-            <Trophy className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-xl font-semibold text-fg/90 group-hover:text-fg transition-colors truncate">
+          <button
+            className="relative flex-shrink-0 hover:scale-105 transition-transform"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMembersDialog({ open: true, leagueId: league.id, leagueName: league.name, defaultTab: 'winners' }); }}
+          >
+            <AppIcon
+              className="w-12 h-12 sm:w-14 sm:h-14"
+              color={league.memberStatus === 'eliminated' && !isWinner
+                ? 'rgb(139 92 246 / 0.25)'
+                : 'rgb(139 92 246)'}
+            />
+            {isWinner ? (
+              <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center shadow-sm">
+                <Trophy className="w-3 h-3 text-white" />
+              </div>
+            ) : league.memberStatus === 'eliminated' && (
+              <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm">
+                <X className="w-3 h-3 text-white" strokeWidth={3} />
+              </div>
+            )}
+          </button>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <h2 className="text-base sm:text-xl font-semibold text-fg/90 group-hover:text-fg transition-colors truncate min-w-0">
                 {league.name}
               </h2>
-              {league.isCommissioner && (
-                <span className="badge badge-active text-xs">Commish</span>
-              )}
-              <span className={`text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded ${getSportBadgeClasses(league.sportId)}`}>{sportMod.name}</span>
+              {league.isCommissioner && <CommishBadge />}
+              <SportBadge sportId={league.sportId} />
             </div>
-            <div className="flex items-center gap-3 sm:gap-4 mt-1 text-xs sm:text-sm text-fg/60 flex-wrap">
-              <span className="flex items-center gap-1">
+            <div className="flex items-center gap-3 sm:gap-4 mt-1 text-xs sm:text-sm text-fg/60 min-w-0 overflow-hidden">
+              <span className="flex items-center gap-1 flex-shrink-0">
                 <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 {league.memberCount}
               </span>
@@ -98,7 +115,32 @@ export default function Leagues() {
                   <span className="hidden sm:inline">Week {league.startWeek} start</span>
                 </>
               )}
-              {isBracketLeague && <span>Bracket Challenge</span>}
+              {isBracketLeague && (() => {
+                const bs = league.bracketStats;
+                if (!bs || bs.brackets.length === 0) return <span className="text-fg/40 hidden sm:inline">No bracket</span>;
+                const best = bs.brackets.find(b => b.isSubmitted) || bs.brackets[0];
+                const submittedCount = bs.brackets.filter(b => b.isSubmitted).length;
+                // Hide on mobile — shown on right side instead
+                return best.isSubmitted ? (
+                  <span className="font-semibold text-fg/80 hidden sm:inline">
+                    {best.score} pts
+                    {best.rank && bs.totalSubmitted > 1 && (
+                      <span className="text-fg/40 font-normal"> · #{best.rank} of {bs.totalSubmitted}</span>
+                    )}
+                    {bs.brackets.length > 1 && (
+                      <span className="text-fg/40 font-normal"> · {submittedCount}/{bs.brackets.length} brackets</span>
+                    )}
+                  </span>
+                ) : best.pickCount >= best.totalPicks ? (
+                  <span className="text-fg/60 hidden sm:inline">
+                    {best.name || `Bracket ${best.bracketNumber}`}
+                  </span>
+                ) : (
+                  <span className="text-fg/60 hidden sm:inline">
+                    {best.name || `Bracket ${best.bracketNumber}`} · {best.pickCount}/{best.totalPicks} picks
+                  </span>
+                );
+              })()}
               {isPast && <span className="text-fg/40">{league.season} Season</span>}
             </div>
           </div>
@@ -106,7 +148,7 @@ export default function Leagues() {
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {/* Status & Strikes */}
             <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 sm:gap-4">
-              {!isBracketLeague && (
+              {!isBracketLeague ? (
                 <div className="flex items-center gap-1">
                   {Array.from({ length: league.maxStrikes }).map((_, i) => (
                     <div
@@ -117,7 +159,57 @@ export default function Leagues() {
                     />
                   ))}
                 </div>
-              )}
+              ) : league.bracketStats?.brackets?.length > 0 ? (() => {
+                const bs = league.bracketStats;
+                const hasSubmitted = bs.brackets.some(b => b.isSubmitted);
+                const best = bs.brackets.find(b => b.isSubmitted) || bs.brackets[0];
+                const submittedCount = bs.brackets.filter(b => b.isSubmitted).length;
+                const bestUnsubmitted = bs.brackets.find(b => !b.isSubmitted);
+                const allPicksDone = bestUnsubmitted && bestUnsubmitted.pickCount >= bestUnsubmitted.totalPicks;
+                return (
+                  <>
+                    {/* Desktop: full badge */}
+                    <span className={`hidden sm:inline badge text-xs ${
+                      hasSubmitted ? 'badge-active'
+                        : allPicksDone ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                        : 'bg-fg/[0.06] text-fg/50 border-fg/10'
+                    }`}>
+                      {hasSubmitted ? `${best.score} pts` : allPicksDone ? 'Not submitted' : 'Incomplete'}
+                    </span>
+                    {/* Mobile: score badge or progress ring — tappable */}
+                    <button
+                      className="sm:hidden"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setBracketDialog({ open: true, leagueName: league.name, brackets: bs.brackets, totalSubmitted: bs.totalSubmitted });
+                      }}
+                    >
+                      {hasSubmitted ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-green-500/15 text-green-500">
+                          {best.score} pts
+                        </span>
+                      ) : allPicksDone ? (
+                        <AlertCircle className="w-6 h-6 text-rose-500" />
+                      ) : (() => {
+                        const pct = best.pickCount / best.totalPicks;
+                        const r = 10; const circ = 2 * Math.PI * r;
+                        return (
+                          <svg width="28" height="28" viewBox="0 0 28 28" className="block">
+                            <circle cx="14" cy="14" r={r} fill="none" className="stroke-neutral-200 dark:stroke-neutral-600" strokeWidth="3" />
+                            <circle cx="14" cy="14" r={r} fill="none" className="stroke-neutral-500 dark:stroke-neutral-300" strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeDasharray={circ}
+                              strokeDashoffset={circ * (1 - pct)}
+                              transform="rotate(-90 14 14)"
+                            />
+                          </svg>
+                        );
+                      })()}
+                    </button>
+                  </>
+                );
+              })() : null}
               {isPast ? (
                 isWinner ? (
                   <button
@@ -126,13 +218,13 @@ export default function Leagues() {
                       const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
                       setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
                     }}
-                    className="text-xs font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 transition-colors cursor-pointer"
+                    className="hidden sm:inline text-xs font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 transition-colors cursor-pointer"
                   >
                     Winner!{league.winners?.length > 1 && ` (+${league.winners.length - 1})`}
                   </button>
                 ) : league.winners?.length > 0 ? (
                   league.winners.length <= 3 ? (
-                    <span className="text-fg/40 text-xs">Won by {league.winners.map(w => w.displayName).join(', ')}</span>
+                    <span className="hidden sm:inline text-fg/40 text-xs">Won by {league.winners.map(w => w.displayName).join(', ')}</span>
                   ) : (
                     <button
                       onClick={(e) => {
@@ -140,23 +232,15 @@ export default function Leagues() {
                         const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
                         setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
                       }}
-                      className="badge text-xs bg-fg/10 text-fg/50 border-fg/20 hover:bg-fg/15 hover:text-fg/70 transition-colors cursor-pointer"
+                      className="hidden sm:inline badge text-xs bg-fg/10 text-fg/50 border-fg/20 hover:bg-fg/15 hover:text-fg/70 transition-colors cursor-pointer"
                     >
                       {league.winners.length} winners
                     </button>
                   )
-                ) : league.memberStatus === 'eliminated' ? (
-                  <span className="badge badge-eliminated text-xs">eliminated</span>
-                ) : (
-                  <span className="text-fg/40 text-xs">Complete</span>
-                )
-              ) : (
-                <span className={`badge text-xs ${
-                  league.memberStatus === 'active' ? 'badge-active' : 'badge-eliminated'
-                }`}>
-                  {league.memberStatus}
-                </span>
-              )}
+                ) : null
+              ) : league.memberStatus === 'eliminated' ? (
+                <span className="hidden sm:inline badge badge-eliminated text-xs">eliminated</span>
+              ) : null}
             </div>
             <ChevronRight className="w-5 h-5 text-fg/40 group-hover:text-fg/60 group-hover:translate-x-1 transition-all hidden sm:block" />
           </div>
@@ -291,6 +375,70 @@ export default function Leagues() {
           </div>
         );
       })()}
+
+      {/* Bracket Status Dialog */}
+      {bracketDialog.open && (() => {
+        const { brackets, totalSubmitted } = bracketDialog;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setBracketDialog({ open: false, leagueName: '', brackets: [], totalSubmitted: 0 })}>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+            <div className="bg-elevated border border-fg/10 rounded-2xl p-6 max-w-sm w-full relative z-10 animate-in shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-fg">{bracketDialog.leagueName}</h3>
+                <button onClick={() => setBracketDialog({ open: false, leagueName: '', brackets: [], totalSubmitted: 0 })} className="text-fg/40 hover:text-fg/60 transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 max-h-72 overflow-y-auto">
+                {brackets.map((b, i) => (
+                  <div key={i} className="p-3 rounded-xl bg-fg/[0.03] border border-fg/5">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-medium text-fg">{b.name || `Bracket ${b.bracketNumber}`}</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                        b.isSubmitted
+                          ? 'bg-green-500/15 text-green-500'
+                          : b.pickCount >= b.totalPicks
+                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                            : 'bg-fg/[0.06] text-fg/50'
+                      }`}>
+                        {b.isSubmitted ? 'Submitted' : b.pickCount >= b.totalPicks ? 'Not submitted' : 'Incomplete'}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="h-1.5 rounded-full bg-fg/10 mb-1.5">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          b.isSubmitted ? 'bg-green-500' : b.pickCount >= b.totalPicks ? 'bg-rose-500' : 'bg-fg/30'
+                        }`}
+                        style={{ width: `${(b.pickCount / b.totalPicks) * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-fg/50">
+                      <span>{b.pickCount}/{b.totalPicks} picks</span>
+                      {b.isSubmitted && (
+                        <span className="font-semibold text-fg/80">
+                          {b.score} pts{b.rank && totalSubmitted > 1 && ` · #${b.rank} of ${totalSubmitted}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Members Status Dialog */}
+      {membersDialog.open && (
+        <LeagueMembersDialog
+          leagueId={membersDialog.leagueId}
+          leagueName={membersDialog.leagueName}
+          defaultTab={membersDialog.defaultTab}
+          onClose={() => setMembersDialog({ open: false, leagueId: null, leagueName: '', defaultTab: 'winners' })}
+        />
+      )}
     </div>
   );
 }

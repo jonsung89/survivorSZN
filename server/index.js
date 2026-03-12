@@ -15,6 +15,7 @@ const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notifications-pg');
 const scheduleRoutes = require('./routes/schedule');
 const bracketRoutes = require('./routes/brackets');
+const adminRoutes = require('./routes/admin');
 
 // Initialize database
 const { initDb } = require('./db/supabase');
@@ -60,6 +61,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/brackets', bracketRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

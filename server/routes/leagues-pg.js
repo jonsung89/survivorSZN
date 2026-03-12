@@ -23,7 +23,7 @@ router.post('/', authMiddleware, async (req, res) => {
     const user = await getUser(req);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { name, password, maxStrikes = 1, startWeek = 1, sportId = 'nfl' } = req.body;
+    const { name, password, maxStrikes = 1, startWeek = 1, sportId = 'nfl', seasonOverride } = req.body;
 
     if (!name || name.trim().length < 3) {
       return res.status(400).json({ error: 'League name must be at least 3 characters' });
@@ -50,7 +50,14 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: periodValidation.error });
     }
 
-    const { season } = await provider.getCurrentSeason();
+    // Allow admins to override season for testing with previous year data
+    let season;
+    if (seasonOverride && user.is_admin) {
+      season = parseInt(seasonOverride);
+    } else {
+      const currentSeason = await provider.getCurrentSeason();
+      season = currentSeason.season;
+    }
     const passwordHash = await bcrypt.hash(password, 10);
     const leagueId = uuidv4();
     const memberId = uuidv4();
@@ -405,23 +412,31 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
       }
     }
 
-    // Batch-fetch winners for concluded leagues with active members
-    const concludedLeagueIds = leagues
-      .filter(l => {
-        const key = `${l.sport_id || 'nfl'}_${l.season}`;
-        return seasonOverCache[key] && parseInt(l.active_count) > 0;
-      })
+    // Batch-fetch winners for concluded leagues
+    const concludedLeagues = leagues.filter(l => {
+      const key = `${l.sport_id || 'nfl'}_${l.season}`;
+      return seasonOverCache[key];
+    });
+
+    // Split by type: NFL survivor (active members = winners) vs bracket (top scorer = winner)
+    const survivorLeagueIds = concludedLeagues
+      .filter(l => (l.sport_id || 'nfl') !== 'ncaab' && parseInt(l.active_count) > 0)
+      .map(l => l.id);
+    const bracketLeagueIds = concludedLeagues
+      .filter(l => (l.sport_id || 'nfl') === 'ncaab')
       .map(l => l.id);
 
     let winnersMap = {};
-    if (concludedLeagueIds.length > 0) {
+
+    // NFL survivor winners: active members
+    if (survivorLeagueIds.length > 0) {
       try {
         const winners = await db.getAll(`
           SELECT lm.league_id, u.display_name, lm.user_id
           FROM league_members lm
           JOIN users u ON u.id = lm.user_id
           WHERE lm.league_id = ANY($1) AND lm.status = 'active'
-        `, [concludedLeagueIds]);
+        `, [survivorLeagueIds]);
 
         winners.forEach(w => {
           if (!winnersMap[w.league_id]) winnersMap[w.league_id] = [];
@@ -431,7 +446,83 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
           });
         });
       } catch (winnerError) {
-        console.error('Failed to get winners:', winnerError);
+        console.error('Failed to get survivor winners:', winnerError);
+      }
+    }
+
+    // Bracket winners: top-scoring submitted bracket per league
+    if (bracketLeagueIds.length > 0) {
+      try {
+        const winners = await db.getAll(`
+          SELECT DISTINCT ON (bc.league_id) bc.league_id, u.display_name, b.user_id
+          FROM brackets b
+          JOIN bracket_challenges bc ON b.challenge_id = bc.id
+          JOIN users u ON b.user_id = u.id
+          WHERE bc.league_id = ANY($1) AND b.is_submitted = true
+          ORDER BY bc.league_id, b.total_score DESC, b.tiebreaker_value ASC
+        `, [bracketLeagueIds]);
+
+        winners.forEach(w => {
+          if (!winnersMap[w.league_id]) winnersMap[w.league_id] = [];
+          winnersMap[w.league_id].push({
+            displayName: w.display_name,
+            isMe: w.user_id === user.id
+          });
+        });
+      } catch (winnerError) {
+        console.error('Failed to get bracket winners:', winnerError);
+      }
+    }
+
+    // Batch-fetch bracket stats for bracket leagues
+    const allBracketLeagueIds = leagues.filter(l => (l.sport_id || 'nfl') === 'ncaab').map(l => l.id);
+    let bracketStatsMap = {};
+    if (allBracketLeagueIds.length > 0) {
+      try {
+        // Get all user brackets with score, submission status, pick count, and rank
+        const bracketStats = await db.getAll(`
+          SELECT
+            bc.league_id,
+            b.id as bracket_id,
+            b.name as bracket_name,
+            b.bracket_number,
+            b.total_score,
+            b.is_submitted,
+            b.picks,
+            bc.status as challenge_status,
+            (SELECT COUNT(*) FROM brackets b2 WHERE b2.challenge_id = bc.id AND b2.is_submitted = true) as total_submitted,
+            (SELECT COUNT(*) FROM brackets b3
+              WHERE b3.challenge_id = bc.id AND b3.is_submitted = true
+              AND b3.total_score > b.total_score) as ahead_count
+          FROM bracket_challenges bc
+          JOIN brackets b ON b.challenge_id = bc.id AND b.user_id = $2
+          WHERE bc.league_id = ANY($1)
+          ORDER BY b.total_score DESC
+        `, [allBracketLeagueIds, user.id]);
+
+        bracketStats.forEach(bs => {
+          if (!bracketStatsMap[bs.league_id]) {
+            bracketStatsMap[bs.league_id] = {
+              brackets: [],
+              totalSubmitted: parseInt(bs.total_submitted),
+              challengeStatus: bs.challenge_status,
+            };
+          }
+          const picks = bs.picks || {};
+          const pickCount = Object.keys(picks).length;
+          bracketStatsMap[bs.league_id].brackets.push({
+            id: bs.bracket_id,
+            name: bs.bracket_name,
+            bracketNumber: bs.bracket_number,
+            score: bs.total_score || 0,
+            isSubmitted: bs.is_submitted,
+            pickCount,
+            totalPicks: 63,
+            rank: bs.is_submitted ? (parseInt(bs.ahead_count) + 1) : null,
+          });
+        });
+      } catch (bracketError) {
+        console.error('Failed to get bracket stats:', bracketError);
       }
     }
 
@@ -457,13 +548,86 @@ router.get('/my-leagues', authMiddleware, async (req, res) => {
           entryFee: parseFloat(l.entry_fee) || 0,
           prizePotOverride: l.prize_pot_override ? parseFloat(l.prize_pot_override) : null,
           seasonOver,
-          winners: seasonOver ? (winnersMap[l.id] || null) : null
+          winners: seasonOver ? (winnersMap[l.id] || null) : null,
+          bracketStats: bracketStatsMap[l.id] || null,
         };
       })
     });
   } catch (error) {
     console.error('Get my leagues error:', error);
     res.status(500).json({ error: 'Failed to get leagues' });
+  }
+});
+
+// Get league members summary (winners, eliminated, active)
+router.get('/:leagueId/members-summary', authMiddleware, async (req, res) => {
+  try {
+    const user = await getUser(req);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { leagueId } = req.params;
+
+    // Check membership
+    const membership = await db.getOne(
+      'SELECT id FROM league_members WHERE league_id = $1 AND user_id = $2',
+      [leagueId, user.id]
+    );
+    if (!membership) return res.status(403).json({ error: 'Not a member' });
+
+    const members = await db.getAll(`
+      SELECT u.display_name, lm.status, lm.strikes, lm.user_id
+      FROM league_members lm
+      JOIN users u ON u.id = lm.user_id
+      WHERE lm.league_id = $1
+      ORDER BY u.display_name ASC
+    `, [leagueId]);
+
+    // Get league info for winner determination + financials
+    const league = await db.getOne('SELECT sport_id, season, entry_fee, prize_pot_override, commissioner_id FROM leagues WHERE id = $1', [leagueId]);
+    const sportId = league?.sport_id || 'nfl';
+
+    // Determine winners based on sport type
+    let winnerUserIds = new Set();
+    if (sportId === 'ncaab') {
+      // Bracket: top scorer
+      const topBracket = await db.getOne(`
+        SELECT b.user_id FROM brackets b
+        JOIN bracket_challenges bc ON b.challenge_id = bc.id
+        WHERE bc.league_id = $1 AND b.is_submitted = true
+        ORDER BY b.total_score DESC, b.tiebreaker_value ASC
+        LIMIT 1
+      `, [leagueId]);
+      if (topBracket) winnerUserIds.add(topBracket.user_id);
+    } else {
+      // Survivor: active members are winners (for past seasons)
+      members.filter(m => m.status === 'active').forEach(m => winnerUserIds.add(m.user_id));
+    }
+
+    const winners = [];
+    const eliminated = [];
+    const active = [];
+
+    members.forEach(m => {
+      const entry = { displayName: m.display_name, isMe: m.user_id === user.id, isCommissioner: m.user_id === league?.commissioner_id };
+      if (winnerUserIds.has(m.user_id)) {
+        winners.push(entry);
+      } else if (m.status === 'eliminated') {
+        eliminated.push({ ...entry, strikes: m.strikes });
+      } else {
+        active.push(entry);
+      }
+    });
+
+    // Calculate pot and per-winner prize
+    const entryFee = parseFloat(league?.entry_fee) || 0;
+    const pot = parseFloat(league?.prize_pot_override) || (entryFee * members.length);
+    const winnerCount = winners.length;
+    const perWinnerPrize = pot > 0 && winnerCount > 0 ? Math.floor(pot / winnerCount) : 0;
+
+    res.json({ winners, eliminated, active, totalMembers: members.length, entryFee, pot, perWinnerPrize, sportId });
+  } catch (err) {
+    console.error('Failed to get members summary:', err);
+    res.status(500).json({ error: 'Failed to get members summary' });
   }
 });
 

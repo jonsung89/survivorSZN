@@ -7,10 +7,12 @@ import {
   AlertTriangle,
   ArrowLeft,
   Loader2,
-  Info
+  Info,
+  Shield
 } from 'lucide-react';
 import { leagueAPI, nflAPI, bracketAPI } from '../api';
 import { useToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 import { getAllSports, getSportModule } from '../sports';
 import BrandLogo from '../components/BrandLogo';
 import BracketSetup from '../components/bracket/BracketSetup';
@@ -19,8 +21,10 @@ import nflSport from '../sports/nfl';
 export default function CreateLeague() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [currentWeek, setCurrentWeek] = useState(1);
+  const [seasonOverride, setSeasonOverride] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -90,7 +94,8 @@ export default function CreateLeague() {
         password: formData.password,
         maxStrikes: isBracketMode ? 1 : formData.maxStrikes,
         startWeek: isBracketMode ? 1 : formData.startWeek,
-        sportId: formData.sportId
+        sportId: formData.sportId,
+        ...(seasonOverride && { seasonOverride }),
       });
 
       if (result.success) {
@@ -178,6 +183,25 @@ export default function CreateLeague() {
             })}
           </div>
         </div>
+
+        {/* Admin: Test Season Override */}
+        {user?.isAdmin && isBracketMode && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+            <label className="block text-amber-400 text-sm font-medium mb-2">
+              <Shield className="w-4 h-4 inline mr-1.5" />
+              Admin: Test Season (uses previous year's bracket data)
+            </label>
+            <select
+              value={seasonOverride}
+              onChange={(e) => setSeasonOverride(e.target.value)}
+              className="input-field"
+            >
+              <option value="">Current Season</option>
+              <option value="2025">2025 (Last Year)</option>
+              <option value="2024">2024</option>
+            </select>
+          </div>
+        )}
 
         {/* League Name */}
         <div>

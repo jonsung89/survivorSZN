@@ -18,7 +18,11 @@ export const ROUND_BOUNDARIES = [
   { round: 5, name: 'Championship', shortName: 'CHAMP', start: 63, end: 63, gamesPerRegion: 0 },
 ];
 
-export const REGIONS = ['East', 'West', 'South', 'Midwest'];
+// Default region names — used as fallback when tournament data isn't available.
+// Actual region names should come from tournament data (data-driven).
+export const DEFAULT_REGIONS = ['East', 'West', 'South', 'Midwest'];
+// Keep REGIONS as alias for backward compatibility
+export const REGIONS = DEFAULT_REGIONS;
 
 export const SEED_MATCHUPS = [
   [1, 16], [8, 9], [5, 12], [4, 13], [6, 11], [3, 14], [7, 10], [2, 15],
@@ -72,13 +76,13 @@ export function getChildSlots(slot) {
   return [prevRound.start + offset * 2, prevRound.start + offset * 2 + 1];
 }
 
-export function getRegionForSlot(slot) {
+export function getRegionForSlot(slot, regions = DEFAULT_REGIONS) {
   const round = getSlotRound(slot);
   if (round >= 4) return null;
   const currentRound = ROUND_BOUNDARIES[round];
   const offset = slot - currentRound.start;
   const regionIndex = Math.floor(offset / currentRound.gamesPerRegion);
-  return REGIONS[regionIndex] || null;
+  return regions[regionIndex] || null;
 }
 
 export function getRegionSlots(regionIndex, round) {
@@ -91,9 +95,9 @@ export function getRegionSlots(regionIndex, round) {
   return slots;
 }
 
-export function getBracketStructure() {
+export function getBracketStructure(regions = DEFAULT_REGIONS) {
   return {
-    regions: REGIONS.map((name, idx) => ({
+    regions: regions.map((name, idx) => ({
       name,
       index: idx,
       rounds: [0, 1, 2, 3].map(round => ({
@@ -105,9 +109,10 @@ export function getBracketStructure() {
     finalFour: {
       semifinals: [61, 62],
       championship: 63,
+      // Semifinal pairings: slot 61 = region 0 vs region 1, slot 62 = region 2 vs region 3
       semifinalRegions: [
-        { slot: 61, regions: ['East', 'West'] },
-        { slot: 62, regions: ['South', 'Midwest'] },
+        { slot: 61, regions: [regions[0] || 'Region 1', regions[1] || 'Region 2'] },
+        { slot: 62, regions: [regions[2] || 'Region 3', regions[3] || 'Region 4'] },
       ],
     },
   };

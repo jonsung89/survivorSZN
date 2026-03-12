@@ -5,6 +5,7 @@ import { leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { getSportBadgeClasses } from '../sports';
+import SportBadge from '../components/SportBadge';
 import AppIcon from '../components/AppIcon';
 import BrandLogo from '../components/BrandLogo';
 
@@ -200,9 +201,7 @@ export default function JoinLeague() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap">
                         <h3 className="font-semibold text-fg">{league.name}</h3>
-                        <span className={`text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded ${getSportBadgeClasses(league.sport || league.sportId)}`}>
-                          {(league.sport || 'nfl').toUpperCase()}
-                        </span>
+                        <SportBadge sportId={league.sport || league.sportId} />
                         {league.isJoined && (
                           <span className="hidden sm:flex items-center gap-1 text-xs bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded font-medium">
                             <Check className="w-3 h-3" />

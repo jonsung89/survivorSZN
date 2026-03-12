@@ -10,7 +10,11 @@ import BracketSetup from '../components/bracket/BracketSetup';
 import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
 import ChatWidget from '../components/ChatWidget';
 import { getSportBadgeClasses } from '../sports';
-import { SCORING_PRESETS, countPicks } from '../utils/bracketSlots';
+import SportBadge from '../components/SportBadge';
+import CommishBadge from '../components/CommishBadge';
+import { SCORING_PRESETS, ROUND_BOUNDARIES, countPicks } from '../utils/bracketSlots';
+
+const TOTAL_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
 
 export default function BracketChallenge() {
   const { leagueId } = useParams();
@@ -221,21 +225,14 @@ export default function BracketChallenge() {
                   <Pencil className="w-4 h-4" />
                 </button>
               )}
-              {isCommissioner && (
-                <span className="badge badge-active text-xs flex items-center gap-1 flex-shrink-0">
-                  <Crown className="w-3 h-3" />
-                  Commish
-                </span>
-              )}
+              {isCommissioner && <CommishBadge />}
             </div>
             <p className="text-fg/50 text-sm mt-1">
               {members.length} member{members.length !== 1 ? 's' : ''}
               {entryFee > 0 && <> &middot; ${entryFee}/bracket</>}
             </p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <span className={`text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded ${getSportBadgeClasses('ncaab')}`}>
-                March Madness
-              </span>
+              <SportBadge sportId="ncaab" label="March Madness" />
               <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-bold uppercase ${
                 isOpen ? 'bg-emerald-500/15 text-emerald-400' :
                 challenge.status === 'locked' ? 'bg-amber-500/15 text-amber-400' :
@@ -328,7 +325,7 @@ export default function BracketChallenge() {
           {/* Bracket Cards */}
           {myBrackets.map(bracket => {
             const pickCount = countPicks(bracket.picks || {});
-            const progress = Math.round((pickCount / 63) * 100);
+            const progress = Math.round((pickCount / TOTAL_GAMES) * 100);
 
             return (
               <div
@@ -348,7 +345,7 @@ export default function BracketChallenge() {
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 text-orange-500 font-medium">
-                          <Clock className="w-4 h-4" /> {pickCount}/63 picks
+                          <Clock className="w-4 h-4" /> {pickCount}/{TOTAL_GAMES} picks
                         </span>
                       )}
                       {bracket.is_submitted && (

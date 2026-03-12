@@ -1,8 +1,6 @@
 import BracketMatchup from './BracketMatchup';
 import { getNextSlot, getChildSlots, getMatchupTeams } from '../../utils/bracketSlots';
 
-const ROUND_NAMES = ['First Round', 'Second Round', 'Sweet 16', 'Elite Eight'];
-
 // Compute a formatted date range from slot start dates
 export function getRoundDateRange(slots, tournamentData) {
   if (!tournamentData?.slots) return null;
@@ -129,7 +127,7 @@ export default function BracketRegion({
                 style={{ width: '260px', minWidth: '260px' }}
               >
                 <div className="text-base font-bold text-fg/80">
-                  {ROUND_NAMES[roundIdx] || roundData.name}
+                  {roundData.name}
                 </div>
                 {dateRange && (
                   <div className="text-sm text-fg/60 mt-0.5">{dateRange}</div>

@@ -2,7 +2,7 @@
 // Fetches bracket structure, team breakdowns, and live results from ESPN API
 
 const { fetchWithCache } = require('./espn');
-const { SEED_MATCHUPS, REGIONS, getSlotRound, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
+const { SEED_MATCHUPS, getSlotRound, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
 const Anthropic = require('@anthropic-ai/sdk');
 const { db } = require('../db/supabase');
 
@@ -49,6 +49,10 @@ async function fetchTournamentGames(season) {
   return data?.events || [];
 }
 
+// Sorted by key length descending so "midwest" matches before "west", etc.
+const SORTED_REGION_ALIASES = Object.entries(REGION_ALIASES)
+  .sort((a, b) => b[0].length - a[0].length);
+
 /**
  * Parse region and round from ESPN event notes
  */
@@ -60,8 +64,8 @@ function parseRegionAndRound(event) {
   for (const note of notes) {
     const headline = (note.headline || '').toLowerCase();
 
-    // Parse region
-    for (const [alias, regionName] of Object.entries(REGION_ALIASES)) {
+    // Parse region (check longer aliases first to avoid "west" matching "midwest")
+    for (const [alias, regionName] of SORTED_REGION_ALIASES) {
       if (headline.includes(alias)) {
         region = regionName;
         break;
@@ -81,6 +85,43 @@ function parseRegionAndRound(event) {
 }
 
 /**
+ * Determine correct region order based on Final Four pairings.
+ * The bracket structure requires: regions[0] vs regions[1] in FF slot 61,
+ * regions[2] vs regions[3] in FF slot 62. We infer pairings from ESPN
+ * FF game data by mapping teams back to their region.
+ */
+function orderRegionsByFFPairings(regionOrder, eventMap) {
+  if (regionOrder.length !== 4) return regionOrder;
+
+  // Build team → region map from all regional games (rounds 0-3)
+  const teamRegion = {};
+  for (const game of Object.values(eventMap)) {
+    if (game.region && game.round !== null && game.round <= 3) {
+      if (game.team1?.id) teamRegion[game.team1.id] = game.region;
+      if (game.team2?.id) teamRegion[game.team2.id] = game.region;
+    }
+  }
+
+  // Find FF games (round 4) and determine which regions are paired
+  const ffGames = Object.values(eventMap).filter(g => g.round === 4);
+  if (ffGames.length < 2) return regionOrder; // No FF data yet — keep discovery order
+
+  const pairs = [];
+  for (const game of ffGames) {
+    const r1 = teamRegion[game.team1?.id];
+    const r2 = teamRegion[game.team2?.id];
+    if (r1 && r2 && r1 !== r2) {
+      pairs.push([r1, r2]);
+    }
+  }
+
+  if (pairs.length !== 2) return regionOrder; // Can't determine pairings
+
+  // Reorder: pair 1 → indices 0,1 and pair 2 → indices 2,3
+  return [...pairs[0], ...pairs[1]];
+}
+
+/**
  * Build the full 64-team tournament bracket from ESPN data
  */
 async function getTournamentBracket(season) {
@@ -93,7 +134,9 @@ async function getTournamentBracket(season) {
   const teams = {};
   const slots = {};
   const eventMap = {};
-  const regionGames = { East: [], West: [], South: [], Midwest: [] };
+  // Discover regions dynamically from ESPN data (data-driven, not hardcoded)
+  const regionGames = {}; // { regionName: [gameInfo, ...] }
+  const regionOrder = []; // preserve discovery order
 
   for (const event of events) {
     const { region, round } = parseRegionAndRound(event);
@@ -139,16 +182,26 @@ async function getTournamentBracket(season) {
 
     eventMap[event.id] = gameInfo;
 
-    // For R64 games, we can determine the slot from region + seeds
-    if (round === 0 && region && regionGames[region]) {
+    // Track region for R64 games and discover region names
+    if (round === 0 && region) {
+      if (!regionGames[region]) {
+        regionGames[region] = [];
+        regionOrder.push(region);
+      }
       regionGames[region].push(gameInfo);
     }
   }
 
+  // Determine correct region ordering from FF pairings
+  // The bracket requires: regions[0] vs regions[1] in FF slot 61, regions[2] vs regions[3] in FF slot 62
+  // We infer the pairings from ESPN's Final Four game data
+  const discoveredRegions = orderRegionsByFFPairings(regionOrder, eventMap);
+
   // Map R64 games to slots using seed matchups
-  for (const [regionIdx, regionName] of REGIONS.entries()) {
-    const games = regionGames[regionName];
-    const slotBase = regionIdx * 8 + 1; // East: 1-8, West: 9-16, South: 17-24, Midwest: 25-32
+  for (let regionIdx = 0; regionIdx < discoveredRegions.length; regionIdx++) {
+    const regionName = discoveredRegions[regionIdx];
+    const games = regionGames[regionName] || [];
+    const slotBase = regionIdx * 8 + 1; // Region 0: 1-8, Region 1: 9-16, etc.
 
     for (const game of games) {
       const seeds = [game.team1?.seed, game.team2?.seed].sort((a, b) => (a || 99) - (b || 99));
@@ -188,7 +241,7 @@ async function getTournamentBracket(season) {
 
     if (game.round <= 3 && game.region) {
       // Regional rounds (R32 through E8)
-      const regionIdx = REGIONS.indexOf(game.region);
+      const regionIdx = discoveredRegions.indexOf(game.region);
       if (regionIdx < 0) continue;
       const regionSlotBase = rb.start + regionIdx * rb.gamesPerRegion;
 
@@ -237,7 +290,7 @@ async function getTournamentBracket(season) {
     }
   }
 
-  return { teams, slots, regions: REGIONS, events: eventMap, available: true };
+  return { teams, slots, regions: discoveredRegions, events: eventMap, available: true };
 }
 
 /**

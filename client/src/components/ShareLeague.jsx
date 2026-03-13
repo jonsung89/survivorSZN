@@ -27,13 +27,14 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
   const entryFee = league?.entryFee || 0;
 
   const buildShareText = () => {
-    let text = `You've been invited to join ${league.name} on SurvivorSZN!\n${inviteLink}`;
+    let text = `You've been invited to join ${league.name} on SurvivorSZN!`;
     if (leaguePassword) {
       text += `\nPassword: ${leaguePassword}`;
     }
     if (entryFee > 0) {
       text += `\nEntry Fee: $${entryFee}`;
     }
+    text += `\n${inviteLink}`;
     return text;
   };
 
@@ -53,9 +54,7 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Join ${league.name} on SurvivorSZN`,
-          text: buildShareText(),
-          url: inviteLink
+          text: buildShareText()
         });
       } catch (err) {
         if (err.name !== 'AbortError') {

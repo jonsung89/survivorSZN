@@ -1045,12 +1045,13 @@ export default function Schedule() {
                         })() : '';
                         return (
                           <div key={i} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                              <span className="text-fg/40 w-7 sm:w-9 flex-shrink-0 text-xs">{dateStr}</span>
-                              <span className="text-fg/50 w-5 sm:w-7 flex-shrink-0 text-center">{g.atVs === 'vs' ? 'vs.' : '@'}</span>
+                            <div className="flex items-center gap-1.5 sm:gap-1.5 min-w-0">
+                              <span className="text-fg/40 w-7 sm:w-auto flex-shrink-0 text-xs sm:text-sm">{dateStr}</span>
+                              <span className="text-fg/50 w-5 sm:w-5 sm:text-sm sm:text-fg/40 flex-shrink-0 text-center">{g.atVs === 'vs' ? 'vs.' : '@'}</span>
                               {g.opponentLogo && <img src={tl(g.opponentLogo)} alt="" className="w-4 h-4 sm:w-5 sm:h-5 object-contain flex-shrink-0" />}
                               <span className="text-fg/70 truncate">
-                                {g.opponentName || g.opponent}
+                                <span className="sm:hidden">{g.opponentName || g.opponent}</span>
+                                <span className="hidden sm:inline">{g.opponent || g.opponentName}</span>
                                 {g.opponentRecord && <span className="text-fg/40 ml-1">({g.opponentRecord})</span>}
                               </span>
                             </div>

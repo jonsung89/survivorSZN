@@ -109,6 +109,7 @@ router.get('/invite/:inviteCode', async (req, res) => {
         l.season,
         l.status,
         l.sport_id,
+        l.entry_fee,
         l.password_hash IS NOT NULL as has_password,
         u.display_name as commissioner_name,
         COUNT(lm.id) as member_count
@@ -134,7 +135,8 @@ router.get('/invite/:inviteCode', async (req, res) => {
         memberCount: parseInt(league.member_count),
         commissionerName: league.commissioner_name || 'Unknown',
         hasPassword: league.has_password,
-        sportId: league.sport_id || 'nfl'
+        sportId: league.sport_id || 'nfl',
+        entryFee: parseFloat(league.entry_fee) || 0
       }
     });
   } catch (error) {

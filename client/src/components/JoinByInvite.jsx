@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { 
-  Trophy, Users, Shield, Calendar, Lock, Loader2, 
-  AlertCircle, Check, LogIn, UserPlus
+import {
+  Lock, Loader2,
+  AlertCircle, Check, LogIn, UserPlus, DollarSign
 } from 'lucide-react';
 import { leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from './Toast';
 import Loading from './Loading';
+import AppIcon from './AppIcon';
+import SportBadge from './SportBadge';
 
 export default function JoinByInvite() {
   const { inviteCode } = useParams();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { showToast } = useToast();
-  
+
   const [league, setLeague] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -28,7 +30,7 @@ export default function JoinByInvite() {
   const loadLeague = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const result = await leagueAPI.getByInviteCode(inviteCode);
       if (result.success) {
@@ -39,15 +41,14 @@ export default function JoinByInvite() {
     } catch (err) {
       setError('Failed to load league');
     }
-    
+
     setLoading(false);
   };
 
   const handleJoin = async (e) => {
     e.preventDefault();
-    
+
     if (!user) {
-      // Save invite code and redirect to login
       sessionStorage.setItem('pendingInvite', inviteCode);
       navigate('/login');
       return;
@@ -59,7 +60,7 @@ export default function JoinByInvite() {
     }
 
     setJoining(true);
-    
+
     try {
       const result = await leagueAPI.join(league.id, password);
       if (result.success) {
@@ -71,7 +72,7 @@ export default function JoinByInvite() {
     } catch (err) {
       showToast('Something went wrong', 'error');
     }
-    
+
     setJoining(false);
   };
 
@@ -100,14 +101,17 @@ export default function JoinByInvite() {
     );
   }
 
+  const entryFee = league.entryFee || 0;
+  const isNcaab = league.sportId === 'ncaab';
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* League Card */}
         <div className="glass-card rounded-2xl p-6 mb-6 animate-in">
           <div className="text-center mb-6">
-            <div className="w-20 h-20 bg-gradient-to-br from-nfl-blue to-nfl-purple rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Trophy className="w-10 h-10 text-white" />
+            <div className="flex justify-center mb-2">
+              <AppIcon className="w-16 h-16" color="rgb(139 92 246)" />
             </div>
             <h1 className="text-2xl font-display font-bold text-fg mb-1">
               {league.name}
@@ -117,49 +121,48 @@ export default function JoinByInvite() {
             </p>
           </div>
 
-          {/* League Stats */}
-          {league.sportId === 'ncaab' ? (
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <div className="bg-fg/5 rounded-xl p-3 text-center">
-                <Users className="w-5 h-5 text-fg mx-auto mb-1" />
-                <p className="text-fg font-bold">{league.memberCount}</p>
-                <p className="text-fg/40 text-xs">Members</p>
-              </div>
-              <div className="bg-fg/5 rounded-xl p-3 text-center">
-                <Trophy className="w-5 h-5 text-amber-400 mx-auto mb-1" />
+          {/* League Info */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="bg-fg/5 rounded-xl p-3 text-center flex flex-col items-center justify-center">
+              <p className="text-fg font-bold">{league.memberCount}</p>
+              <p className="text-fg/40 text-xs">Members</p>
+            </div>
+            {isNcaab ? (
+              <div className="bg-fg/5 rounded-xl p-3 text-center flex flex-col items-center justify-center">
                 <p className="text-fg font-bold text-sm">Bracket</p>
                 <p className="text-fg/40 text-xs">Challenge</p>
               </div>
+            ) : (
               <div className="bg-fg/5 rounded-xl p-3 text-center">
-                <Calendar className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-fg font-bold text-sm">NCAAB</p>
-                <p className="text-fg/40 text-xs">March Madness</p>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <div className="bg-fg/5 rounded-xl p-3 text-center">
-                <Users className="w-5 h-5 text-fg mx-auto mb-1" />
-                <p className="text-fg font-bold">{league.memberCount}</p>
-                <p className="text-fg/40 text-xs">Members</p>
-              </div>
-              <div className="bg-fg/5 rounded-xl p-3 text-center">
-                <Shield className="w-5 h-5 text-orange-400 mx-auto mb-1" />
+                <p className="text-fg/40 text-xs mb-1">Max Strikes</p>
                 <p className="text-fg font-bold">{league.maxStrikes}</p>
-                <p className="text-fg/40 text-xs">Max Strikes</p>
               </div>
-              <div className="bg-fg/5 rounded-xl p-3 text-center">
-                <Calendar className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-fg font-bold">Week {league.startWeek}</p>
-                <p className="text-fg/40 text-xs">Start</p>
-              </div>
+            )}
+            <div className="bg-fg/5 rounded-xl p-3 flex flex-col items-center justify-center">
+              <SportBadge sportId={league.sportId} />
+              <p className="text-fg/40 text-xs mt-1">
+                {isNcaab ? 'March Madness' : league.season}
+              </p>
             </div>
-          )}
+          </div>
 
-          {/* Commissioner */}
-          <div className="bg-fg/5 rounded-xl p-3 mb-6">
-            <p className="text-fg/50 text-xs mb-1">Commissioner</p>
-            <p className="text-fg font-medium">{league.commissionerName}</p>
+          {/* Entry Fee + Commissioner */}
+          <div className="space-y-3 mb-6">
+            {entryFee > 0 && (
+              <div className="bg-fg/5 rounded-xl p-3 flex items-center gap-3">
+                <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-fg font-bold">${entryFee}{isNcaab ? '/bracket' : ''}</p>
+                  <p className="text-fg/40 text-xs">Entry Fee</p>
+                </div>
+              </div>
+            )}
+            <div className="bg-fg/5 rounded-xl p-3">
+              <p className="text-fg/50 text-xs mb-1">Commissioner</p>
+              <p className="text-fg font-medium">{league.commissionerName}</p>
+            </div>
           </div>
 
           {/* Join Form */}
@@ -228,7 +231,7 @@ export default function JoinByInvite() {
         {/* Back Link */}
         <div className="text-center">
           <Link to="/dashboard" className="text-fg/70 hover:text-fg text-base font-medium">
-            ← Back to Dashboard
+            &larr; Back to Dashboard
           </Link>
         </div>
       </div>

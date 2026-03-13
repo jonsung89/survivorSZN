@@ -65,9 +65,9 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // Create league with invite code and sport
     await db.run(`
-      INSERT INTO leagues (id, name, password_hash, commissioner_id, max_strikes, start_week, season, invite_code, sport_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    `, [leagueId, name.trim(), passwordHash, user.id, maxStrikes, startWeek, season, inviteCode, sportId]);
+      INSERT INTO leagues (id, name, password_hash, password_plain, commissioner_id, max_strikes, start_week, season, invite_code, sport_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `, [leagueId, name.trim(), passwordHash, password, user.id, maxStrikes, startWeek, season, inviteCode, sportId]);
 
     // Add commissioner as first member
     await db.run(`
@@ -694,6 +694,7 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
         sportId: league.sport_id || 'nfl',
         entryFee: parseFloat(league.entry_fee) || 0,
         prizePotOverride: league.prize_pot_override ? parseFloat(league.prize_pot_override) : null,
+        password: league.password_plain || null,
         myStrikes: membership.strikes,
         myStatus: membership.status,
         members: members.map(m => ({

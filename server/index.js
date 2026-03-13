@@ -70,9 +70,50 @@ app.get('/health', (req, res) => {
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/dist')));
+  const fs = require('fs');
+  const { pool } = require('./db/supabase');
+  const distPath = path.join(__dirname, '../client/dist');
+  const indexHtml = fs.readFileSync(path.join(distPath, 'index.html'), 'utf-8');
+
+  app.use(express.static(distPath));
+
+  // Dynamic OG tags for invite links
+  app.get('/join/:inviteCode', async (req, res) => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT l.name, l.sport_id,
+               COUNT(lm.id)::int as member_count,
+               u.display_name as commissioner_name
+        FROM leagues l
+        LEFT JOIN league_members lm ON lm.league_id = l.id
+        LEFT JOIN users u ON u.id = l.commissioner_id
+        WHERE UPPER(l.invite_code) = UPPER($1) AND l.status = 'active'
+        GROUP BY l.id, u.display_name
+      `, [req.params.inviteCode]);
+
+      if (rows.length > 0) {
+        const league = rows[0];
+        const title = `Join ${league.name} on SurvivorSZN`;
+        const description = `${league.commissioner_name} invited you to join ${league.name}. ${league.member_count} member${league.member_count !== 1 ? 's' : ''} and counting.`;
+        const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        const html = indexHtml
+          .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${escHtml(title)}" />`)
+          .replace(/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${escHtml(description)}" />`)
+          .replace(/<meta name="twitter:title"[^>]*>/, `<meta name="twitter:title" content="${escHtml(title)}" />`)
+          .replace(/<meta name="twitter:description"[^>]*>/, `<meta name="twitter:description" content="${escHtml(description)}" />`);
+
+        return res.send(html);
+      }
+    } catch (err) {
+      console.error('OG tag injection error:', err);
+    }
+    // Fallback to default index.html
+    res.send(indexHtml);
+  });
+
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+    res.send(indexHtml);
   });
 }
 

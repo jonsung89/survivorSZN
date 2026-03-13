@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Pencil } from 'lucide-react';
+import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil } from 'lucide-react';
 import { bracketAPI, leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
@@ -225,6 +225,7 @@ export default function BracketChallenge() {
                   <Pencil className="w-4 h-4" />
                 </button>
               )}
+              {isCommissioner && <CommishBadge />}
             </div>
             <p className="text-fg/50 text-sm mt-1">
               {members.length} member{members.length !== 1 ? 's' : ''}
@@ -474,7 +475,11 @@ export default function BracketChallenge() {
                         {member.displayName || 'Anonymous'}
                       </span>
                       {isMe && <span className="text-xs text-violet-400/60">(you)</span>}
-                      {memberCommissioner && <CommishBadge />}
+                      {memberCommissioner && (
+                        <span className="inline-flex items-center gap-0.5 text-xs text-amber-400">
+                          <Crown className="w-3 h-3" />
+                        </span>
+                      )}
                     </div>
                     {isCommissioner && member.email && (
                       <p className="text-xs text-fg/40 mt-0.5 truncate">{member.email}</p>
@@ -544,7 +549,7 @@ export default function BracketChallenge() {
       {/* Share Modal */}
       {showShareModal && (
         <ShareLeagueModal
-          league={league}
+          league={{ ...league, entryFee: entryFee || league.entryFee }}
           isCommissioner={isCommissioner}
           onClose={() => setShowShareModal(false)}
           onInviteCodeUpdate={(newCode) => setLeague(prev => ({ ...prev, inviteCode: newCode }))}

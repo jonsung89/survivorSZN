@@ -23,9 +23,22 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
 
   const inviteCode = league?.inviteCode;
   const inviteLink = inviteCode ? `${window.location.origin}/join/${inviteCode}` : null;
+  const leaguePassword = league?.password || null;
+  const entryFee = league?.entryFee || 0;
+
+  const buildShareText = () => {
+    let text = `You've been invited to join ${league.name} on SurvivorSZN!\n${inviteLink}`;
+    if (leaguePassword) {
+      text += `\nPassword: ${leaguePassword}`;
+    }
+    if (entryFee > 0) {
+      text += `\nEntry Fee: $${entryFee}`;
+    }
+    return text;
+  };
 
   const handleCopy = async (type) => {
-    const text = type === 'code' ? inviteCode : inviteLink;
+    const text = type === 'code' ? inviteCode : type === 'password' ? leaguePassword : type === 'message' ? buildShareText() : inviteLink;
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -40,8 +53,8 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Join ${league.name} on Survivor SZN`,
-          text: `Join "${league.name}" on Survivor SZN! Use invite code: ${inviteCode}`,
+          title: `Join ${league.name} on SurvivorSZN`,
+          text: buildShareText(),
           url: inviteLink
         });
       } catch (err) {
@@ -50,7 +63,7 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
         }
       }
     } else {
-      handleCopy('link');
+      handleCopy('message');
     }
   };
 
@@ -138,7 +151,7 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
                   <button
                     onClick={() => handleCopy('link')}
                     className={`p-2 rounded-lg transition-all flex-shrink-0 ${
-                      copied === 'link' 
+                      copied === 'link'
                         ? 'bg-green-500 text-white'
                         : 'bg-fg/10 hover:bg-fg/20 text-fg'
                     }`}
@@ -147,6 +160,43 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
                   </button>
                 </div>
               </div>
+
+              {/* League Details (password + entry fee) */}
+              {(leaguePassword || entryFee > 0) && (
+                <div className="bg-fg/5 rounded-xl p-4 space-y-3">
+                  {leaguePassword && (
+                    <div>
+                      <label className="block text-fg/50 text-xs uppercase tracking-wider mb-1">
+                        League Password
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="flex-1 text-fg font-medium">{leaguePassword}</span>
+                        <button
+                          onClick={() => handleCopy('password')}
+                          className={`p-2 rounded-lg transition-all flex-shrink-0 ${
+                            copied === 'password'
+                              ? 'bg-green-500 text-white'
+                              : 'bg-fg/10 hover:bg-fg/20 text-fg'
+                          }`}
+                        >
+                          {copied === 'password' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {entryFee > 0 && (
+                    <div>
+                      <label className="block text-fg/50 text-xs uppercase tracking-wider mb-1">
+                        Entry Fee
+                      </label>
+                      <span className="text-fg font-medium">${entryFee}</span>
+                    </div>
+                  )}
+                  <p className="text-fg/30 text-xs">
+                    Included when you share
+                  </p>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex gap-3">
@@ -171,9 +221,9 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
               {/* QR Code */}
               {showQR && qrCodeUrl && (
                 <div className="bg-white rounded-xl p-4 flex items-center justify-center">
-                  <img 
-                    src={qrCodeUrl} 
-                    alt="QR Code" 
+                  <img
+                    src={qrCodeUrl}
+                    alt="QR Code"
                     className="w-48 h-48"
                   />
                 </div>
@@ -199,13 +249,6 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
                   </p>
                 </div>
               )}
-
-              {/* Instructions */}
-              <div className="text-center text-fg/40 text-sm pt-2">
-                {league.hasPassword !== false && (
-                  <p>Members will need the league password to join</p>
-                )}
-              </div>
             </>
           )}
         </div>

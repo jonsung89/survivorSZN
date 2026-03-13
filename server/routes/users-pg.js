@@ -86,6 +86,10 @@ router.put('/display-name', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Display name must be at least 2 characters' });
     }
 
+    if (displayName.trim().length > 20) {
+      return res.status(400).json({ error: 'Display name must be 20 characters or less' });
+    }
+
     await db.run(`
       UPDATE users SET display_name = $1, updated_at = NOW()
       WHERE firebase_uid = $2

@@ -98,7 +98,7 @@ export default function Onboarding() {
                 }}
                 placeholder="Enter your display name"
                 className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-xl text-fg placeholder-fg/30 focus:outline-none focus:border-nfl-blue text-lg"
-                maxLength={30}
+                maxLength={20}
                 autoFocus
               />
               <p className="text-fg/40 text-xs mt-2">

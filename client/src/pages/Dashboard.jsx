@@ -619,11 +619,17 @@ export default function Dashboard() {
 
                 {/* League name and status */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <h3 className="font-semibold text-fg text-sm sm:text-base truncate max-w-[60vw] sm:max-w-none">{league.name}</h3>
-                    <SportBadge sportId={league.sportId} />
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0">
+                    <h3 className="font-semibold text-fg text-sm sm:text-base">{league.name}</h3>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <SportBadge sportId={league.sportId} />
+                      <span className="flex items-center gap-0.5 text-fg/40 text-xs">
+                        <Users className="w-3 h-3" />
+                        {league.memberCount}
+                      </span>
+                    </div>
                   </div>
-                  {/* Mobile-only status row (non-bracket only — bracket info moved to right side) */}
+                  {/* Mobile-only status row (non-bracket only) */}
                   <div className="flex items-center gap-2 text-sm sm:hidden">
                     {isBracketLeague ? null : isPast ? null : (
                       <>

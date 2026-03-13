@@ -215,7 +215,7 @@ export default function CreateLeague() {
             onChange={handleChange}
             placeholder={isBracketMode ? "e.g., Office Bracket Challenge 2026" : "e.g., Office Survivor Pool 2024"}
             className="input-field"
-            maxLength={50}
+            maxLength={30}
           />
         </div>
 

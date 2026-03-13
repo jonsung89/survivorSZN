@@ -321,6 +321,7 @@ export default function Navbar() {
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Enter your display name"
                 className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-lg text-fg placeholder-fg/40 focus:outline-none focus:border-nfl-blue"
+                maxLength={20}
                 onKeyDown={(e) => e.key === 'Enter' && handleSaveDisplayName()}
                 autoFocus
               />

@@ -29,6 +29,10 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'League name must be at least 3 characters' });
     }
 
+    if (name.trim().length > 30) {
+      return res.status(400).json({ error: 'League name must be 30 characters or less' });
+    }
+
     if (!password || password.length < 4) {
       return res.status(400).json({ error: 'Password must be at least 4 characters' });
     }

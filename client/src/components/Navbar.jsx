@@ -161,7 +161,7 @@ export default function Navbar() {
                     name={user?.displayName || 'Player'}
                     size="sm"
                   />
-                  <span className="text-sm text-fg/80">
+                  <span className="hidden lg:inline text-sm text-fg/80">
                     {user?.displayName || 'Player'}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-fg/50 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />

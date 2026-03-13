@@ -26,40 +26,6 @@ const authFetch = async (url, options = {}) => {
   return response;
 };
 
-// Auth API
-export const authAPI = {
-  requestCode: async (phone) => {
-    const res = await fetch(`${API_URL}/auth/request-code`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone })
-    });
-    return res.json();
-  },
-
-  verifyCode: async (phone, code) => {
-    const res = await fetch(`${API_URL}/auth/verify-code`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, code })
-    });
-    return res.json();
-  },
-
-  getMe: async () => {
-    const res = await authFetch('/auth/me');
-    return res.json();
-  },
-
-  updateDisplayName: async (displayName) => {
-    const res = await authFetch('/auth/display-name', {
-      method: 'PUT',
-      body: JSON.stringify({ displayName })
-    });
-    return res.json();
-  }
-};
-
 // League API
 export const leagueAPI = {
   create: async (data) => {
@@ -514,7 +480,6 @@ export const adminAPI = {
 };
 
 export default {
-  auth: authAPI,
   league: leagueAPI,
   picks: picksAPI,
   nfl: nflAPI,

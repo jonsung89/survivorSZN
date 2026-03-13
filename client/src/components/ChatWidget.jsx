@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircle, X, Send, Users, Crown, ChevronLeft, ChevronRight, ChevronUp, Smile, Image, Reply, CornerUpLeft, AlertCircle, Search, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Trash2, ShieldX } from 'lucide-react';
+import { MessageCircle, X, Send, Users, ChevronLeft, ChevronRight, ChevronUp, Smile, Image, Reply, CornerUpLeft, AlertCircle, Search, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Trash2, ShieldX } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
+import CommishBadge from './CommishBadge';
 import { useThemedLogo } from '../utils/logo';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -941,9 +942,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             </div>
             <h3 className="text-xl font-bold text-fg flex items-center gap-2">
               {profile.displayName}
-              {isCommissioner && (
-                <Crown className="w-5 h-5 text-yellow-500" />
-              )}
+              {isCommissioner && <CommishBadge />}
             </h3>
             <div className="flex items-center gap-2 mt-1">
               <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-fg/30'}`} />
@@ -1104,16 +1103,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 <div className="flex-1 min-w-0">
                   {showName && (
                     <p className="text-sm mb-1 ml-1 flex items-center gap-2">
-                      <span className={`font-medium ${isOwn ? 'text-emerald-600' : 'text-fg/70'}`}>
+                      <span className={`font-medium ${isOwn ? 'text-emerald-400' : 'text-fg/70'}`}>
                         {displayName}
                         {isOwn && <span className="text-fg/40 font-normal ml-1">(you)</span>}
                       </span>
-                      {isMessageFromCommissioner && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 rounded text-yellow-600 text-[10px] font-medium">
-                          <Crown className="w-3 h-3" />
-                          Commish
-                        </span>
-                      )}
+                      {isMessageFromCommissioner && <CommishBadge />}
                       <span className="text-fg/50 text-xs">{formatTime(message.created_at || message.createdAt)}</span>
                     </p>
                   )}
@@ -1164,7 +1158,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         <div
                           className={`inline-block px-3 py-2 rounded-2xl rounded-tl-md cursor-pointer active:scale-[0.98] transition-all hover:ring-1 hover:ring-fg/20 ${
                             isOwn
-                              ? 'bg-emerald-600/20 border border-emerald-500/30 text-fg hover:bg-emerald-600/30'
+                              ? 'bg-emerald-500/25 border border-emerald-400/30 text-fg hover:bg-emerald-500/35'
                               : 'bg-fg/10 text-fg hover:bg-fg/15'
                           }`}
                           onClick={(e) => handleMessageTap(e, message)}
@@ -1612,7 +1606,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     <p className="text-fg font-medium text-sm truncate">
                       {messages[messages.length - 1]?.display_name || messages[messages.length - 1]?.displayName || 'User'}
                       {(messages[messages.length - 1]?.user_id || messages[messages.length - 1]?.userId) === commissionerId && (
-                        <span className="ml-1.5 text-yellow-400 text-xs">👑</span>
+                        <span className="ml-1"><CommishBadge /></span>
                       )}
                     </p>
                     <p className="text-fg/50 text-sm truncate">

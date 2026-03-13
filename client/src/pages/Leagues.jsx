@@ -6,7 +6,6 @@ import { useAuth } from '../context/AuthContext';
 import Loading from '../components/Loading';
 import { getSportModule, getSportGradient, getSportBadgeClasses } from '../sports';
 import SportBadge from '../components/SportBadge';
-import CommishBadge from '../components/CommishBadge';
 import AppIcon from '../components/AppIcon';
 import LeagueMembersDialog from '../components/LeagueMembersDialog';
 
@@ -101,7 +100,6 @@ export default function Leagues() {
               <h2 className="text-base sm:text-xl font-semibold text-fg/90 group-hover:text-fg transition-colors truncate min-w-0">
                 {league.name}
               </h2>
-              {league.isCommissioner && <CommishBadge />}
               <SportBadge sportId={league.sportId} />
             </div>
             <div className="flex items-center gap-3 sm:gap-4 mt-1 text-xs sm:text-sm text-fg/60 min-w-0 overflow-hidden">

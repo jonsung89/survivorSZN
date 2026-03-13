@@ -749,7 +749,6 @@ export default function LeagueDetail() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="font-display text-xl sm:text-3xl font-bold text-fg truncate">{league.name}</h1>
-              {isCommissioner && <CommishBadge />}
             </div>
             <p className="text-fg/60 text-sm sm:text-base">
               {league.members?.length || 0} members • {league.maxStrikes} strike{league.maxStrikes !== 1 ? 's' : ''} max
@@ -1514,6 +1513,7 @@ export default function LeagueDetail() {
                       <p className="text-fg font-medium text-sm flex items-center gap-1">
                         {member.displayName}
                         {member.isMe && <span className="text-xs text-nfl-blue">(You)</span>}
+                        {member.userId === league?.commissionerId && <CommishBadge />}
                       </p>
                       {member.email && (
                         <p className="text-fg/40 text-xs truncate max-w-[150px]">{member.email}</p>
@@ -1662,6 +1662,7 @@ export default function LeagueDetail() {
                             {member.isMe && (
                               <span className="text-xs text-nfl-blue">(You)</span>
                             )}
+                            {member.userId === league?.commissionerId && <CommishBadge />}
                           </p>
                           {member.email && (
                             <p className="text-fg/40 text-xs">{member.email}</p>

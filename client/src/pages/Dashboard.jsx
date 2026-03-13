@@ -18,7 +18,6 @@ import { BROADCAST_NETWORKS } from '../sports/nfl/constants';
 import { getWeekLabel } from '../sports/nfl/weekUtils';
 import { getSportModule, getSportGradient, getSportBadgeClasses } from '../sports';
 import SportBadge from '../components/SportBadge';
-import CommishBadge from '../components/CommishBadge';
 import LeagueMembersDialog from '../components/LeagueMembersDialog';
 import { useThemedLogo } from '../utils/logo';
 
@@ -622,7 +621,6 @@ export default function Dashboard() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <h3 className="font-semibold text-fg text-sm sm:text-base truncate max-w-[60vw] sm:max-w-none">{league.name}</h3>
-                    {league.isCommissioner && <CommishBadge />}
                     <SportBadge sportId={league.sportId} />
                   </div>
                   {/* Mobile-only status row (non-bracket only — bracket info moved to right side) */}

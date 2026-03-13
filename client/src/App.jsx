@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -209,7 +209,7 @@ function AppRoutes() {
           <div className="text-center">
             <h1 className="text-6xl font-display font-bold text-fg mb-4">404</h1>
             <p className="text-fg/60 mb-6">Page not found</p>
-            <a href="/dashboard" className="btn-primary">Go Home</a>
+            <Link to="/dashboard" className="btn-primary">Go Home</Link>
           </div>
         </div>
       } />

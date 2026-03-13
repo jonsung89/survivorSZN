@@ -39,11 +39,18 @@ router.post('/challenges', authMiddleware, async (req, res) => {
     // Fetch tournament data from ESPN
     const tournamentData = await getTournamentBracket(league.season);
 
+    const parsedFee = parseFloat(entryFee) || 0;
+
     const challenge = await db.getOne(`
       INSERT INTO bracket_challenges (league_id, season, max_brackets_per_user, scoring_preset, scoring_system, tiebreaker_type, entry_deadline, entry_fee, tournament_data, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open')
       RETURNING *
-    `, [leagueId, league.season, maxBracketsPerUser, scoringPreset, JSON.stringify(scoringSystem), tiebreakerType, entryDeadline || null, parseFloat(entryFee) || 0, JSON.stringify(tournamentData)]);
+    `, [leagueId, league.season, maxBracketsPerUser, scoringPreset, JSON.stringify(scoringSystem), tiebreakerType, entryDeadline || null, parsedFee, JSON.stringify(tournamentData)]);
+
+    // Keep league entry_fee in sync
+    if (parsedFee > 0) {
+      await db.run('UPDATE leagues SET entry_fee = $1 WHERE id = $2', [parsedFee, leagueId]);
+    }
 
     res.json({ success: true, challenge });
   } catch (error) {
@@ -107,6 +114,12 @@ router.put('/challenges/:challengeId', authMiddleware, async (req, res) => {
     values.push(req.params.challengeId);
 
     const updated = await db.getOne(`UPDATE bracket_challenges SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`, values);
+
+    // Keep league entry_fee in sync
+    if (entryFee !== undefined) {
+      await db.run('UPDATE leagues SET entry_fee = $1 WHERE id = $2', [parseFloat(entryFee) || 0, updated.league_id]);
+    }
+
     res.json({ success: true, challenge: updated });
   } catch (error) {
     console.error('Error updating bracket challenge:', error);

@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
+const { cronAuth } = require('../middleware/cronAuth');
 const { getProvider } = require('../sports');
 
 // Helper to get user from Firebase UID
@@ -405,7 +406,7 @@ router.get('/available/:leagueId/:week', authMiddleware, async (req, res) => {
 });
 
 // Check and update pick results (can be called by a cron job or manually)
-router.post('/update-results', async (req, res) => {
+router.post('/update-results', cronAuth, async (req, res) => {
   try {
     // Get all pending picks for completed games (include sport_id for provider lookup)
     const pendingPicks = await db.getAll(`

@@ -1,7 +1,7 @@
 const { createRemoteJWKSet, jwtVerify } = require('jose');
 
 // Firebase project ID
-const FIREBASE_PROJECT_ID = 'survivorszn';
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'survivorszn';
 
 // Google's public keys for Firebase Auth
 const JWKS = createRemoteJWKSet(

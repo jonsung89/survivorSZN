@@ -33,8 +33,9 @@ export function AuthProvider({ children }) {
           // Show onboarding for new users
           if (userData.isNewUser) {
             setShowOnboarding(true);
-          } else if (!userData.email) {
+          } else if (!userData.email && !firebaseUser.email) {
             // Show email prompt for existing users without email
+            // Skip if Firebase user has email (e.g. Google sign-in) since sync will save it
             console.log('Showing email prompt - no email found');
             setShowEmailPrompt(true);
           }

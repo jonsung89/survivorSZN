@@ -1,32 +1,17 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { Phone, ArrowRight, Loader2, Shield } from 'lucide-react';
 import { sendVerificationCode, verifyCode, signInWithGoogle } from '../firebase';
 import { useToast } from '../components/Toast';
-import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const [mode, setMode] = useState('select'); // 'select' | 'phone' | 'code'
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
   const { showToast } = useToast();
-  const { user } = useAuth();
 
-  // Redirect when user is authenticated (handles the case where AuthContext updates)
-  useEffect(() => {
-    if (user) {
-      // Check for pending invite code from invite link flow
-      const pendingInvite = sessionStorage.getItem('pendingInvite');
-      if (pendingInvite) {
-        sessionStorage.removeItem('pendingInvite');
-        navigate(`/join/${pendingInvite}`, { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
-    }
-  }, [user, navigate]);
+  // Redirect is handled by PublicRoute wrapper in App.jsx
+  // which checks pendingInvite and redirects appropriately
 
   const formatPhone = (value) => {
     const digits = value.replace(/\D/g, '');
@@ -76,7 +61,6 @@ export default function Login() {
     try {
       await verifyCode(code);
       showToast('Welcome to SurvivorSZN!', 'success');
-      // Navigation will happen via the useEffect when user state updates
     } catch (err) {
       console.error(err);
       showToast('Invalid code. Please try again.', 'error');
@@ -89,17 +73,7 @@ export default function Login() {
     try {
       await signInWithGoogle();
       showToast('Welcome to SurvivorSZN!', 'success');
-      // Navigation will happen via the useEffect when user state updates
-      // Add a fallback navigation in case AuthContext doesn't update fast enough
-      setTimeout(() => {
-        const pendingInvite = sessionStorage.getItem('pendingInvite');
-        if (pendingInvite) {
-          sessionStorage.removeItem('pendingInvite');
-          navigate(`/join/${pendingInvite}`, { replace: true });
-        } else {
-          navigate('/dashboard', { replace: true });
-        }
-      }, 1000);
+      // Navigation handled by PublicRoute wrapper when user state updates
     } catch (err) {
       console.error('Google sign-in error:', err);
       showToast(err.message || 'Failed to sign in with Google', 'error');

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import BasketballCourt, { espnToSvg, espnToSvgFar, nudgeThreePointer } from './BasketballCourt';
+import BasketballCourt, { espnToSvg, espnToSvgFar } from './BasketballCourt';
 
 /**
  * ShotChart — plots shooting plays on a full basketball court.
@@ -24,13 +24,9 @@ export default function ShotChart({ plays = [], game, courtType = 'nba' }) {
       const { x, y } = play.coordinate;
       if (x === 25 && y === 0) return null; // FT sentinel
       const isNear = play.team?.id === homeTeam?.id;
-      let pt = isNear ? espnToSvg(x, y) : espnToSvgFar(x, y);
-      if (pt && (play.text || '').toLowerCase().includes('three point')) {
-        pt = nudgeThreePointer(pt, courtType, isNear);
-      }
-      return pt;
+      return isNear ? espnToSvg(x, y) : espnToSvgFar(x, y);
     },
-    [homeTeam, courtType],
+    [homeTeam],
   );
 
   // Separate field goals from free throws + compute stats by FG/3PT

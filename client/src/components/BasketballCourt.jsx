@@ -1,96 +1,113 @@
 import { useMemo } from 'react';
 import { useTheme } from '../context/ThemeContext';
 
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │                      BASKETBALL COURT — SVG COMPONENT                      │
+// │                                                                            │
+// │  Renders a full NBA/NCAAB basketball court in a HORIZONTAL layout with     │
+// │  3D perspective (CSS rotateX). Used by Gamecast and ShotChart to           │
+// │  visualize shot locations from ESPN play-by-play data.                     │
+// │                                                                            │
+// │  KEY CONCEPTS:                                                             │
+// │  • SVG coordinate system: 940×500 (94ft × 50ft), 10 SVG units = 1 foot    │
+// │  • X-axis = court length (baseline to baseline), Y-axis = court width      │
+// │  • Right half = "near" (home team), Left half = "far" (away team)          │
+// │  • 3D effect via CSS perspective + rotateX(35deg) on parent div            │
+// │  • offy on basket assembly fakes elevation above the tilted court          │
+// │                                                                            │
+// │  ESPN COORDINATE SYSTEM (play-by-play data):                               │
+// │  • ESPN x: 0–50 → court WIDTH in feet (left sideline to right sideline)    │
+// │  • ESPN y: 0–~47 → DEPTH from the BASKET center, NOT the baseline         │
+// │    - y=0 is at the basket (5.25ft in front of the baseline)                │
+// │    - y=25 is roughly half-court                                            │
+// │    - y=47 is roughly the opposite basket                                   │
+// │  • Shot distance is measured from the CENTER OF THE RIM to the shooter     │
+// │  • Free throws: ESPN sends (25, 0) as a sentinel — Gamecast overrides      │
+// │    this to y=14.5 (FT line is 15ft from backboard, ~13.75ft from rim)      │
+// │                                                                            │
+// │  COORDINATE MAPPING (ESPN → SVG):                                          │
+// │  • Near half: svgX = NEAR_BASKET.x - espnY × 10                           │
+// │               svgY = (espnX / 50) × 500                                   │
+// │  • Far half:  svgX = FAR_BASKET.x + espnY × 10                            │
+// │               svgY = 500 - (espnX / 50) × 500                             │
+// │  • Teams are mirrored — near side maps directly, far side flips Y          │
+// │                                                                            │
+// │  DEBUG MODE (admin only, toggled from Gamecast):                            │
+// │  • showDebug prop renders colored reference dots at key ESPN coordinates    │
+// │  • Magenta = (0,0), Green = (50,25), Yellow = (25,25), Orange = (25,0)     │
+// │  • Dots appear on both halves of the court for visual verification          │
+// └─────────────────────────────────────────────────────────────────────────────┘
+
 // ── Full-court dimensions — HORIZONTAL layout ──
-// Length along X-axis (94ft = 940), width along Y-axis (50ft = 500)
-// 10 SVG units = 1 foot
-const L = 940;   // court length (x-axis)
-const W = 500;   // court width (y-axis)
+// 94ft court length along X-axis (940 SVG units), 50ft width along Y-axis (500 SVG units)
+// Scale: 10 SVG units = 1 foot
+const L = 940;   // court length (x-axis), 94ft
+const W = 500;   // court width (y-axis), 50ft
 const MID = L / 2; // 470 — center court x
 
-// Basket centers (5.25ft from each baseline along x-axis)
-const NEAR_BASKET = { x: L - 52.5, y: 250 };  // right end (home)
-const FAR_BASKET  = { x: 52.5,     y: 250 };   // left end (away)
+// Basket centers — 5.25ft (52.5 SVG units) from each baseline along x-axis
+// These are the anchor points for ESPN coordinate mapping (ESPN y=0 maps here)
+const NEAR_BASKET = { x: L - 52.5, y: 250 };  // 887.5, 250 — right end (home team)
+const FAR_BASKET  = { x: 52.5,     y: 250 };   // 52.5, 250  — left end (away team)
 
-// Regulation measurements
-const PAINT_DEPTH     = 190;  // 19ft from baseline to FT line
-const FT_CIRCLE_R     = 60;   // 6ft
-const RESTRICTED_R    = 40;   // 4ft
-const CORNER_3_DEPTH  = 140;  // 14ft from baseline
-const CENTER_CIRCLE_R = 60;   // 6ft
-const BACKBOARD_W     = 60;   // 6ft
+// Regulation court measurements (all in SVG units, 10 units = 1ft)
+const PAINT_DEPTH     = 190;  // 19ft — baseline to free-throw line
+const FT_CIRCLE_R     = 60;   // 6ft radius
+const RESTRICTED_R    = 40;   // 4ft radius (restricted area arc)
+const CORNER_3_DEPTH  = 140;  // 14ft — baseline to where 3pt arc begins
+const CENTER_CIRCLE_R = 60;   // 6ft radius
+const BACKBOARD_W     = 60;   // 6ft (not directly used, kept for reference)
 
-// Paint width: NBA = 16ft, NCAAB = 12ft
+// Paint width differs between leagues: NBA = 16ft, NCAAB = 12ft
 const PAINT_W = { nba: 160, ncaab: 120 };
 
 // ── ESPN → SVG coordinate mapping ──
-// ESPN coords: x 0-50 (court width in feet), y 0-47 (depth from baseline in feet)
-// Our horizontal court: court width is Y-axis (500), court length is X-axis (940)
-// Near (right) half = home team, Far (left) half = away team
-// 10 SVG units per foot
-//
-// ESPN coordinates are approximate — wing 3-pointers are consistently ~2ft short.
-// nudgeThreePointer() corrects 3pt shots that fall inside the arc.
-//
-// Y-axis inset: ESPN x=0 and x=50 map to the sidelines, but corner 3s are ~3ft
-// inside. Scale to [Y_MIN, Y_MAX] so edge shots stay within the court.
-const Y_MIN = 15;   // 1.5ft inset from top sideline
-const Y_MAX = W - 15; // 1.5ft inset from bottom sideline
+// See block comment above for full coordinate system documentation.
+// ESPN coords are BASKET-ANCHORED: y=0 is the basket, not the baseline.
+// This was a critical fix — before basket-anchoring, all shots were ~5.25ft too close.
 
-// X-axis inset: keep shots from landing on/past the baselines
-const X_BASELINE_PAD = 20; // 2ft inset from each baseline
-
-/** Map ESPN x (0-50) to SVG y, scaled to stay inside sidelines */
+/**
+ * Map ESPN x (0–50) to SVG Y coordinate.
+ * ESPN x represents lateral position across the court width (50ft).
+ * Direct proportional mapping: espnX=0 → svgY=0 (top), espnX=50 → svgY=500 (bottom)
+ */
 function espnXtoSvgY(espnX) {
-  return Y_MIN + (espnX / 50) * (Y_MAX - Y_MIN);
+  return (espnX / 50) * W;
 }
 
-/** Returns null if coordinates are invalid (garbage sentinel or out of range) */
+/**
+ * Validate ESPN coordinates — reject garbage sentinels or out-of-range values.
+ * ESPN occasionally sends extreme values (e.g., -999) for plays without location data.
+ */
 function validEspn(espnX, espnY) {
   if (espnX == null || espnY == null) return false;
   if (espnX < -100 || espnX > 100 || espnY < -100 || espnY > 100) return false;
   return true;
 }
 
+/**
+ * Convert ESPN coordinates to SVG position on the NEAR (right/home) half.
+ * espnY=0 maps to NEAR_BASKET.x (887.5), increasing y moves toward center court.
+ * Returns { x, y } in SVG coordinates, or null if invalid.
+ */
 export function espnToSvg(espnX, espnY) {
   if (!validEspn(espnX, espnY)) return null;
-  // +3ft offset: ESPN coords land ~3ft too close to the baseline
-  const svgX = Math.max(MID, Math.min(L - X_BASELINE_PAD, L - (espnY + 3) * 10));
-  const svgY = Math.max(Y_MIN, Math.min(Y_MAX, espnXtoSvgY(espnX)));
-  return { x: svgX, y: svgY };
-}
-
-export function espnToSvgFar(espnX, espnY) {
-  if (!validEspn(espnX, espnY)) return null;
-  // +3ft offset: ESPN coords land ~3ft too close to the baseline
-  const svgX = Math.max(X_BASELINE_PAD, Math.min(MID, (espnY + 3) * 10));
-  const svgY = Math.max(Y_MIN, Math.min(Y_MAX, W - espnXtoSvgY(espnX)));
+  const svgX = NEAR_BASKET.x - espnY * 10;
+  const svgY = espnXtoSvgY(espnX);
   return { x: svgX, y: svgY };
 }
 
 /**
- * Nudge a 3-point shot radially outward if ESPN coords place it inside the arc.
- * Call this ONLY for plays where text includes "three point".
- * @param {{ x: number, y: number }} pt - SVG coordinate from espnToSvg/espnToSvgFar
- * @param {'nba'|'ncaab'} courtType
- * @param {boolean} isNear - true for near (right) half, false for far (left) half
- * @returns {{ x: number, y: number }} corrected point
+ * Convert ESPN coordinates to SVG position on the FAR (left/away) half.
+ * Mirrors the near-side mapping: espnY=0 maps to FAR_BASKET.x (52.5),
+ * increasing y moves toward center court. Y-axis is also flipped.
+ * Returns { x, y } in SVG coordinates, or null if invalid.
  */
-export function nudgeThreePointer(pt, courtType = 'nba', isNear = true) {
-  if (!pt) return pt;
-  const basket = isNear ? NEAR_BASKET : FAR_BASKET;
-  const arcR = (courtType === 'ncaab' ? 221.75 : 237.5) + 15; // push slightly past arc
-  const dx = pt.x - basket.x;
-  const dy = pt.y - basket.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  if (dist < arcR && dist > 0) {
-    const scale = arcR / dist;
-    return {
-      x: Math.max(X_BASELINE_PAD, Math.min(L - X_BASELINE_PAD, basket.x + dx * scale)),
-      y: Math.max(Y_MIN, Math.min(Y_MAX, basket.y + dy * scale)),
-    };
-  }
-  return pt;
+export function espnToSvgFar(espnX, espnY) {
+  if (!validEspn(espnX, espnY)) return null;
+  const svgX = FAR_BASKET.x + espnY * 10;
+  const svgY = W - espnXtoSvgY(espnX);
+  return { x: svgX, y: svgY };
 }
 
 // ── Colors (light maple hardwood) ──
@@ -99,7 +116,17 @@ const LINE    = '#ffffff';
 const LW      = 2;
 const LO      = 0.92;
 
-export default function BasketballCourt({ courtType = 'nba', homeLogo, homeColor, children, className = '' }) {
+/**
+ * BasketballCourt — renders a full SVG basketball court with 3D perspective.
+ *
+ * @param {string}  courtType  — 'nba' or 'ncaab' (affects paint width: 16ft vs 12ft)
+ * @param {string}  homeLogo   — URL for home team logo, displayed at center court
+ * @param {string}  homeColor  — hex color for home team (used on base pads)
+ * @param {ReactNode} children — SVG elements overlaid on the court (shot markers, etc.)
+ * @param {string}  className  — additional CSS classes for the wrapper div
+ * @param {boolean} showDebug  — admin-only: show colored reference dots at key ESPN coordinates
+ */
+export default function BasketballCourt({ courtType = 'nba', homeLogo, homeColor, children, className = '', showDebug = false }) {
   const { isDark } = useTheme();
   const paintW    = PAINT_W[courtType] || PAINT_W.nba;
   const paintTop  = (W - paintW) / 2; // y position of paint top edge
@@ -179,20 +206,31 @@ export default function BasketballCourt({ courtType = 'nba', homeLogo, homeColor
   const netColor = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)';
   const netRingColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
 
-  // Basket assembly — ESPN-style with 3D backboard, pole, base pad, and net
-  // The court is CSS rotateX(35deg). offy=-38 fakes elevation above the court.
-  // "Up" (perpendicular to court) projects as -Y in SVG after the tilt.
+  // ── Basket assembly ──
+  // Renders a full basket structure: base pad → pole → horizontal arm → backboard → bracket → rim + net
+  //
+  // 3D PERSPECTIVE NOTES:
+  // The court has CSS rotateX(35deg), so "up" (perpendicular to court surface) projects
+  // as -Y in SVG coordinates. The offy offset fakes the hoop's elevation above the court.
+  //
+  // PARAMETERS:
+  //   bx, by — basket center position in SVG coords (e.g., NEAR_BASKET = 887.5, 250)
+  //   dir — direction multiplier: +1 for near (right) side, -1 for far (left) side
+  //         Controls which way the backboard/pole face (toward their respective baseline)
+  //
+  // COORDINATE ALIGNMENT:
+  // The rim center (rimCx) is placed at the basket position (bx), which is where
+  // ESPN coordinate (25, 0) maps to. Shot distance is measured from rim center to shooter.
   const basePadColor = homeColor ? `#${homeColor.replace('#', '')}` : '#1a3a6e';
   const basket = (bx, by, dir) => {
-    const offy = -38;
-    const offx = dir * 8;
-    const rimCx = bx + offx;
-    const rimCy = by + offy;          // 250 - 38 = 212
-    const rimR = 9;
+    const offy = -24;                   // vertical offset to fake elevation above tilted court
+    const rimCx = bx;                   // rim center X = basket position (ESPN 25,0 maps here)
+    const rimCy = by + offy;            // rim center Y = 250 + offy = 226 (elevated above court)
+    const rimR = 9;                     // rim radius in SVG units
 
     // ── Backboard — parallelogram to show 3D perspective ──
     // Front face X (the side facing the court)
-    const bbFrontX = rimCx + dir * 14;  // closer to rim (was 20)
+    const bbFrontX = rimCx + dir * 14;  // behind the rim toward baseline
     const bbHalfW = 28;               // half-width along Y (6ft board)
     const bbRise = 28;                // 3D height of backboard
     const bbShift = dir * 4;          // small shift = near-vertical left/right edges
@@ -264,19 +302,13 @@ export default function BasketballCourt({ courtType = 'nba', homeLogo, homeColor
         />
 
         {/* ── Bracket — backboard front face to rim ── */}
-        <line x1={bbFrontX} y1={rimCy} x2={rimCx + dir * 2} y2={rimCy}
+        <line x1={bbFrontX} y1={rimCy} x2={rimCx + dir * rimR} y2={rimCy}
           stroke={bracketColor} strokeWidth="2.5" />
 
         {/* ── Rim glow ── */}
         <circle cx={rimCx} cy={rimCy} r={rimR + 8} fill="url(#rimGlow)" />
 
-        {/* ── Rim — orange ring ── */}
-        <circle cx={rimCx} cy={rimCy} r={rimR}
-          fill="none" stroke="#d84315" strokeWidth="2.8" />
-        <circle cx={rimCx} cy={rimCy} r={rimR - 1.5}
-          fill="none" stroke="#ff6d00" strokeWidth="0.7" opacity="0.4" />
-
-        {/* ── Net — white mesh ── */}
+        {/* ── Net — white mesh (drawn first so rim renders on top) ── */}
         {Array.from({ length: 10 }, (_, i) => {
           const angle = (i / 10) * Math.PI * 2;
           const startX = rimCx + Math.cos(angle) * (rimR - 1);
@@ -296,6 +328,12 @@ export default function BasketballCourt({ courtType = 'nba', homeLogo, homeColor
         <ellipse cx={rimCx} cy={rimCy + 18} rx={3} ry={1.2}
           fill="none" stroke={isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.5)'}
           strokeWidth="0.5" />
+
+        {/* ── Rim — orange ring (on top of net) ── */}
+        <circle cx={rimCx} cy={rimCy} r={rimR}
+          fill="none" stroke="#d84315" strokeWidth="2.8" />
+        <circle cx={rimCx} cy={rimCy} r={rimR - 1.5}
+          fill="none" stroke="#ff6d00" strokeWidth="0.7" opacity="0.4" />
       </g>
     );
   };
@@ -393,7 +431,7 @@ export default function BasketballCourt({ courtType = 'nba', homeLogo, homeColor
           <path d={nearThreeArc} fill="none" stroke={LINE} strokeWidth={LW} opacity={LO} />
           <path d={nearRestrictedArc} fill="none" stroke={LINE} strokeWidth="1.5" opacity={LO} />
           {hashMarks(L, -1)}
-          {basket(NEAR_BASKET.x + 15, NEAR_BASKET.y, 1)}
+          {basket(NEAR_BASKET.x, NEAR_BASKET.y, 1)}
 
           {/* ========= FAR HALF (left) — Away ========= */}
 
@@ -407,10 +445,71 @@ export default function BasketballCourt({ courtType = 'nba', homeLogo, homeColor
           <path d={farThreeArc} fill="none" stroke={LINE} strokeWidth={LW} opacity={LO} />
           <path d={farRestrictedArc} fill="none" stroke={LINE} strokeWidth="1.5" opacity={LO} />
           {hashMarks(0, 1)}
-          {basket(FAR_BASKET.x - 15, FAR_BASKET.y, -1)}
+          {basket(FAR_BASKET.x, FAR_BASKET.y, -1)}
 
           {/* Spotlight / lighting overlay */}
           <rect x="0" y="0" width={L} height={W} fill="url(#spotlight)" />
+
+          {/* ── Debug reference dots (admin only) ──
+              Colored dots at key ESPN coordinates to verify coordinate mapping.
+              Each dot shows its ESPN (x, y) value with a leader line to a label.
+              Near side = home team (right half), Far side = away team (left half).
+              Colors: magenta=(0,0), green=(50,25), yellow=(25,25), orange=(25,0)
+              The orange (25,0) dot should align with the rim center on each side. */}
+
+          {/* Debug dots — near (right/home) side */}
+          {showDebug && <>
+            {/* ESPN (0, 0) → SVG (887.5, 0) — top-right corner, label below */}
+            <circle cx={887.5} cy={0} r="12" fill="#ff00ff" stroke="#fff" strokeWidth="2" />
+            <line x1={887.5} y1={14} x2={887.5} y2={38} stroke="#ff00ff" strokeWidth="2" />
+            <rect x={827.5} y={40} width="120" height="28" rx="6" fill="#ff00ff" />
+            <text x={887.5} y={60} textAnchor="middle" fill="#fff" fontSize="18" fontWeight="900">(0, 0)</text>
+
+            {/* ESPN (50, 25) → SVG (637.5, 500) — bottom-center-right, label above */}
+            <circle cx={637.5} cy={500} r="12" fill="#00ff00" stroke="#fff" strokeWidth="2" />
+            <line x1={637.5} y1={486} x2={637.5} y2={462} stroke="#00ff00" strokeWidth="2" />
+            <rect x={577.5} y={432} width="120" height="28" rx="6" fill="#00ff00" />
+            <text x={637.5} y={452} textAnchor="middle" fill="#000" fontSize="18" fontWeight="900">(50, 25)</text>
+
+            {/* ESPN (25, 25) → SVG (637.5, 250) — center of near half, label below */}
+            <circle cx={637.5} cy={250} r="12" fill="#ffff00" stroke="#fff" strokeWidth="2" />
+            <line x1={637.5} y1={264} x2={637.5} y2={288} stroke="#ffff00" strokeWidth="2" />
+            <rect x={577.5} y={290} width="120" height="28" rx="6" fill="#ffff00" />
+            <text x={637.5} y={310} textAnchor="middle" fill="#000" fontSize="18" fontWeight="900">(25, 25)</text>
+
+            {/* ESPN (25, 0) → SVG (887.5, 250) — basket/rim center, label below */}
+            <circle cx={887.5} cy={250} r="12" fill="#ff6600" stroke="#fff" strokeWidth="2" />
+            <line x1={887.5} y1={264} x2={887.5} y2={288} stroke="#ff6600" strokeWidth="2" />
+            <rect x={827.5} y={290} width="120" height="28" rx="6" fill="#ff6600" />
+            <text x={887.5} y={310} textAnchor="middle" fill="#fff" fontSize="18" fontWeight="900">(25, 0)</text>
+          </>}
+
+          {/* Debug dots — far (left/away) side (mirrored from near side) */}
+          {showDebug && <>
+            {/* ESPN (0, 0) → SVG (52.5, 500) — bottom-left corner, label above */}
+            <circle cx={52.5} cy={500} r="12" fill="#ff00ff" stroke="#fff" strokeWidth="2" />
+            <line x1={52.5} y1={486} x2={52.5} y2={462} stroke="#ff00ff" strokeWidth="2" />
+            <rect x={-7.5} y={432} width="120" height="28" rx="6" fill="#ff00ff" />
+            <text x={52.5} y={452} textAnchor="middle" fill="#fff" fontSize="18" fontWeight="900">(0, 0)</text>
+
+            {/* ESPN (50, 25) → SVG (302.5, 0) — top-center-left, label below */}
+            <circle cx={302.5} cy={0} r="12" fill="#00ff00" stroke="#fff" strokeWidth="2" />
+            <line x1={302.5} y1={14} x2={302.5} y2={38} stroke="#00ff00" strokeWidth="2" />
+            <rect x={242.5} y={40} width="120" height="28" rx="6" fill="#00ff00" />
+            <text x={302.5} y={60} textAnchor="middle" fill="#000" fontSize="18" fontWeight="900">(50, 25)</text>
+
+            {/* ESPN (25, 25) → SVG (302.5, 250) — center of far half, label below */}
+            <circle cx={302.5} cy={250} r="12" fill="#ffff00" stroke="#fff" strokeWidth="2" />
+            <line x1={302.5} y1={264} x2={302.5} y2={288} stroke="#ffff00" strokeWidth="2" />
+            <rect x={242.5} y={290} width="120" height="28" rx="6" fill="#ffff00" />
+            <text x={302.5} y={310} textAnchor="middle" fill="#000" fontSize="18" fontWeight="900">(25, 25)</text>
+
+            {/* ESPN (25, 0) → SVG (52.5, 250) — basket/rim center, label below */}
+            <circle cx={52.5} cy={250} r="12" fill="#ff6600" stroke="#fff" strokeWidth="2" />
+            <line x1={52.5} y1={264} x2={52.5} y2={288} stroke="#ff6600" strokeWidth="2" />
+            <rect x={-7.5} y={290} width="120" height="28" rx="6" fill="#ff6600" />
+            <text x={52.5} y={310} textAnchor="middle" fill="#fff" fontSize="18" fontWeight="900">(25, 0)</text>
+          </>}
 
           {/* Child overlays */}
           {children}

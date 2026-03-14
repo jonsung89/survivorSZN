@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import BasketballCourt, { espnToSvg, espnToSvgFar, nudgeThreePointer } from './BasketballCourt';
+import BasketballCourt, { espnToSvg, espnToSvgFar } from './BasketballCourt';
 import { usePlayerGameStats, getPlayLabel } from '../hooks/usePlayerGameStats';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 /** ESPN dark logo: replace /500/ with /500-dark/ in the URL */
 function getDarkLogo(logoUrl) {
@@ -12,13 +13,35 @@ function getDarkLogo(logoUrl) {
 /**
  * Gamecast — live play-by-play feed overlaid on a full basketball court.
  *
- * ESPN coordinates are half-court (x 0-50, y 0-25, 0=baseline).
- * We map each team's plays to opposite ends of the full court:
- *   homeTeam → near (right) half via espnToSvg
- *   awayTeam → far (left) half via espnToSvgFar
+ * This component combines a real-time play-by-play feed with an interactive court
+ * visualization. Shots and plays are plotted on the court as they happen during live games.
+ *
+ * ESPN COORDINATE HANDLING:
+ * • ESPN provides half-court coords: x (0–50, court width), y (0–~47, depth from basket)
+ * • Home team plays → near (right) half via espnToSvg()
+ * • Away team plays → far (left) half via espnToSvgFar()
+ * • Free throw sentinel: ESPN sends (25, 0) for FT plays — we override y to 14.5
+ *   (FT line is 15ft from backboard, basket is ~1.25ft in front = ~13.75ft from rim,
+ *    we use 14.5 so the marker appears slightly behind the line for a natural look)
+ *
+ * COURT MARKERS:
+ * • Most recent shot: pulsing circle (or player headshot) with stat label
+ * • Clicked play from feed: highlighted with larger ring + stat label
+ * • Markers fade when game is paused (timeout, halftime, etc.)
+ *
+ * BANNER SYSTEM:
+ * • Displays event context above the court (scoring plays, timeouts, fouls, etc.)
+ * • Scoring banners use team color background with shimmer animation
+ * • Substitution banners accumulate consecutive sub plays
+ * • Persistent banners (timeouts, end of period) stay until next play
+ *
+ * DEBUG MODE (admin only):
+ * • Toggle button in period filter row (visible only when user.isAdmin)
+ * • When on: shows ESPN coordinates for each play in the feed
+ * • Also passes showDebug to BasketballCourt to render reference dots
  */
 
-// ESPN type IDs for play classification
+// ESPN type IDs for play classification (from ESPN API typeId field)
 const REBOUND_IDS = new Set(['155', '156']);
 const FOUL_IDS = new Set(['42', '43', '44', '45']);
 const TURNOVER_IDS = new Set(['62', '63', '84', '86', '90']);
@@ -141,13 +164,21 @@ function StatLabel({ pt, play, playerStats, r, color: teamBg }) {
   );
 }
 
+/**
+ * @param {Array}  plays     — array of ESPN play-by-play objects (newest last)
+ * @param {Object} game      — game object with homeTeam, awayTeam, status
+ * @param {string} courtType — 'nba' or 'ncaab' (passed to BasketballCourt)
+ * @param {boolean} isPaused — true during timeouts/halftime (fades court markers)
+ */
 export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused = false }) {
   const [selectedPlayIdx, setSelectedPlayIdx] = useState(null);
   const [periodFilter, setPeriodFilter] = useState('all');
   const [banner, setBanner] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
   const feedRef = useRef(null);
   const prevPlaysLength = useRef(plays.length);
   const { isDark } = useTheme();
+  const { user } = useAuth();
 
   const homeTeam = game?.homeTeam;
   const awayTeam = game?.awayTeam;
@@ -167,21 +198,33 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
     [homeTeam, awayTeam],
   );
 
-  /** Map a play's ESPN coords to the correct half of the full court */
+  /**
+   * Map a play's ESPN coordinates to SVG position on the correct half of the court.
+   *
+   * Handles the free throw sentinel: ESPN sends (25, 0) for FT plays instead of
+   * actual coordinates. We detect this and override to y=14.5 (just behind the
+   * FT line) for a natural look. Without this, FTs would plot right at the basket.
+   *
+   * Team mapping: home team → near (right) half, away team → far (left) half.
+   * Returns { x, y } in SVG coords, or null if no valid coordinates.
+   */
   const mapPlay = useCallback(
     (play) => {
       if (!play.coordinate) return null;
       let { x, y } = play.coordinate;
-      // ESPN uses (25,0) as a sentinel for free throws — place behind the FT line (15ft from baseline)
-      if (x === 25 && y === 0) { x = 25; y = 20; }
-      const isNear = play.team?.id === homeTeam?.id;
-      let pt = isNear ? espnToSvg(x, y) : espnToSvgFar(x, y);
-      if (pt && (play.text || '').toLowerCase().includes('three point')) {
-        pt = nudgeThreePointer(pt, courtType, isNear);
+      // Free throw sentinel detection:
+      // ESPN sends (25, 0) as a placeholder for free throws (no real court position).
+      // FT line is 15ft from backboard, basket center is ~1.25ft in front of backboard,
+      // so FT line is ~13.75ft from basket center. We use y=14.5 to place the marker
+      // slightly behind the line, since players don't shoot exactly at the line.
+      const isFT = play.shootingPlay && (play.scoreValue === 1 || play.pointsAttempted === 1);
+      if (isFT && x === 25 && y === 0) {
+        y = 14.5;
       }
-      return pt;
+      const isNear = play.team?.id === homeTeam?.id;
+      return isNear ? espnToSvg(x, y) : espnToSvgFar(x, y);
     },
-    [homeTeam, courtType],
+    [homeTeam],
   );
 
   const reversedPlays = useMemo(() => [...plays].reverse(), [plays]);
@@ -409,7 +452,7 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
       `}</style>
 
       {/* Full-width court */}
-      <BasketballCourt courtType={courtType} homeLogo={homeTeam?.logo} homeColor={homeTeam?.color}>
+      <BasketballCourt courtType={courtType} homeLogo={homeTeam?.logo} homeColor={homeTeam?.color} showDebug={showDebug}>
         <style>{`
           @keyframes shotPulse {
             0%, 100% { r: 8; opacity: 1; }
@@ -518,6 +561,17 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
               label={periodLabels.get(num) || `Q${num}`}
             />
           ))}
+          {/* Admin-only debug toggle — shows ESPN coordinates in feed + reference dots on court */}
+          {user?.isAdmin && (
+            <button
+              onClick={() => setShowDebug(d => !d)}
+              className={`ml-auto px-2 py-0.5 text-[10px] font-mono rounded transition-colors ${
+                showDebug ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-fg/5 text-fg/30 border border-fg/10'
+              }`}
+            >
+              DEBUG
+            </button>
+          )}
         </div>
 
         {/* Scrollable feed */}
@@ -569,6 +623,14 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
                   <p className="text-sm text-fg/70 leading-snug mt-0.5 line-clamp-2">
                     {play.text || play.description || ''}
                   </p>
+                  {/* Debug: show raw ESPN coordinates for each play (green = has coords, red = none) */}
+                  {showDebug && (
+                    <p className="text-xs font-mono mt-0.5" style={{ color: play.coordinate ? '#00ff99' : '#ff6666' }}>
+                      {play.coordinate
+                        ? `ESPN (${play.coordinate.x}, ${play.coordinate.y})`
+                        : 'no coords'}
+                    </p>
+                  )}
                 </div>
               </button>
             );

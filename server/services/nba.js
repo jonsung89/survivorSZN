@@ -49,7 +49,10 @@ function parseNBAGameDetails(data) {
   // --- Player Stats (full box score) ---
   const playerStats = parsePlayerStats(boxscore);
 
-  return { leaders, scoringPlays, linescores, teamStats, winProbability, seasonAverages, playerStats };
+  // --- Play-by-play data (for Gamecast / Shot Chart) ---
+  const plays = parsePlays(data);
+
+  return { leaders, scoringPlays, linescores, teamStats, winProbability, seasonAverages, playerStats, plays };
 }
 
 /**
@@ -303,6 +306,67 @@ function parseTeamStats(boxscore) {
     home: extractStats(boxscore.teams[0]),
     away: extractStats(boxscore.teams[1])
   };
+}
+
+/**
+ * Parse play-by-play data from ESPN summary response.
+ * Used for Gamecast (live plays on court) and Shot Chart (all shots plotted).
+ */
+function parsePlays(data) {
+  if (!data.plays || !Array.isArray(data.plays)) return [];
+
+  // Build player lookup from boxscore (plays only have athlete IDs)
+  const playerMap = {};
+  const boxPlayers = data.boxscore?.players || [];
+  for (const team of boxPlayers) {
+    for (const statGroup of (team.statistics || [])) {
+      for (const entry of (statGroup.athletes || [])) {
+        const a = entry.athlete;
+        if (a?.id) {
+          playerMap[a.id] = {
+            name: a.displayName || '',
+            shortName: a.shortName || '',
+            headshot: a.headshot?.href || null,
+          };
+        }
+      }
+    }
+  }
+
+  return data.plays.map(play => ({
+    id: play.id,
+    type: play.type?.text || '',
+    typeId: play.type?.id || '',
+    text: play.text || '',
+    shortText: play.shortText || play.shortDescription || '',
+    awayScore: play.awayScore,
+    homeScore: play.homeScore,
+    period: play.period ? {
+      number: play.period.number || null,
+      displayValue: play.period.displayValue || '',
+    } : null,
+    clock: play.clock ? {
+      displayValue: play.clock.displayValue || '',
+    } : null,
+    scoringPlay: play.scoringPlay || false,
+    scoreValue: play.scoreValue || 0,
+    shootingPlay: play.shootingPlay || false,
+    team: play.team ? {
+      id: play.team.id || null,
+    } : null,
+    coordinate: play.coordinate || null,
+    wallclock: play.wallclock || null,
+    participants: (play.participants || []).map(p => {
+      const id = p.athlete?.id || null;
+      const lookup = id ? playerMap[id] : null;
+      return {
+        name: lookup?.name || p.athlete?.displayName || '',
+        shortName: lookup?.shortName || p.athlete?.shortName || '',
+        headshot: lookup?.headshot || p.athlete?.headshot?.href || null,
+        playerId: id,
+      };
+    }),
+  }));
 }
 
 module.exports = createDailySportService({

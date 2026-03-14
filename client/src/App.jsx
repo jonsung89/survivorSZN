@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { ScoresSocketProvider } from './context/ScoresSocketContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './components/Toast';
 import Navbar from './components/Navbar';
@@ -230,14 +231,16 @@ export default function App() {
     <BrowserRouter>
       <ThemeProvider>
         <ToastProvider>
-          <AuthProvider>
-            <SocketProvider>
-              {showSplash && !splashDone && (
-                <SplashScreen onComplete={handleSplashComplete} />
-              )}
-              <AppRoutes />
-            </SocketProvider>
-          </AuthProvider>
+          <ScoresSocketProvider>
+            <AuthProvider>
+              <SocketProvider>
+                {showSplash && !splashDone && (
+                  <SplashScreen onComplete={handleSplashComplete} />
+                )}
+                <AppRoutes />
+              </SocketProvider>
+            </AuthProvider>
+          </ScoresSocketProvider>
         </ToastProvider>
       </ThemeProvider>
     </BrowserRouter>

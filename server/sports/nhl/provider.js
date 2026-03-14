@@ -12,8 +12,8 @@ class NHLProvider extends BaseSportProvider {
     return nhlService.getCurrentSeason();
   }
 
-  async getScheduleByDate(dateStr) {
-    return nhlService.getScheduleByDate(dateStr);
+  async getScheduleByDate(dateStr, options) {
+    return nhlService.getScheduleByDate(dateStr, options);
   }
 
   async getTeams() {
@@ -24,8 +24,8 @@ class NHLProvider extends BaseSportProvider {
     return null;
   }
 
-  async getGameDetails(gameId) {
-    return nhlService.getGameDetails(gameId);
+  async getGameDetails(gameId, options) {
+    return nhlService.getGameDetails(gameId, options);
   }
 
   async getTeamInfo(teamId) {

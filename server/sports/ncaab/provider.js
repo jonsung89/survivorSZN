@@ -12,8 +12,8 @@ class NCAABProvider extends BaseSportProvider {
     return ncaabService.getCurrentSeason();
   }
 
-  async getScheduleByDate(dateStr) {
-    return ncaabService.getScheduleByDate(dateStr);
+  async getScheduleByDate(dateStr, options) {
+    return ncaabService.getScheduleByDate(dateStr, options);
   }
 
   async getTeams() {
@@ -24,8 +24,8 @@ class NCAABProvider extends BaseSportProvider {
     return null;
   }
 
-  async getGameDetails(gameId) {
-    return ncaabService.getGameDetails(gameId);
+  async getGameDetails(gameId, options) {
+    return ncaabService.getGameDetails(gameId, options);
   }
 
   async getTeamInfo(teamId) {

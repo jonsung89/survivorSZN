@@ -234,8 +234,9 @@ export const scheduleAPI = {
     return res.json();
   },
 
-  getGameDetails: async (sport, gameId) => {
-    const res = await fetch(`${API_URL}/schedule/${sport}/game/${gameId}`);
+  getGameDetails: async (sport, gameId, options = {}) => {
+    const params = options.live ? '?live=1' : '';
+    const res = await fetch(`${API_URL}/schedule/${sport}/game/${gameId}${params}`);
     return res.json();
   },
 

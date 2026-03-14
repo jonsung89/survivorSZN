@@ -12,8 +12,8 @@ class MLBProvider extends BaseSportProvider {
     return mlbService.getCurrentSeason();
   }
 
-  async getScheduleByDate(dateStr) {
-    return mlbService.getScheduleByDate(dateStr);
+  async getScheduleByDate(dateStr, options) {
+    return mlbService.getScheduleByDate(dateStr, options);
   }
 
   async getTeams() {
@@ -24,8 +24,8 @@ class MLBProvider extends BaseSportProvider {
     return null;
   }
 
-  async getGameDetails(gameId) {
-    return mlbService.getGameDetails(gameId);
+  async getGameDetails(gameId, options) {
+    return mlbService.getGameDetails(gameId, options);
   }
 
   async getTeamInfo(teamId) {

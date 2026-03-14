@@ -489,4 +489,28 @@ function broadcastGameUpdate(io, leagueId, gameData) {
   io.to(`league:${leagueId}`).emit('game-update', gameData);
 }
 
-module.exports = { setupSocketHandlers, broadcastGameUpdate, onlineUsers };
+/**
+ * Setup public /scores namespace for live score updates.
+ * No authentication required — scores are public data.
+ */
+function setupScoresNamespace(io) {
+  const scoresNs = io.of('/scores');
+
+  scoresNs.on('connection', (socket) => {
+    socket.on('subscribe-scores', (sportId) => {
+      if (typeof sportId === 'string' && sportId.length < 20) {
+        socket.join(`scores:${sportId}`);
+      }
+    });
+
+    socket.on('unsubscribe-scores', (sportId) => {
+      if (typeof sportId === 'string' && sportId.length < 20) {
+        socket.leave(`scores:${sportId}`);
+      }
+    });
+  });
+
+  return scoresNs;
+}
+
+module.exports = { setupSocketHandlers, setupScoresNamespace, broadcastGameUpdate, onlineUsers };

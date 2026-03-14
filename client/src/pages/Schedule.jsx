@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, TrendingUp, Users, Target, AlertTriangle, ArrowRight } from 'lucide-react';
 import { nflAPI, scheduleAPI } from '../api';
@@ -11,6 +11,10 @@ import StatRankingDialog from '../components/StatRankingDialog';
 import BoxScore from '../components/BoxScore';
 import { PLAYOFF_ROUNDS, BROADCAST_NETWORKS } from '../sports/nfl/constants';
 import { useThemedLogo, useThemedColor } from '../utils/logo';
+import useLiveScores from '../hooks/useLiveScores';
+import useAnimatedScore from '../hooks/useAnimatedScore';
+import Gamecast from '../components/Gamecast';
+import ShotChart from '../components/ShotChart';
 
 const SPORT_TABS = [
   { id: 'nfl', name: 'NFL', implemented: true, scheduleType: 'weekly' },
@@ -177,10 +181,70 @@ export default function Schedule() {
   const [dailySportSeasons, setDailySportSeasons] = useState({});
   const [showDailySeasonDropdown, setShowDailySeasonDropdown] = useState(false);
 
+  const [detailTab, setDetailTab] = useState('summary');
+
   const weekTabsRef = useRef(null);
   const weekButtonRefs = useRef({});
   const seasonDropdownRef = useRef(null);
   const dailySeasonDropdownRef = useRef(null);
+
+  // Live score updates for daily sports (NBA, NCAAB, etc.)
+  const selectedSportTab = SPORT_TABS.find(s => s.id === selectedSport);
+  const liveScoresSportId = selectedSportTab?.scheduleType === 'daily' ? selectedSport : null;
+  const liveData = useLiveScores(liveScoresSportId, selectedDate, dailySchedule);
+  const liveGames = liveData.games;
+
+  // Reset detail tab when expanded game changes
+  useEffect(() => {
+    setDetailTab('summary');
+  }, [expandedGame]);
+
+  // Poll game details every 15s when Gamecast/Shot Chart is open on a live game
+  const expandedGameRef = useRef(expandedGame);
+  expandedGameRef.current = expandedGame;
+  const detailTabRef = useRef(detailTab);
+  detailTabRef.current = detailTab;
+
+  useEffect(() => {
+    if (!expandedGame) return;
+    if (detailTab !== 'gamecast' && detailTab !== 'shotchart') return;
+
+    const game = liveGames.find(g => g.id === expandedGame);
+    if (!game) return;
+
+    const isLive =
+      game.status === 'STATUS_IN_PROGRESS' ||
+      game.status === 'STATUS_HALFTIME' ||
+      game.status === 'STATUS_END_PERIOD' ||
+      game.status === 'STATUS_FIRST_HALF' ||
+      game.status === 'STATUS_SECOND_HALF' ||
+      game.status === 'in_progress';
+    if (!isLive) return;
+
+    const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
+    const fetchFn = sportTab?.scheduleType === 'daily'
+      ? () => scheduleAPI.getGameDetails(selectedSport, expandedGame, { live: true })
+      : () => nflAPI.getGameDetails(expandedGame);
+
+    const fetchDetails = () => {
+      // Guard: only fetch if still on gamecast/shotchart for the same game
+      if (expandedGameRef.current !== expandedGame) return;
+      if (detailTabRef.current !== 'gamecast' && detailTabRef.current !== 'shotchart') return;
+
+      fetchFn().then(data => {
+        if (data) {
+          setGameDetails(prev => ({ ...prev, [expandedGame]: data }));
+        }
+      }).catch(() => {});
+    };
+
+    // Poll every 15 seconds to match score update frequency
+    const interval = setInterval(fetchDetails, 15000);
+    // Also fetch immediately on tab switch
+    fetchDetails();
+
+    return () => clearInterval(interval);
+  }, [expandedGame, detailTab, selectedSport]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync selected sport/week/date → URL query params
   useEffect(() => {
@@ -647,16 +711,31 @@ export default function Schedule() {
   };
 
   const isGameLive = (game) => {
-    return game.status === 'STATUS_IN_PROGRESS' || game.status === 'in_progress';
+    return (
+      game.status === 'STATUS_IN_PROGRESS' ||
+      game.status === 'STATUS_HALFTIME' ||
+      game.status === 'STATUS_END_PERIOD' ||
+      game.status === 'STATUS_FIRST_HALF' ||
+      game.status === 'STATUS_SECOND_HALF' ||
+      game.status === 'in_progress'
+    );
   };
 
   const getStatusDisplay = (game) => {
     if (isGameLive(game)) {
       return (
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-500/20 px-2 py-1 rounded-full">
-          <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-          {game.statusDetail || 'LIVE'}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-bold text-white bg-red-600 px-2.5 py-1 rounded-full shadow-[0_0_8px_rgba(220,38,38,0.5)]">
+            <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+            {game.statusDetail || 'LIVE'}
+          </span>
+          {liveData.isAutoUpdating && (
+            <span className="flex items-center gap-1 text-[10px] text-fg/30">
+              <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
+              Auto-updating
+            </span>
+          )}
+        </div>
       );
     }
     if (isGamePast(game)) {
@@ -1319,8 +1398,59 @@ export default function Schedule() {
       });
     }
 
+    const isBasketball = selectedSport === 'nba' || selectedSport === 'ncaab';
+    const hasPlays = details?.plays && details.plays.length > 0;
+
     return (
       <div className="mt-3 pt-3 border-t border-fg/10 space-y-4">
+        {/* Detail tabs for basketball sports */}
+        {isBasketball && hasPlays && (
+          <div className="flex gap-1">
+            {['summary', 'gamecast', 'shotchart'].map(tab => (
+              <button
+                key={tab}
+                onClick={(e) => { e.stopPropagation(); setDetailTab(tab); }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  detailTab === tab
+                    ? 'bg-fg/15 text-fg/90'
+                    : 'bg-fg/5 text-fg/40 hover:bg-fg/10 hover:text-fg/60'
+                }`}
+              >
+                {tab === 'summary' ? 'Summary' : tab === 'gamecast' ? 'Gamecast' : 'Shot Chart'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Gamecast tab */}
+        {isBasketball && detailTab === 'gamecast' && hasPlays && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Gamecast
+              plays={details.plays}
+              game={game}
+              courtType={selectedSport}
+              isPaused={
+                game.status === 'STATUS_HALFTIME' ||
+                game.status === 'STATUS_END_PERIOD' ||
+                /timeout|time.?out/i.test(game.statusDetail || '')
+              }
+            />
+          </div>
+        )}
+
+        {/* Shot Chart tab */}
+        {isBasketball && detailTab === 'shotchart' && hasPlays && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <ShotChart
+              plays={details.plays}
+              game={game}
+              courtType={selectedSport}
+            />
+          </div>
+        )}
+
+        {/* Summary tab (default — original content) */}
+        {(!isBasketball || detailTab === 'summary' || !hasPlays) && <>
         {/* Top Performers by Team */}
         {hasLeaders ? (
           <div className="space-y-3">
@@ -1513,7 +1643,18 @@ export default function Schedule() {
             No additional details available for this game
           </div>
         )}
+        </>}
       </div>
+    );
+  };
+
+  // Animated score display component
+  const ScoreDisplay = ({ score, className }) => {
+    const animating = useAnimatedScore(score);
+    return (
+      <span className={`${className} inline-block ${animating ? 'score-animate' : ''}`}>
+        {score ?? 0}
+      </span>
     );
   };
 
@@ -1572,11 +1713,12 @@ export default function Schedule() {
                         {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
                       </span>
                     </ClickableTeam>
-                    <span className={`ml-auto font-bold text-base ${
-                      isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-500' : 'text-fg'
-                    }`}>
-                      {getScore(game.awayTeam) ?? 0}
-                    </span>
+                    <ScoreDisplay
+                      score={getScore(game.awayTeam)}
+                      className={`ml-auto font-bold text-base ${
+                        isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-500' : 'text-fg'
+                      }`}
+                    />
                   </>
                 ) : (
                   <div className="flex-1 min-w-0">
@@ -1624,11 +1766,12 @@ export default function Schedule() {
                         {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
                       </span>
                     </ClickableTeam>
-                    <span className={`ml-auto font-bold text-base ${
-                      isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-500' : 'text-fg'
-                    }`}>
-                      {getScore(game.homeTeam) ?? 0}
-                    </span>
+                    <ScoreDisplay
+                      score={getScore(game.homeTeam)}
+                      className={`ml-auto font-bold text-base ${
+                        isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-500' : 'text-fg'
+                      }`}
+                    />
                   </>
                 ) : (
                   <div className="flex-1 min-w-0">
@@ -1655,12 +1798,18 @@ export default function Schedule() {
             <div className="flex-shrink-0 pl-4 border-l border-fg/10 ml-4 flex flex-col justify-center items-end max-w-[90px]">
               {isLive ? (
                 <div className="flex flex-col items-end gap-0.5">
-                  <span className="flex items-center justify-end gap-1.5 text-sm font-semibold text-red-500">
-                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                  <span className="flex items-center justify-end gap-1.5 text-xs font-bold text-white bg-red-600 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(220,38,38,0.5)]">
+                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                     LIVE
                   </span>
                   {game.statusDetail && (
                     <span className="text-sm text-fg/50">{game.statusDetail}</span>
+                  )}
+                  {liveData.isAutoUpdating && (
+                    <span className="text-[10px] text-fg/30 flex items-center gap-1">
+                      <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
+                      Auto-updating
+                    </span>
                   )}
                 </div>
               ) : isPast ? (
@@ -1753,17 +1902,19 @@ export default function Schedule() {
             <div className="flex-shrink-0 text-center min-w-[80px]">
               {isPast || isLive ? (
                 <div className="flex items-center justify-center gap-2">
-                  <span className={`text-2xl font-bold ${
-                    isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-500' : 'text-fg'
-                  }`}>
-                    {getScore(game.awayTeam) ?? 0}
-                  </span>
+                  <ScoreDisplay
+                    score={getScore(game.awayTeam)}
+                    className={`text-2xl font-bold ${
+                      isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-500' : 'text-fg'
+                    }`}
+                  />
                   <span className="text-fg/30">-</span>
-                  <span className={`text-2xl font-bold ${
-                    isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-500' : 'text-fg'
-                  }`}>
-                    {getScore(game.homeTeam) ?? 0}
-                  </span>
+                  <ScoreDisplay
+                    score={getScore(game.homeTeam)}
+                    className={`text-2xl font-bold ${
+                      isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-500' : 'text-fg'
+                    }`}
+                  />
                 </div>
               ) : (
                 <span className="text-fg/30 text-sm">vs</span>
@@ -1821,8 +1972,6 @@ export default function Schedule() {
   if (loading) {
     return <Loading fullScreen />;
   }
-
-  const selectedSportTab = SPORT_TABS.find(s => s.id === selectedSport);
 
   return (
     <div className="max-w-3xl mx-auto px-3 sm:px-4 pt-0 sm:py-8 pb-4">
@@ -1919,13 +2068,21 @@ export default function Schedule() {
           {/* Date Picker */}
           <DatePicker date={selectedDate} onChange={setSelectedDate} />
 
+          {/* Delayed scores banner */}
+          {liveData.isDelayed && (
+            <div className="flex items-center gap-2 text-xs text-amber-400/80 bg-amber-400/10 px-3 py-2 rounded-lg mb-3">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              Scores may be delayed
+            </div>
+          )}
+
           {/* Loading / Games */}
           {dailyLoading ? (
             <div className="glass-card rounded-xl p-12 text-center">
               <div className="w-8 h-8 border-2 border-fg/30 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
               <p className="text-fg/50">Loading schedule...</p>
             </div>
-          ) : dailySchedule.length === 0 ? (
+          ) : liveGames.length === 0 ? (
             <div className="glass-card rounded-xl p-8 sm:p-12 text-center">
               <Calendar className="w-12 h-12 sm:w-16 sm:h-16 text-fg/20 mx-auto mb-4" />
               <h3 className="text-lg sm:text-xl font-semibold text-fg mb-2">No Games Found</h3>
@@ -1936,7 +2093,7 @@ export default function Schedule() {
           ) : (
             <div className="space-y-6">
               {(() => {
-                const grouped = dailySchedule.reduce((acc, game) => {
+                const grouped = liveGames.reduce((acc, game) => {
                   const day = formatDay(game.date);
                   if (!acc[day]) acc[day] = [];
                   acc[day].push(game);

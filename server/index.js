@@ -21,7 +21,7 @@ const adminRoutes = require('./routes/admin');
 const { initDb } = require('./db/supabase');
 
 // Socket handlers
-const { setupSocketHandlers } = require('./socket/handlers');
+const { setupSocketHandlers, setupScoresNamespace } = require('./socket/handlers');
 
 const app = express();
 const server = http.createServer(app);
@@ -136,6 +136,12 @@ app.use((err, req, res, next) => {
 
 // Setup socket handlers
 setupSocketHandlers(io);
+
+// Setup public /scores namespace (no auth required) and start live score poller
+const scoresNs = setupScoresNamespace(io);
+const LiveScorePoller = require('./services/live-score-poller');
+const liveScorePoller = new LiveScorePoller(scoresNs);
+liveScorePoller.start();
 
 // Initialize database and start server
 initDb().then(() => {

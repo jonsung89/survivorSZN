@@ -135,13 +135,13 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
    * Get schedule for a specific date
    * @param {string} dateStr - Date in YYYY-MM-DD format
    */
-  const getScheduleByDate = async (dateStr) => {
+  const getScheduleByDate = async (dateStr, { cacheTtl } = {}) => {
     try {
       // Convert YYYY-MM-DD to YYYYMMDD for ESPN
       const espnDate = dateStr.replace(/-/g, '');
       const url = `${apiBase}/scoreboard?dates=${espnDate}`;
       console.log(`[${sportName}] Fetching schedule for ${dateStr}: ${url}`);
-      const data = await fetchWithCache(url);
+      const data = await fetchWithCache(url, cacheTtl);
 
       if (!data.events) {
         console.log(`[${sportName}] No events found for ${dateStr}`);
@@ -336,11 +336,12 @@ function createDailySportService({ apiBase, sportName, parseGameDetails, teamSta
   /**
    * Get detailed game info (box score, leaders, scoring plays)
    */
-  const getGameDetailsWrapped = async (gameId) => {
+  const getGameDetailsWrapped = async (gameId, options = {}) => {
     try {
       const url = `${apiBase}/summary?event=${gameId}`;
-      console.log(`[${sportName}] Fetching game details for ${gameId}`);
-      const data = await fetchWithCache(url, GAME_DETAILS_CACHE_TTL);
+      const ttl = options.cacheTtl || GAME_DETAILS_CACHE_TTL;
+      console.log(`[${sportName}] Fetching game details for ${gameId} (ttl=${ttl}ms)`);
+      const data = await fetchWithCache(url, ttl);
 
       if (!data) {
         console.warn(`[${sportName}] No data returned for game ${gameId}`);

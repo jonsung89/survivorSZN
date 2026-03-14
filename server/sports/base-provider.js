@@ -18,6 +18,11 @@ class BaseSportProvider {
     throw new Error('Not implemented: getSchedule');
   }
 
+  /** Get schedule/games for a specific date (daily sports). Options: { cacheTtl } */
+  async getScheduleByDate(dateStr, options) {
+    throw new Error('Not implemented: getScheduleByDate');
+  }
+
   /** Get all teams/entities for this sport */
   async getTeams() {
     throw new Error('Not implemented: getTeams');
@@ -71,7 +76,7 @@ class BaseSportProvider {
   // Optional methods — not all sports need these
 
   /** Get detailed game info */
-  async getGameDetails(gameId) { return null; }
+  async getGameDetails(gameId, options) { return null; }
 
   /** Get team injuries */
   async getTeamInjuries(teamId) { return []; }

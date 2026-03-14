@@ -10,25 +10,28 @@ import { useThemedLogo } from '../utils/logo';
  *   - hockey (NHL): Skaters + Goalies tables
  *   - football (NFL): Passing, Rushing, Receiving, etc. grouped tables
  */
-export default function BoxScore({ playerStats, game }) {
-  const [expanded, setExpanded] = useState(false);
+export default function BoxScore({ playerStats, game, alwaysExpanded = false }) {
+  const [expanded, setExpanded] = useState(alwaysExpanded);
 
   if (!playerStats?.teams || playerStats.teams.length < 2) return null;
 
   const type = playerStats.type;
+  const showContent = alwaysExpanded || expanded;
 
   return (
     <div className="space-y-2">
-      <button
-        onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-        className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-fg/70 uppercase tracking-wide px-3 py-1.5 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
-      >
-        <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-        Box Score
-        {expanded ? <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-      </button>
+      {!alwaysExpanded && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+          className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-fg/70 uppercase tracking-wide px-3 py-1.5 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
+        >
+          <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          Box Score
+          {expanded ? <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+        </button>
+      )}
 
-      {expanded && (
+      {showContent && (
         <div className="space-y-4">
           {type === 'basketball' && <BasketballBoxScore data={playerStats} game={game} />}
           {type === 'baseball' && <BaseballBoxScore data={playerStats} game={game} />}

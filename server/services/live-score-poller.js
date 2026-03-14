@@ -121,21 +121,29 @@ class LiveScorePoller {
   }
 
   /**
-   * Get today's date string(s) to poll. For late-night games, also checks
-   * yesterday's scoreboard (games starting at 11pm might still be on
+   * Get today's date string(s) to poll. Uses Eastern Time since ESPN's
+   * scoreboards are organized by ET date. For late-night games, also checks
+   * yesterday's scoreboard (games starting at 10-11pm might still be on
    * yesterday's ESPN scoreboard).
    * @returns {string[]} Array of date strings in YYYY-MM-DD format
    */
   _getPollingDates() {
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
+
+    // Use Eastern Time for date calculation since ESPN organizes by ET
+    const etFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    const today = etFormatter.format(now); // YYYY-MM-DD in ET
+
+    const etHour = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' })).getHours();
 
     // Before 6am ET, also check yesterday's scoreboard for late games
-    const etHour = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' })).getHours();
     if (etHour < 6) {
       const yesterday = new Date(now);
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const yesterdayStr = etFormatter.format(yesterday);
       return [today, yesterdayStr];
     }
 

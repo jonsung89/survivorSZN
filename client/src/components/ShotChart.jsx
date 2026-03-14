@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import BasketballCourt, { espnToSvg, espnToSvgFar } from './BasketballCourt';
+import BasketballCourt, { espnToSvg, espnToSvgFar, nudgeThreePointer } from './BasketballCourt';
 
 /**
  * ShotChart — plots shooting plays on a full basketball court.
@@ -23,19 +23,24 @@ export default function ShotChart({ plays = [], game, courtType = 'nba' }) {
       if (!play.coordinate) return null;
       const { x, y } = play.coordinate;
       if (x === 25 && y === 0) return null; // FT sentinel
-      if (play.team?.id === homeTeam?.id) return espnToSvg(x, y);
-      return espnToSvgFar(x, y);
+      const isNear = play.team?.id === homeTeam?.id;
+      let pt = isNear ? espnToSvg(x, y) : espnToSvgFar(x, y);
+      if (pt && (play.text || '').toLowerCase().includes('three point')) {
+        pt = nudgeThreePointer(pt, courtType, isNear);
+      }
+      return pt;
     },
-    [homeTeam],
+    [homeTeam, courtType],
   );
 
-  // Separate field goals from free throws + compute stats
+  // Separate field goals from free throws + compute stats by FG/3PT
   const { shots, freeThrows, stats } = useMemo(() => {
     const shots = [];
     const freeThrows = [];
+    const emptyStats = () => ({ fgMade: 0, fgAtt: 0, threeMade: 0, threeAtt: 0 });
     const stats = {
-      [homeTeam?.id]: { makes: 0, misses: 0 },
-      [awayTeam?.id]: { makes: 0, misses: 0 },
+      [homeTeam?.id]: emptyStats(),
+      [awayTeam?.id]: emptyStats(),
     };
 
     for (const play of plays) {
@@ -46,13 +51,19 @@ export default function ShotChart({ plays = [], game, courtType = 'nba' }) {
       const isFreeThrow = play.coordinate?.x === 25 && play.coordinate?.y === 0;
       if (isFreeThrow) {
         freeThrows.push(play);
-      } else if (play.coordinate) {
-        shots.push(play);
+        continue;
       }
+      if (!play.coordinate) continue;
+      shots.push(play);
 
       if (stats[teamId]) {
-        if (play.scoringPlay) stats[teamId].makes++;
-        else stats[teamId].misses++;
+        const isThree = (play.text || '').toLowerCase().includes('three point');
+        if (isThree) {
+          stats[teamId].threeAtt++;
+          if (play.scoringPlay) stats[teamId].threeMade++;
+        }
+        stats[teamId].fgAtt++;
+        if (play.scoringPlay) stats[teamId].fgMade++;
       }
     }
     return { shots, freeThrows, stats };
@@ -73,9 +84,9 @@ export default function ShotChart({ plays = [], game, courtType = 'nba' }) {
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       {/* Filter buttons */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap mb-4">
         <FilterBtn active={teamFilter === 'all'} onClick={() => setTeamFilter('all')} label="All" />
         {homeTeam && (
           <FilterBtn
@@ -96,7 +107,7 @@ export default function ShotChart({ plays = [], game, courtType = 'nba' }) {
       </div>
 
       {/* Court with shot markers */}
-      <BasketballCourt courtType={courtType} homeLogo={homeTeam?.logo}>
+      <BasketballCourt courtType={courtType} homeLogo={homeTeam?.logo} homeColor={homeTeam?.color}>
         {/* Field goal attempts */}
         {filteredShots.map((play, i) => {
           const pt = mapPlay(play);
@@ -106,17 +117,17 @@ export default function ShotChart({ plays = [], game, courtType = 'nba' }) {
           if (play.scoringPlay) {
             return (
               <circle key={`shot-${i}`}
-                cx={pt.x} cy={pt.y} r="6"
-                fill={color} fillOpacity="0.85"
-                stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+                cx={pt.x} cy={pt.y} r="8"
+                fill={color} fillOpacity="0.9"
+                stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
             );
           }
           return (
-            <g key={`shot-${i}`} opacity="0.4">
-              <line x1={pt.x - 4} y1={pt.y - 4} x2={pt.x + 4} y2={pt.y + 4}
-                stroke={color} strokeWidth="2" strokeLinecap="round" />
-              <line x1={pt.x + 4} y1={pt.y - 4} x2={pt.x - 4} y2={pt.y + 4}
-                stroke={color} strokeWidth="2" strokeLinecap="round" />
+            <g key={`shot-${i}`} opacity="0.55">
+              <line x1={pt.x - 6} y1={pt.y - 6} x2={pt.x + 6} y2={pt.y + 6}
+                stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+              <line x1={pt.x + 6} y1={pt.y - 6} x2={pt.x - 6} y2={pt.y + 6}
+                stroke={color} strokeWidth="2.5" strokeLinecap="round" />
             </g>
           );
         })}
@@ -146,16 +157,18 @@ export default function ShotChart({ plays = [], game, courtType = 'nba' }) {
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-fg/60 px-1">
         {[homeTeam, awayTeam].filter(Boolean).map((team) => {
-          const s = stats[team.id] || { makes: 0, misses: 0 };
+          const s = stats[team.id] || { fgMade: 0, fgAtt: 0, threeMade: 0, threeAtt: 0 };
+          const fgPct = s.fgAtt > 0 ? Math.round((s.fgMade / s.fgAtt) * 100) : 0;
+          const threePct = s.threeAtt > 0 ? Math.round((s.threeMade / s.threeAtt) * 100) : 0;
           const color = teamColor(team.id);
           return (
             <div key={team.id} className="flex items-center gap-1.5">
               <span className="inline-block w-2.5 h-2.5 rounded-full"
                 style={{ backgroundColor: color }} />
               <span className="font-medium text-fg/80">{team.abbreviation}</span>
-              <span>{s.makes} made</span>
+              <span>FG: {s.fgMade}/{s.fgAtt} ({fgPct}%)</span>
               <span className="text-fg/40">|</span>
-              <span>{s.misses} missed</span>
+              <span>3PT: {s.threeMade}/{s.threeAtt} ({threePct}%)</span>
             </div>
           );
         })}

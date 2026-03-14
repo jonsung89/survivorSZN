@@ -16,6 +16,14 @@ import useAnimatedScore from '../hooks/useAnimatedScore';
 import Gamecast from '../components/Gamecast';
 import ShotChart from '../components/ShotChart';
 
+/** Get today's date as YYYY-MM-DD in local timezone (not UTC) */
+function getLocalDateStr(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 const SPORT_TABS = [
   { id: 'nfl', name: 'NFL', implemented: true, scheduleType: 'weekly' },
   { id: 'nba', name: 'NBA', implemented: true, scheduleType: 'daily' },
@@ -171,7 +179,7 @@ export default function Schedule() {
   const [selectedDate, setSelectedDate] = useState(() => {
     const urlDate = initialUrlParams.current.date;
     if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) return urlDate;
-    return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    return getLocalDateStr(); // YYYY-MM-DD
   });
   const [dailySchedule, setDailySchedule] = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
@@ -182,7 +190,6 @@ export default function Schedule() {
   const [showDailySeasonDropdown, setShowDailySeasonDropdown] = useState(false);
 
   const [detailTab, setDetailTab] = useState('summary');
-
   const weekTabsRef = useRef(null);
   const weekButtonRefs = useRef({});
   const seasonDropdownRef = useRef(null);
@@ -296,10 +303,10 @@ export default function Schedule() {
     const changeDate = (delta) => {
       const d = new Date(date + 'T12:00:00');
       d.setDate(d.getDate() + delta);
-      onChange(d.toISOString().split('T')[0]);
+      onChange(getLocalDateStr(d));
     };
 
-    const isToday = date === new Date().toISOString().split('T')[0];
+    const isToday = date === getLocalDateStr();
 
     return (
       <div className="flex items-center gap-2 mb-4 sm:mb-6">
@@ -314,7 +321,7 @@ export default function Schedule() {
         </button>
         {!isToday && (
           <button
-            onClick={() => onChange(new Date().toISOString().split('T')[0])}
+            onClick={() => onChange(getLocalDateStr())}
             className="px-3 py-2 bg-fg/10 hover:bg-fg/15 rounded-lg transition-colors text-fg text-sm font-medium flex-shrink-0"
           >
             Today
@@ -361,7 +368,7 @@ export default function Schedule() {
     }));
     setShowDailySeasonDropdown(false);
     if (newSeasonYear === originalSeasonYear) {
-      setSelectedDate(new Date().toISOString().split('T')[0]);
+      setSelectedDate(getLocalDateStr());
     } else {
       setSelectedDate(getDefaultDateForSeason(selectedSport, newSeasonYear));
     }
@@ -598,7 +605,7 @@ export default function Schedule() {
     // Reset date to today for daily sports
     const sportTab = SPORT_TABS.find(s => s.id === sportId);
     if (sportTab?.scheduleType === 'daily') {
-      setSelectedDate(new Date().toISOString().split('T')[0]);
+      setSelectedDate(getLocalDateStr());
     }
   };
 
@@ -721,18 +728,28 @@ export default function Schedule() {
     );
   };
 
+  // Sort: live games first, then by start time ascending
+  const sortGames = (games) => {
+    return [...games].sort((a, b) => {
+      const aLive = isGameLive(a) ? 0 : 1;
+      const bLive = isGameLive(b) ? 0 : 1;
+      if (aLive !== bLive) return aLive - bLive;
+      return new Date(a.date) - new Date(b.date);
+    });
+  };
+
   const getStatusDisplay = (game) => {
     if (isGameLive(game)) {
       return (
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 text-xs font-bold text-white bg-red-600 px-2.5 py-1 rounded-full shadow-[0_0_8px_rgba(220,38,38,0.5)]">
+          <span className="flex items-center gap-1.5 text-xs font-bold text-white bg-red-600 px-2.5 py-1 rounded-full">
             <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
             {game.statusDetail || 'LIVE'}
           </span>
           {liveData.isAutoUpdating && (
-            <span className="flex items-center gap-1 text-[10px] text-fg/30">
-              <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
-              Auto-updating
+            <span className="flex items-center gap-1 text-xs text-fg/40">
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+              Auto update
             </span>
           )}
         </div>
@@ -1406,7 +1423,7 @@ export default function Schedule() {
         {/* Detail tabs for basketball sports */}
         {isBasketball && hasPlays && (
           <div className="flex gap-1">
-            {['summary', 'gamecast', 'shotchart'].map(tab => (
+            {['summary', ...(hasPlayerStats ? ['boxscore'] : []), 'gamecast', 'shotchart'].map(tab => (
               <button
                 key={tab}
                 onClick={(e) => { e.stopPropagation(); setDetailTab(tab); }}
@@ -1416,7 +1433,7 @@ export default function Schedule() {
                     : 'bg-fg/5 text-fg/40 hover:bg-fg/10 hover:text-fg/60'
                 }`}
               >
-                {tab === 'summary' ? 'Summary' : tab === 'gamecast' ? 'Gamecast' : 'Shot Chart'}
+                {tab === 'summary' ? 'Summary' : tab === 'boxscore' ? 'Box Score' : tab === 'gamecast' ? 'Gamecast' : 'Shot Chart'}
               </button>
             ))}
           </div>
@@ -1449,136 +1466,65 @@ export default function Schedule() {
           </div>
         )}
 
+        {/* Box Score tab */}
+        {isBasketball && detailTab === 'boxscore' && hasPlayerStats && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <BoxScore playerStats={details.playerStats} game={game} alwaysExpanded />
+          </div>
+        )}
+
         {/* Summary tab (default — original content) */}
         {(!isBasketball || detailTab === 'summary' || !hasPlays) && <>
         {/* Top Performers by Team */}
         {hasLeaders ? (
-          <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-fg/70 uppercase tracking-wide flex items-center gap-1.5">
+          <div className="space-y-2">
+            <h4 className="text-xs sm:text-sm font-semibold text-fg/70 uppercase tracking-wide flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Top Performers
             </h4>
-            
-            {/* Mobile Layout - Stacked by team */}
-            <div className="sm:hidden space-y-3">
-              {Object.entries(leadersByTeam).map(([teamAbbr, leaders]) => (
-                <div key={teamAbbr} className="space-y-2">
-                  {/* Team Header */}
-                  <div className="flex items-center gap-2">
-                    {leaders[0]?.player?.teamLogo ? (
-                      <img src={leaders[0].player.teamLogo} alt={teamAbbr} className="w-5 h-5" />
-                    ) : null}
-                    <span className="text-sm font-semibold text-fg/70">{teamAbbr}</span>
-                  </div>
-                  
-                  {/* Leaders Grid */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {leaders.map((leader, idx) => (
-                      <div key={idx} className="bg-fg/5 rounded-lg p-2 flex items-start gap-2">
-                        {leader.player?.headshot ? (
-                          <img 
-                            src={leader.player.headshot} 
-                            alt={leader.player?.name}
-                            className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-xs flex-shrink-0">
-                            {leader.player?.position || '?'}
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[10px] text-fg/40 uppercase">{leader.displayName}</div>
-                          <div className="text-sm font-medium text-fg truncate">{leader.player?.name || 'Unknown'}</div>
-                          <div className="text-[11px] text-fg/70 font-medium leading-tight">{leader.value}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
 
-            {/* Desktop Layout - Side by side */}
-            <div className="hidden sm:grid sm:grid-cols-2 gap-4">
-              {/* Away Team - Left */}
-              {(() => {
-                const awayLeaders = leadersByTeam[game.awayTeam?.abbreviation] || [];
+            <div className="grid grid-cols-2 gap-4">
+              {[game.awayTeam, game.homeTeam].map((team) => {
+                const teamLeaders = leadersByTeam[team?.abbreviation] || [];
+                if (teamLeaders.length === 0) return <div key={team?.abbreviation || 'unknown'} />;
                 return (
-                  <div className="space-y-2">
+                  <div key={team?.abbreviation} className="space-y-2">
                     <div className="flex items-center gap-2 pb-1 border-b border-fg/10">
-                      {game.awayTeam?.logo && (
-                        <img src={tl(game.awayTeam.logo)} alt={game.awayTeam?.abbreviation} className="w-6 h-6" />
+                      {team?.logo && (
+                        <img src={tl(team.logo)} alt={team?.abbreviation} className="w-5 h-5 sm:w-6 sm:h-6" />
                       )}
-                      <span className="text-sm sm:text-base font-semibold text-fg">{game.awayTeam?.abbreviation}</span>
+                      <span className="text-xs sm:text-sm font-semibold text-fg">{team?.abbreviation}</span>
                     </div>
-                    <div className="space-y-2">
-                      {awayLeaders.map((leader, idx) => (
-                        <div key={idx} className="bg-fg/5 rounded-lg p-2.5 sm:p-3 flex items-center gap-3">
+                    <div className="space-y-1.5">
+                      {teamLeaders.map((leader, idx) => (
+                        <div key={idx} className="flex items-center gap-2.5">
                           {leader.player?.headshot ? (
                             <img
                               src={leader.player.headshot}
                               alt={leader.player?.name}
-                              className="w-11 h-11 rounded-full object-cover flex-shrink-0"
+                              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
                             />
                           ) : (
-                            <div className="w-11 h-11 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-xs flex-shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-[10px] flex-shrink-0">
                               {leader.player?.position || '?'}
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="text-[10px] sm:text-xs text-fg/40 uppercase">{leader.displayName}</div>
-                            <div className="text-sm sm:text-base font-medium text-fg">{leader.player?.name || 'Unknown'}</div>
-                            <div className="text-sm text-fg/70 font-medium">{leader.value}</div>
+                            <div className="text-xs sm:text-sm font-medium text-fg truncate">{leader.player?.name || 'Unknown'}</div>
+                            <div className="text-[11px] sm:text-xs text-fg/50">{leader.value}</div>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 );
-              })()}
-
-              {/* Home Team - Right */}
-              {(() => {
-                const homeLeaders = leadersByTeam[game.homeTeam?.abbreviation] || [];
-                return (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 pb-1 border-b border-fg/10">
-                      {game.homeTeam?.logo && (
-                        <img src={tl(game.homeTeam.logo)} alt={game.homeTeam?.abbreviation} className="w-6 h-6" />
-                      )}
-                      <span className="text-sm sm:text-base font-semibold text-fg">{game.homeTeam?.abbreviation}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {homeLeaders.map((leader, idx) => (
-                        <div key={idx} className="bg-fg/5 rounded-lg p-2.5 sm:p-3 flex items-center gap-3">
-                          {leader.player?.headshot ? (
-                            <img
-                              src={leader.player.headshot}
-                              alt={leader.player?.name}
-                              className="w-11 h-11 rounded-full object-cover flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="w-11 h-11 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-xs flex-shrink-0">
-                              {leader.player?.position || '?'}
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[10px] sm:text-xs text-fg/40 uppercase">{leader.displayName}</div>
-                            <div className="text-sm sm:text-base font-medium text-fg">{leader.player?.name || 'Unknown'}</div>
-                            <div className="text-sm text-fg/70 font-medium">{leader.value}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
+              })}
             </div>
           </div>
         ) : null}
 
-        {/* Box Score */}
-        {hasPlayerStats && (
+        {/* Box Score (non-basketball sports only — basketball uses tab) */}
+        {!isBasketball && hasPlayerStats && (
           <BoxScore playerStats={details.playerStats} game={game} />
         )}
 
@@ -1673,8 +1619,8 @@ export default function Schedule() {
       <div
         key={game.id || index}
         className={`
-          glass-card rounded-xl p-3 sm:p-4 transition-all cursor-pointer hover:bg-fg/5
-          ${isLive ? 'ring-2 ring-red-500/50 bg-red-500/5' : ''}
+          glass-card rounded-xl p-3 sm:p-4 transition-all cursor-pointer overflow-hidden ${isExpanded ? '' : 'hover:bg-fg/5'}
+          ${isLive ? 'ring-1 ring-red-500/30' : ''}
           ${isExpanded ? 'ring-1 ring-white/20' : ''}
         `}
         onClick={() => toggleGameExpand(game.id, game)}
@@ -1716,7 +1662,7 @@ export default function Schedule() {
                     <ScoreDisplay
                       score={getScore(game.awayTeam)}
                       className={`ml-auto font-bold text-base ${
-                        isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-500' : 'text-fg'
+                        isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'text-fg/40' : 'text-fg'
                       }`}
                     />
                   </>
@@ -1769,7 +1715,7 @@ export default function Schedule() {
                     <ScoreDisplay
                       score={getScore(game.homeTeam)}
                       className={`ml-auto font-bold text-base ${
-                        isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-500' : 'text-fg'
+                        isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'text-fg/40' : 'text-fg'
                       }`}
                     />
                   </>
@@ -1798,7 +1744,7 @@ export default function Schedule() {
             <div className="flex-shrink-0 pl-4 border-l border-fg/10 ml-4 flex flex-col justify-center items-end max-w-[90px]">
               {isLive ? (
                 <div className="flex flex-col items-end gap-0.5">
-                  <span className="flex items-center justify-end gap-1.5 text-xs font-bold text-white bg-red-600 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(220,38,38,0.5)]">
+                  <span className="flex items-center justify-end gap-1.5 text-xs font-bold text-white bg-red-600 px-2 py-0.5 rounded-full">
                     <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                     LIVE
                   </span>
@@ -1806,9 +1752,9 @@ export default function Schedule() {
                     <span className="text-sm text-fg/50">{game.statusDetail}</span>
                   )}
                   {liveData.isAutoUpdating && (
-                    <span className="text-[10px] text-fg/30 flex items-center gap-1">
-                      <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
-                      Auto-updating
+                    <span className="text-xs text-fg/40 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                      Auto update
                     </span>
                   )}
                 </div>
@@ -1905,14 +1851,14 @@ export default function Schedule() {
                   <ScoreDisplay
                     score={getScore(game.awayTeam)}
                     className={`text-2xl font-bold ${
-                      isPast && getScore(game.awayTeam) > getScore(game.homeTeam) ? 'text-green-500' : 'text-fg'
+                      isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'text-fg/40' : 'text-fg'
                     }`}
                   />
                   <span className="text-fg/30">-</span>
                   <ScoreDisplay
                     score={getScore(game.homeTeam)}
                     className={`text-2xl font-bold ${
-                      isPast && getScore(game.homeTeam) > getScore(game.awayTeam) ? 'text-green-500' : 'text-fg'
+                      isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'text-fg/40' : 'text-fg'
                     }`}
                   />
                 </div>
@@ -2107,7 +2053,7 @@ export default function Schedule() {
                       {day}
                     </h2>
                     <div className="space-y-2">
-                      {games.map((game, index) => renderGameCard(game, index))}
+                      {sortGames(games).map((game, index) => renderGameCard(game, index))}
                     </div>
                   </div>
                 ));
@@ -2339,7 +2285,7 @@ export default function Schedule() {
                   </h2>
 
                   <div className="space-y-2">
-                    {games.map((game, index) => renderGameCard(game, index))}
+                    {sortGames(games).map((game, index) => renderGameCard(game, index))}
                   </div>
                 </div>
               ))}

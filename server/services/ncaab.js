@@ -143,18 +143,20 @@ function normalizeStatsToObject(statsArray, keyMap) {
 }
 
 /**
- * Find the top performer in a given stat from boxscore player data.
- * Works identically to NBA version since basketball stats are the same.
+ * Find the top performer per team in a given stat from boxscore player data.
+ * Returns an array with one leader per team (so both teams always have representation).
  */
-function findTopPerformer(boxscore, statIndex, labels) {
-  if (!boxscore?.players) return null;
+function findTopPerformers(boxscore, statIndex, labels) {
+  if (!boxscore?.players) return [];
 
-  let best = null;
-  let bestValue = -1;
+  const results = [];
 
   boxscore.players.forEach(teamPlayers => {
     const teamAbbr = teamPlayers.team?.abbreviation;
     const teamLogo = teamPlayers.team?.logo;
+
+    let best = null;
+    let bestValue = -1;
 
     teamPlayers.statistics?.forEach(statGroup => {
       statGroup.athletes?.forEach(athleteEntry => {
@@ -176,9 +178,11 @@ function findTopPerformer(boxscore, statIndex, labels) {
         }
       });
     });
+
+    if (best) results.push(best);
   });
 
-  return best;
+  return results;
 }
 
 /**
@@ -199,11 +203,11 @@ function parseLeaders(boxscore) {
   const leaders = [];
 
   categories.forEach(({ category, statIndex, label }) => {
-    const top = findTopPerformer(boxscore, statIndex, label);
-    if (top) {
+    const tops = findTopPerformers(boxscore, statIndex, label);
+    if (tops.length > 0) {
       leaders.push({
         category,
-        leaders: [top]
+        leaders: tops
       });
     }
   });
@@ -321,6 +325,7 @@ function parsePlays(data) {
             name: a.displayName || '',
             shortName: a.shortName || '',
             headshot: a.headshot?.href || null,
+            jersey: a.jersey || null,
           };
         }
       }
@@ -345,6 +350,7 @@ function parsePlays(data) {
     scoringPlay: play.scoringPlay || false,
     scoreValue: play.scoreValue || 0,
     shootingPlay: play.shootingPlay || false,
+    pointsAttempted: play.pointsAttempted || 0,
     team: play.team ? {
       id: play.team.id || null,
     } : null,
@@ -357,6 +363,7 @@ function parsePlays(data) {
         name: lookup?.name || p.athlete?.displayName || '',
         shortName: lookup?.shortName || p.athlete?.shortName || '',
         headshot: lookup?.headshot || p.athlete?.headshot?.href || null,
+        jersey: lookup?.jersey || p.athlete?.jersey || null,
         playerId: id,
       };
     }),

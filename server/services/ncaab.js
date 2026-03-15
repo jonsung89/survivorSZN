@@ -300,9 +300,11 @@ function parseTeamStats(boxscore) {
       }));
   };
 
+  const homeTeam = boxscore.teams.find(t => t.homeAway === 'home') || boxscore.teams[0];
+  const awayTeam = boxscore.teams.find(t => t.homeAway === 'away') || boxscore.teams[1];
   return {
-    home: extractStats(boxscore.teams[0]),
-    away: extractStats(boxscore.teams[1])
+    home: extractStats(homeTeam),
+    away: extractStats(awayTeam)
   };
 }
 

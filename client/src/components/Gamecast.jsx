@@ -396,6 +396,8 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
   const [prevMarker, setPrevMarker] = useState(null);       // fading-out ghost of previous court marker
   const prevMarkerTimerRef = useRef(null);
   const feedRef = useRef(null);
+  const [hasNewPlays, setHasNewPlays] = useState(false);
+  const isScrolledRef = useRef(false);
   const prevPlaysLength = useRef(plays.length);
 
   // ── Sequential Play Reveal Queue ──────────────────────────────────────
@@ -476,8 +478,8 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
    * Map a play's ESPN coordinates to SVG position on the correct half of the court.
    *
    * Court side logic (matches real basketball):
-   *   First half:  away team scores on right (near), home team scores on left (far)
-   *   Second half: teams switch — home team scores on right, away on left
+   *   First half:  home team scores on right (near), away team scores on left (far)
+   *   Second half: teams switch — away team scores on right, home on left
    *   Overtime:    stays on second-half sides (no additional switch)
    *
    * Defensive rebounds are flipped because they occur on the opponent's scoring side.
@@ -514,16 +516,20 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
       const secondHalf = isSecondHalf(play.period?.number, courtType);
       const isHome = play.team?.id === homeTeam?.id;
 
-      // First half: away=near(right), home=far(left)
-      // Second half: flip — home=near(right), away=far(left)
-      let useNear = isHome ? secondHalf : !secondHalf;
+      // First half: home=near(right), away=far(left)
+      // Second half: flip — away=near(right), home=far(left)
+      let useNear = isHome ? !secondHalf : secondHalf;
 
-      // Defensive rebounds happen on the opponent's scoring side → flip
+      // Defensive plays happen at the team's own basket (opponent's scoring side) → flip
+      // - Defensive rebounds: team recovers at their own basket
+      // - Blocks: team blocks a shot at their own basket
       // Offensive rebounds stay on the team's scoring side → no flip
       // ESPN typeIds: 155 = defensive rebound, 156 = offensive rebound
-      const isDefRebound = tid === '155' ||
-        (!play.shootingPlay && play.text?.toLowerCase().includes('defensive') && play.text?.toLowerCase().includes('rebound'));
-      if (isDefRebound) {
+      const playText = play.text?.toLowerCase() || '';
+      const isDefensivePlay = tid === '155' ||
+        (!play.shootingPlay && playText.includes('defensive') && playText.includes('rebound')) ||
+        (!play.shootingPlay && playText.includes('block'));
+      if (isDefensivePlay) {
         useNear = !useNear;
       }
 
@@ -707,8 +713,10 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
       setVisibleCount(entry.visibleCount);
       setRevealingPlay(entry.play);
 
-      if (feedRef.current) {
+      if (feedRef.current && selectedPlayIdx == null && !isScrolledRef.current) {
         feedRef.current.scrollTop = 0;
+      } else if (selectedPlayIdx != null || isScrolledRef.current) {
+        setHasNewPlays(true);
       }
 
       if (queue.length > 0) {
@@ -1198,9 +1206,31 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
 
         {/* Scrollable feed */}
         <div ref={feedRef}
-          className="flex-1 overflow-y-auto max-h-[250px] space-y-0.5 rounded-lg"
+          className="flex-1 overflow-y-auto max-h-[250px] space-y-0.5 rounded-lg relative"
           style={{ background: 'rgba(var(--color-surface, 255 255 255), 0.03)' }}
+          onScroll={(e) => {
+            const scrolled = e.target.scrollTop > 10;
+            isScrolledRef.current = scrolled;
+            if (!scrolled) setHasNewPlays(false);
+          }}
         >
+          {hasNewPlays && (
+            <div className="sticky top-1 z-10 flex justify-center">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedPlayIdx(null);
+                  setHasNewPlays(false);
+                  isScrolledRef.current = false;
+                  if (feedRef.current) feedRef.current.scrollTop = 0;
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-blue-600 text-white shadow-lg hover:bg-blue-500 transition-colors animate-in"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+                New plays
+              </button>
+            </div>
+          )}
           {filteredPlays.length === 0 && (
             <div className="text-center text-fg/30 text-xs py-6">No plays yet</div>
           )}
@@ -1258,8 +1288,8 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
               </button>
             );
           })}
+          </div>
         </div>
-      </div>
     </div>
   );
 }

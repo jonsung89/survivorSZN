@@ -18,6 +18,7 @@ const { getSport } = require('../sports');
 // Polling intervals
 const LIVE_POLL_INTERVAL = 15 * 1000;       // 15 seconds when games are live
 const IDLE_POLL_INTERVAL = 5 * 60 * 1000;   // 5 minutes when no live games
+const PREGAME_POLL_INTERVAL = 30 * 1000;    // 30 seconds when a game is about to start
 const COORDINATION_INTERVAL = 30 * 1000;     // 30 seconds — checks if polling loops need starting
 const MAX_BACKOFF = 5 * 60 * 1000;           // 5 minutes max backoff on errors
 
@@ -209,10 +210,23 @@ class LiveScorePoller {
         });
       }
 
-      // Schedule next poll
-      const nextDelay = hasLiveGames ? LIVE_POLL_INTERVAL : IDLE_POLL_INTERVAL;
+      // Schedule next poll — ramp up when games are about to start
+      let nextDelay;
       if (hasLiveGames) {
-        console.log(`[LiveScorePoller] ${sportId}: ${changedGames.length} changes, ${games.length} games, next poll in ${nextDelay / 1000}s (LIVE)`);
+        nextDelay = LIVE_POLL_INTERVAL;
+      } else {
+        // Check if any scheduled game is starting within the next 10 minutes
+        const now = Date.now();
+        const hasUpcoming = games.some(g => {
+          if (LIVE_STATUSES.has(g.status) || g.status === 'STATUS_FINAL' || g.status === 'final') return false;
+          const startTime = g.date ? new Date(g.date).getTime() : 0;
+          return startTime > 0 && startTime <= now + 10 * 60 * 1000 && startTime >= now - 30 * 60 * 1000;
+        });
+        nextDelay = hasUpcoming ? PREGAME_POLL_INTERVAL : IDLE_POLL_INTERVAL;
+      }
+      if (hasLiveGames || nextDelay === PREGAME_POLL_INTERVAL) {
+        const mode = hasLiveGames ? 'LIVE' : 'PREGAME';
+        console.log(`[LiveScorePoller] ${sportId}: ${changedGames.length} changes, ${games.length} games, next poll in ${nextDelay / 1000}s (${mode})`);
       }
       this._schedulePoll(sportId, nextDelay);
 

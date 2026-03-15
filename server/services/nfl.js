@@ -1174,8 +1174,8 @@ const getGameDetails = async (gameId) => {
     const result = {
       gameId,
       teamStats: {
-        home: parseTeamStats(boxscore?.teams?.[0]?.statistics),
-        away: parseTeamStats(boxscore?.teams?.[1]?.statistics)
+        home: parseTeamStats((boxscore?.teams?.find(t => t.homeAway === 'home') || boxscore?.teams?.[0])?.statistics),
+        away: parseTeamStats((boxscore?.teams?.find(t => t.homeAway === 'away') || boxscore?.teams?.[1])?.statistics)
       },
       leaders: parseLeadersFromBoxscore(),
       betting: parseBettingInfo(),

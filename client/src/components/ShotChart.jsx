@@ -152,7 +152,7 @@ export default function ShotChart({ plays = [], game, courtType = 'nba' }) {
 
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-fg/60 px-1">
-        {[homeTeam, awayTeam].filter(Boolean).map((team) => {
+        {[awayTeam, homeTeam].filter(Boolean).map((team) => {
           const s = stats[team.id] || { fgMade: 0, fgAtt: 0, threeMade: 0, threeAtt: 0 };
           const fgPct = s.fgAtt > 0 ? Math.round((s.fgMade / s.fgAtt) * 100) : 0;
           const threePct = s.threeAtt > 0 ? Math.round((s.threeMade / s.threeAtt) * 100) : 0;

@@ -339,6 +339,26 @@ export default function Schedule() {
 
   const expandedGameStatus = liveGames.find(g => g.id === expandedGame)?.status;
 
+  // Refetch game details when the expanded game's status changes (e.g. scheduled → live)
+  // This ensures stale cached details (from when the game was scheduled) get replaced
+  const prevExpandedStatusRef = useRef(null);
+  useEffect(() => {
+    if (!expandedGame || !expandedGameStatus) return;
+    const prev = prevExpandedStatusRef.current;
+    prevExpandedStatusRef.current = expandedGameStatus;
+    // Skip the initial mount (prev is null) — only react to actual status transitions
+    if (!prev || prev === expandedGameStatus) return;
+
+    const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
+    const fetchFn = sportTab?.scheduleType === 'daily'
+      ? () => scheduleAPI.getGameDetails(selectedSport, expandedGame, { live: isGameLive({ status: expandedGameStatus }) })
+      : () => nflAPI.getGameDetails(expandedGame);
+
+    fetchFn().then(data => {
+      if (data) setGameDetails(prev => ({ ...prev, [expandedGame]: data }));
+    }).catch(() => {});
+  }, [expandedGame, expandedGameStatus, selectedSport]);
+
   useEffect(() => {
     if (!expandedGame) return;
     if (detailTab !== 'gamecast' && detailTab !== 'shotchart') return;
@@ -831,6 +851,66 @@ export default function Schedule() {
     return () => { cancelled = true; };
   }, [selectedSport, selectedDate]);
 
+  // Auto-refetch when a scheduled game's start time passes (transition to live)
+  useEffect(() => {
+    const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
+    if (!sportTab || sportTab.scheduleType !== 'daily') return;
+    if (!liveGames || liveGames.length === 0) return;
+
+    // Find games that haven't started yet
+    const scheduledStatuses = new Set(['STATUS_SCHEDULED', 'pre', 'STATUS_POSTPONED']);
+    const getNextCheckTime = () => {
+      const now = Date.now();
+      let soonest = Infinity;
+      let hasOverdue = false;
+
+      for (const game of liveGames) {
+        // Skip games that are already live or final
+        if (isGameLive(game) || isGamePast(game)) continue;
+        // Only care about scheduled games
+        const status = game.status || '';
+        if (!scheduledStatuses.has(status) && status !== '') continue;
+
+        const startTime = game.date ? new Date(game.date).getTime() : 0;
+        if (startTime <= 0) continue;
+
+        if (startTime <= now) {
+          // Game should have started but status hasn't updated
+          hasOverdue = true;
+        } else if (startTime < soonest) {
+          soonest = startTime;
+        }
+      }
+
+      return { hasOverdue, soonest };
+    };
+
+    const { hasOverdue, soonest } = getNextCheckTime();
+
+    // If a game is overdue (start time passed, still scheduled), poll every 30s
+    if (hasOverdue) {
+      const interval = setInterval(async () => {
+        try {
+          const result = await scheduleAPI.getScheduleByDate(selectedSport, selectedDate);
+          if (result.games) setDailySchedule(result.games);
+        } catch { /* ignore */ }
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+
+    // If a game is starting soon, set a timeout to start checking at start time
+    if (soonest < Infinity) {
+      const delay = Math.max(0, soonest - Date.now());
+      const timer = setTimeout(async () => {
+        try {
+          const result = await scheduleAPI.getScheduleByDate(selectedSport, selectedDate);
+          if (result.games) setDailySchedule(result.games);
+        } catch { /* ignore */ }
+      }, delay);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedSport, selectedDate, liveGames]);
+
   // Preload league-wide rankings for season-average stat labels shown on cards.
   useEffect(() => {
     let cancelled = false;
@@ -956,18 +1036,21 @@ export default function Schedule() {
 
     setExpandedGame(gameId);
 
-    // Fetch details if we don't have them
-    if (!gameDetails[gameId]) {
-      setDetailsLoading(true);
+    // Fetch details if we don't have them, or refetch if game is live (details may be stale)
+    const liveGame = game || liveGames.find(g => g.id === gameId);
+    const gameLive = liveGame && isGameLive(liveGame);
+    const needsFetch = !gameDetails[gameId] || gameLive;
+    if (needsFetch) {
+      if (!gameDetails[gameId]) setDetailsLoading(true);
       try {
         const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
         const details = sportTab?.scheduleType === 'daily'
-          ? await scheduleAPI.getGameDetails(selectedSport, gameId)
+          ? await scheduleAPI.getGameDetails(selectedSport, gameId, { live: gameLive })
           : await nflAPI.getGameDetails(gameId);
         setGameDetails(prev => ({ ...prev, [gameId]: details }));
       } catch (error) {
         console.error('Failed to load game details:', error);
-        setGameDetails(prev => ({ ...prev, [gameId]: {} }));
+        if (!gameDetails[gameId]) setGameDetails(prev => ({ ...prev, [gameId]: {} }));
       }
       setDetailsLoading(false);
     }

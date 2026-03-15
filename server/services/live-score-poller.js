@@ -6,7 +6,7 @@
  * snapshot, and pushes only changed games to connected clients via Socket.io.
  *
  * Polling cadence adapts automatically:
- *   • 15 seconds when live games are in progress
+ *   • ~6–11 seconds (randomized) when live games are in progress
  *   • 5 minutes when no games are live (idle monitoring)
  *
  * Error handling uses exponential backoff per sport so a single sport failure
@@ -16,11 +16,15 @@
 const { getSport } = require('../sports');
 
 // Polling intervals
-const LIVE_POLL_INTERVAL = 15 * 1000;       // 15 seconds when games are live
+const LIVE_POLL_MIN = 6 * 1000;              // minimum live poll delay
+const LIVE_POLL_MAX = 11 * 1000;             // maximum live poll delay
 const IDLE_POLL_INTERVAL = 5 * 60 * 1000;   // 5 minutes when no live games
 const PREGAME_POLL_INTERVAL = 30 * 1000;    // 30 seconds when a game is about to start
 const COORDINATION_INTERVAL = 30 * 1000;     // 30 seconds — checks if polling loops need starting
 const MAX_BACKOFF = 5 * 60 * 1000;           // 5 minutes max backoff on errors
+
+/** Random integer in [min, max] inclusive */
+const jitter = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
 
 // ESPN game statuses that indicate a game is in progress
 const LIVE_STATUSES = new Set([
@@ -168,7 +172,7 @@ class LiveScorePoller {
       const dates = this._getPollingDates();
 
       // Determine cache TTL — use short TTL if we know there are live games
-      const cacheTtl = state.hasLiveGames ? LIVE_POLL_INTERVAL : undefined;
+      const cacheTtl = state.hasLiveGames ? LIVE_POLL_MIN : undefined;
 
       // Fetch games for all relevant dates
       let allGames = [];
@@ -210,10 +214,17 @@ class LiveScorePoller {
         });
       }
 
-      // Schedule next poll — ramp up when games are about to start
+      // Schedule next poll — adapt cadence to game state
       let nextDelay;
-      if (hasLiveGames) {
-        nextDelay = LIVE_POLL_INTERVAL;
+      const BREAK_STATUSES = new Set(['STATUS_HALFTIME', 'STATUS_END_PERIOD']);
+      const allOnBreak = hasLiveGames && games
+        .filter(g => LIVE_STATUSES.has(g.status))
+        .every(g => BREAK_STATUSES.has(g.status));
+      if (hasLiveGames && !allOnBreak) {
+        nextDelay = jitter(LIVE_POLL_MIN, LIVE_POLL_MAX);
+      } else if (hasLiveGames && allOnBreak) {
+        // All live games are at halftime or between periods — poll slower
+        nextDelay = PREGAME_POLL_INTERVAL;
       } else {
         // Check if any scheduled game is starting within the next 10 minutes
         const now = Date.now();
@@ -225,7 +236,7 @@ class LiveScorePoller {
         nextDelay = hasUpcoming ? PREGAME_POLL_INTERVAL : IDLE_POLL_INTERVAL;
       }
       if (hasLiveGames || nextDelay === PREGAME_POLL_INTERVAL) {
-        const mode = hasLiveGames ? 'LIVE' : 'PREGAME';
+        const mode = hasLiveGames ? (allOnBreak ? 'BREAK' : 'LIVE') : 'PREGAME';
         console.log(`[LiveScorePoller] ${sportId}: ${changedGames.length} changes, ${games.length} games, next poll in ${nextDelay / 1000}s (${mode})`);
       }
       this._schedulePoll(sportId, nextDelay);
@@ -234,7 +245,7 @@ class LiveScorePoller {
       // Exponential backoff on failure
       state.failCount++;
       state.delayed = true;
-      const backoff = Math.min(LIVE_POLL_INTERVAL * Math.pow(2, state.failCount), MAX_BACKOFF);
+      const backoff = Math.min(LIVE_POLL_MIN * Math.pow(2, state.failCount), MAX_BACKOFF);
       console.error(`[LiveScorePoller] ${sportId} poll failed (attempt ${state.failCount}):`, error.message);
       console.log(`[LiveScorePoller] ${sportId}: backing off for ${backoff / 1000}s`);
 

@@ -11,6 +11,7 @@ A modern **survivor pool** and **bracket challenge** platform. Pick one team to 
 - [Features](#features)
 - [Tech stack](#tech-stack)
 - [Architecture](#architecture)
+- [Live scores & real-time data](#live-scores--real-time-data)
 - [Quick start](#quick-start)
 - [Project structure](#project-structure)
 - [Environment variables](#environment-variables)
@@ -93,7 +94,86 @@ flowchart TB
 - **Browser** loads the React SPA; user signs in with **Firebase Auth** (Google or phone).
 - **React** sends `Authorization: Bearer <firebase_token>` to **Express**; middleware verifies the JWT and attaches the user to the request.
 - **Express** serves REST routes under `/api/*`, uses **PostgreSQL** for leagues, picks, users, brackets, and calls **ESPN** for schedules and scores.
-- **Socket.io** uses the same server and token for real-time league chat.
+- **Socket.io** uses the same server and token for real-time league chat and live score updates.
+
+---
+
+## Live scores & real-time data
+
+The app delivers near-real-time scores, play-by-play, and game state updates without any third-party WebSocket feeds. Everything is built on top of ESPN's public API with a server-side polling + client push architecture.
+
+### Architecture
+
+```
+ESPN API  ──(poll)──>  Server cache  ──(Socket.io)──>  All clients
+                            │
+                            └──(REST /api)──>  Gamecast polling (expanded game only)
+```
+
+ESPN only ever sees requests from the server — never from individual clients. Even with thousands of users, ESPN sees one request per sport per polling interval.
+
+### Backend: LiveScorePoller (`server/services/live-score-poller.js`)
+
+A server-side polling engine that manages independent polling loops per sport. It fetches the ESPN scoreboard, diffs against the previous snapshot, and pushes only changed games to connected clients via Socket.io.
+
+**Adaptive polling cadence:**
+
+| Game state | Interval | Rationale |
+|------------|----------|-----------|
+| Active play (in progress) | 6–11s (randomized jitter) | Matches ESPN's own refresh cadence |
+| Halftime / end of period | 30s | Nothing changes during breaks |
+| Pregame (within 10 min of tip) | 30s | Detect game start quickly |
+| Idle (no live games) | 5 min | Light monitoring |
+
+**Anti-bot measures:** Polling intervals use randomized jitter (`6–11s` instead of a fixed `10s`) so the request pattern doesn't look automated. Each poll tick picks a fresh random delay.
+
+**Error handling:** Exponential backoff per sport on failure — a single sport's ESPN outage doesn't affect others.
+
+**Diffing:** Only games whose state actually changed (score, status, period, clock) are emitted to clients, minimizing unnecessary re-renders.
+
+### Client: Socket.io score updates (`client/src/hooks/useLiveScores.js`)
+
+Clients subscribe to a sport's room (`scores:{sportId}`) and receive `score-update` events pushed by the LiveScorePoller. This is purely event-driven — no client-side polling for the scoreboard. Updates are merged into React state so all game cards on the schedule page update in real time.
+
+### Client: Gamecast polling (`client/src/pages/Schedule.jsx`)
+
+When a user expands a game card to view Gamecast (play-by-play, shot chart, box score), a **second** polling loop starts that fetches full game details from the server:
+
+**Two-system approach:**
+
+1. **Baseline polling** — Chained `setTimeout` with randomized jitter (6–11s during active play, 25–35s during halftime/breaks). Catches non-scoring events like rebounds, turnovers, and timeouts.
+
+2. **Socket-triggered early fetch** — When a `score-update` arrives for the expanded game with a meaningful change (score, status, or period change), an early fetch is triggered with a 5s debounce. The 5s delay exists because ESPN updates their scoreboard endpoint before their play-by-play endpoint — without it, the fetch would return stale play-by-play data.
+
+The baseline timer resets after each early fetch to avoid redundant requests.
+
+**Automatic cadence adjustment:** The polling useEffect depends on the live game state. When the game status changes (e.g., `STATUS_HALFTIME` → `STATUS_IN_PROGRESS`), the effect re-runs and automatically tightens or loosens the polling interval.
+
+### Server: Cache layers
+
+| Data | Cache TTL | Notes |
+|------|-----------|-------|
+| Scoreboard (schedule) | 5 min default | Overridden by LiveScorePoller's shorter TTL during live games |
+| Game details (plays, box score, shots) | 2 min default | |
+| Game details with `?live=1` | 6s | Used by Gamecast polling for live games |
+| Team data | 24 hours | Rarely changes |
+| Team context (standings, records) | 6 hours | |
+| Tournament bracket | 10 min | |
+| Rosters, player stats | 6 hours | |
+
+All caching uses `fetchWithCache()` in `server/services/espn.js` with configurable per-request TTL overrides.
+
+### Scheduled → Live game transition
+
+Three mechanisms ensure the UI updates when a game starts:
+
+1. **Backend pregame polling** — LiveScorePoller ramps to 30s polling when any game is within 10 minutes of its scheduled start time.
+2. **Client auto-refetch** — A `useEffect` detects when a scheduled game's start time has passed while still showing scheduled status, and polls every 30s until the status updates.
+3. **Detail refetch on status change** — When the expanded game's status changes (tracked via `prevExpandedStatusRef`), game details are refetched immediately so the card transitions from showing "vs." to showing "0 - 0" with live data.
+
+### Play-by-play reveal queue
+
+New plays are revealed sequentially with animated transitions rather than appearing all at once. A queue system processes incoming plays with short timers between each reveal. Auto-scroll is suppressed when a previous play is selected or when the feed is scrolled down — in those cases, a floating "New plays" button appears instead.
 
 ---
 

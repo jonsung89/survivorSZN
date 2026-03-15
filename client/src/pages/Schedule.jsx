@@ -389,7 +389,10 @@ export default function Schedule() {
 
     if (!isLive) return;
 
-    const POLL_INTERVAL = 15000;
+    const BREAK_STATUSES = ['STATUS_HALFTIME', 'STATUS_END_PERIOD'];
+    const onBreak = BREAK_STATUSES.includes(game.status);
+    const POLL_MIN = onBreak ? 25000 : 6000;   // slower during halftime/breaks
+    const POLL_MAX = onBreak ? 35000 : 11000;
     const DEBOUNCE_MS = 5000;    // minimum gap between early-triggered fetches
     // ESPN updates their scoreboard endpoint before their play-by-play endpoint.
     // Without this delay, a score-triggered fetch would often return stale play-by-play
@@ -437,7 +440,7 @@ export default function Schedule() {
             }
           }
 
-          const nextTime = now + POLL_INTERVAL;
+          const nextTime = now + POLL_MIN + Math.floor(Math.random() * (POLL_MAX - POLL_MIN + 1));
 
           return {
             ...prev,
@@ -452,12 +455,19 @@ export default function Schedule() {
     };
 
     /**
-     * Start (or restart) the fixed 15s polling cycle.
-     * Clears any pending interval first to prevent duplicates.
+     * Start (or restart) the polling cycle with randomized 6–11s jitter.
+     * Uses chained setTimeout instead of setInterval so each tick gets fresh jitter.
      */
     const startInterval = () => {
-      if (gamecastIntervalRef.current) clearInterval(gamecastIntervalRef.current);
-      gamecastIntervalRef.current = setInterval(() => fetchDetails('timer'), POLL_INTERVAL);
+      if (gamecastIntervalRef.current) clearTimeout(gamecastIntervalRef.current);
+      const scheduleNext = () => {
+        const delay = POLL_MIN + Math.floor(Math.random() * (POLL_MAX - POLL_MIN + 1));
+        gamecastIntervalRef.current = setTimeout(() => {
+          fetchDetails('timer');
+          scheduleNext();
+        }, delay);
+      };
+      scheduleNext();
     };
 
     // Fetch immediately, then start the polling interval
@@ -539,7 +549,7 @@ export default function Schedule() {
       pendingEarlyFetchRef.current = setTimeout(() => {
         pendingEarlyFetchRef.current = null;
         fetchDetails('score-update');
-        startInterval(); // restart 15s countdown from the fetch
+        startInterval(); // restart polling countdown from the fetch
       }, SCORE_FETCH_DELAY);
     };
 
@@ -549,7 +559,7 @@ export default function Schedule() {
     }
 
     return () => {
-      if (gamecastIntervalRef.current) clearInterval(gamecastIntervalRef.current);
+      if (gamecastIntervalRef.current) clearTimeout(gamecastIntervalRef.current);
       gamecastIntervalRef.current = null;
       if (pendingEarlyFetchRef.current) clearTimeout(pendingEarlyFetchRef.current);
       pendingEarlyFetchRef.current = null;

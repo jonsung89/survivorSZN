@@ -78,8 +78,8 @@ router.get('/:sport/date/:date', async (req, res) => {
 router.get('/:sport/game/:gameId', async (req, res) => {
   try {
     const { gameId } = req.params;
-    // ?live=1 shortens cache to 15s for live game polling (Gamecast, Shot Chart)
-    const options = req.query.live === '1' ? { cacheTtl: 15000 } : {};
+    // ?live=1 shortens cache to 6s for live game polling (Gamecast, Shot Chart)
+    const options = req.query.live === '1' ? { cacheTtl: 6000 } : {};
     const details = await req.provider.getGameDetails(gameId, options);
     if (!details) {
       return res.status(404).json({ error: 'Game not found' });

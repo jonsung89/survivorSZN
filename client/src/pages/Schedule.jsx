@@ -12,6 +12,7 @@ import BoxScore from '../components/BoxScore';
 import { PLAYOFF_ROUNDS, BROADCAST_NETWORKS } from '../sports/nfl/constants';
 import { useThemedLogo, useThemedColor } from '../utils/logo';
 import useLiveScores from '../hooks/useLiveScores';
+import { useScoresSocket } from '../context/ScoresSocketContext';
 import useAnimatedScore from '../hooks/useAnimatedScore';
 import Gamecast from '../components/Gamecast';
 import ShotChart from '../components/ShotChart';
@@ -201,16 +202,142 @@ export default function Schedule() {
   const liveData = useLiveScores(liveScoresSportId, selectedDate, dailySchedule);
   const liveGames = liveData.games;
 
+  // Socket access for score-triggered early gamecast fetch
+  const { socket: scoresSocket, connected: scoresConnected } = useScoresSocket();
+
   // Reset detail tab when expanded game changes
   useEffect(() => {
     setDetailTab('summary');
   }, [expandedGame]);
 
-  // Poll game details every 15s when Gamecast/Shot Chart is open on a live game
+  /*
+   * ── Gamecast Live Polling with Score-Triggered Early Fetch ──────────────
+   *
+   * Two systems work together to keep the gamecast up-to-date:
+   *
+   * 1. BASELINE POLLING (setInterval, 15s):
+   *    Fetches full game details (play-by-play, box score, shot chart) every
+   *    15 seconds. This catches all updates including ones the score poller
+   *    doesn't detect (e.g. new plays that don't change the score).
+   *
+   * 2. SCORE-TRIGGERED EARLY FETCH (Socket.io listener):
+   *    The live score poller pushes `score-update` events via Socket.io when
+   *    it detects score/status/clock changes. When the client receives a
+   *    score-update for the game currently open in gamecast, it:
+   *      - Immediately fetches fresh game details (skipping if fetched <5s ago)
+   *      - Resets the 15s baseline timer so the next poll is a full 15s away
+   *
+   *    This reduces the delay between a score change appearing on the game
+   *    card and the corresponding play showing up in the gamecast feed.
+   *
+   * The two systems share a single intervalRef so the early fetch can reset
+   * the baseline timer without creating duplicate intervals.
+   *
+   * Debug info (lastFetchTime, nextFetchTime, fetchTrigger) is tracked in
+   * gamecastDebugRef and passed to the Gamecast component for display when
+   * debug mode is enabled.
+   */
   const expandedGameRef = useRef(expandedGame);
   expandedGameRef.current = expandedGame;
   const detailTabRef = useRef(detailTab);
   detailTabRef.current = detailTab;
+
+  // Ref to hold the baseline polling interval so the socket listener can reset it
+  const gamecastIntervalRef = useRef(null);
+  // Timestamp of the last gamecast fetch — used to debounce early fetches (<5s apart)
+  const lastGamecastFetchRef = useRef(0);
+  // Ref for a pending delayed early fetch (when score changes within debounce window)
+  const pendingEarlyFetchRef = useRef(null);
+  // Debug state for the Gamecast timer overlay
+  const [gamecastDebug, setGamecastDebug] = useState({
+    lastFetchTime: null,    // when the last fetch completed (ms timestamp)
+    nextFetchTime: null,    // when the next baseline fetch is scheduled (ms timestamp)
+    fetchTrigger: null,     // 'timer' | 'score-update' — what triggered the last fetch
+    socketEvents: [],       // recent socket score-update events with diffs (max 10)
+    fetchEvents: [],        // recent gamecast fetch events with trigger type (max 10)
+  });
+
+  /*
+   * ── Debug: Socket Event Logger ─────────────────────────────────────────
+   * Listens for all score-update events on the socket and logs them with
+   * human-readable diffs (e.g. "score 95→98", "clock 3:42→3:20").
+   * Only tracks events for the currently expanded game.
+   * Keeps the last 10 events to avoid unbounded memory growth.
+   */
+  const prevGameSnapshotRef = useRef(null); // snapshot of last known game state for diffing (debug logger)
+  // Separate snapshot for the early fetch handler — must be independent from the debug
+  // logger's snapshot so they don't interfere with each other's diff detection.
+  const earlyFetchSnapshotRef = useRef(null);
+
+  useEffect(() => {
+    if (!scoresSocket || !scoresConnected || !expandedGame) return;
+
+    const handleDebugScoreUpdate = (data) => {
+      if (data.sport !== selectedSport) return;
+      if (!data.games || data.games.length === 0) return;
+
+      const updatedGame = data.games.find(g => g.id === expandedGame);
+      if (!updatedGame) return;
+
+      // Build a diff by comparing to the previous snapshot
+      const prev = prevGameSnapshotRef.current;
+      const changes = [];
+
+      if (prev) {
+        if (prev.homeScore !== updatedGame.homeTeam?.score) {
+          changes.push(`${updatedGame.homeTeam?.abbreviation || 'Home'} score ${prev.homeScore ?? '?'}→${updatedGame.homeTeam?.score ?? '?'}`);
+        }
+        if (prev.awayScore !== updatedGame.awayTeam?.score) {
+          changes.push(`${updatedGame.awayTeam?.abbreviation || 'Away'} score ${prev.awayScore ?? '?'}→${updatedGame.awayTeam?.score ?? '?'}`);
+        }
+        if (prev.clock !== (updatedGame.clock || updatedGame.statusDetail)) {
+          changes.push(`clock ${prev.clock ?? '?'}→${updatedGame.clock || updatedGame.statusDetail || '?'}`);
+        }
+        if (prev.period !== updatedGame.period) {
+          changes.push(`period ${prev.period ?? '?'}→${updatedGame.period ?? '?'}`);
+        }
+        if (prev.status !== updatedGame.status) {
+          changes.push(`status ${prev.status ?? '?'}→${updatedGame.status ?? '?'}`);
+        }
+      } else {
+        changes.push('initial snapshot');
+      }
+
+      // Save current state as the new snapshot for next diff
+      prevGameSnapshotRef.current = {
+        homeScore: updatedGame.homeTeam?.score,
+        awayScore: updatedGame.awayTeam?.score,
+        clock: updatedGame.clock || updatedGame.statusDetail,
+        period: updatedGame.period,
+        status: updatedGame.status,
+      };
+
+
+      // Only log if there are actual changes (skip if just initial snapshot with no diff)
+      const event = {
+        time: Date.now(),
+        changes,
+        gamesInPayload: data.games.length, // how many games were in this socket push
+      };
+
+      setGamecastDebug(prev => ({
+        ...prev,
+        socketEvents: [event, ...(prev.socketEvents || [])].slice(0, 10), // keep last 10
+      }));
+    };
+
+    scoresSocket.on('score-update', handleDebugScoreUpdate);
+    return () => scoresSocket.off('score-update', handleDebugScoreUpdate);
+  }, [scoresSocket, scoresConnected, expandedGame, selectedSport]);
+
+  // Reset debug socket events, snapshots, and lag data when expanded game changes
+  useEffect(() => {
+    prevGameSnapshotRef.current = null;
+    earlyFetchSnapshotRef.current = null;
+    setGamecastDebug(prev => ({ ...prev, socketEvents: [] }));
+  }, [expandedGame]);
+
+  const expandedGameStatus = liveGames.find(g => g.id === expandedGame)?.status;
 
   useEffect(() => {
     if (!expandedGame) return;
@@ -219,6 +346,7 @@ export default function Schedule() {
     const game = liveGames.find(g => g.id === expandedGame);
     if (!game) return;
 
+    const isFinal = game.status === 'STATUS_FINAL' || game.status === 'final';
     const isLive =
       game.status === 'STATUS_IN_PROGRESS' ||
       game.status === 'STATUS_HALFTIME' ||
@@ -226,32 +354,190 @@ export default function Schedule() {
       game.status === 'STATUS_FIRST_HALF' ||
       game.status === 'STATUS_SECOND_HALF' ||
       game.status === 'in_progress';
+
+    // Game is final — do one last fetch to capture any remaining plays, then stop
+    if (isFinal) {
+      const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
+      const fetchFn = sportTab?.scheduleType === 'daily'
+        ? () => scheduleAPI.getGameDetails(selectedSport, expandedGame, { live: true })
+        : () => nflAPI.getGameDetails(expandedGame);
+      fetchFn().then(data => {
+        if (data) setGameDetails(prev => ({ ...prev, [expandedGame]: data }));
+      }).catch(() => {});
+      return;
+    }
+
     if (!isLive) return;
+
+    const POLL_INTERVAL = 15000;
+    const DEBOUNCE_MS = 5000;    // minimum gap between early-triggered fetches
+    // ESPN updates their scoreboard endpoint before their play-by-play endpoint.
+    // Without this delay, a score-triggered fetch would often return stale play-by-play
+    // data because we'd hit the endpoint before ESPN has propagated the update.
+    // 5 seconds gives their play-by-play time to sync with the scoreboard.
+    const SCORE_FETCH_DELAY = 5000;
 
     const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
     const fetchFn = sportTab?.scheduleType === 'daily'
       ? () => scheduleAPI.getGameDetails(selectedSport, expandedGame, { live: true })
       : () => nflAPI.getGameDetails(expandedGame);
 
-    const fetchDetails = () => {
+    /**
+     * Fetch full game details and update state.
+     * @param {'timer'|'score-update'} trigger — what caused this fetch (for debug display)
+     */
+    const fetchDetails = (trigger = 'timer') => {
       // Guard: only fetch if still on gamecast/shotchart for the same game
       if (expandedGameRef.current !== expandedGame) return;
       if (detailTabRef.current !== 'gamecast' && detailTabRef.current !== 'shotchart') return;
+
+      lastGamecastFetchRef.current = Date.now();
 
       fetchFn().then(data => {
         if (data) {
           setGameDetails(prev => ({ ...prev, [expandedGame]: data }));
         }
+
+        // Update debug info after fetch completes (preserve socketEvents & fetchEvents)
+        const now = Date.now();
+        const playCount = data?.plays?.length ?? 0;
+        setGamecastDebug(prev => {
+          const prevPlayCount = prev.lastPlayCount ?? playCount;
+          const newPlays = Math.max(0, playCount - prevPlayCount);
+
+          // Calculate how stale the first new play is (seconds between play wallclock and fetch time)
+          let staleSec = null;
+          if (newPlays > 0 && data?.plays?.length > 0) {
+            const firstNewPlay = data.plays[prevPlayCount];
+            if (firstNewPlay?.wallclock) {
+              const playTime = new Date(firstNewPlay.wallclock).getTime();
+              if (!isNaN(playTime)) {
+                staleSec = Math.round((now - playTime) / 1000);
+              }
+            }
+          }
+
+          const nextTime = now + POLL_INTERVAL;
+
+          return {
+            ...prev,
+            lastFetchTime: now,
+            nextFetchTime: nextTime,
+            fetchTrigger: trigger,
+            lastPlayCount: playCount,
+            fetchEvents: [{ time: now, trigger, newPlays, staleSec }, ...(prev.fetchEvents || [])].slice(0, 10),
+          };
+        });
       }).catch(() => {});
     };
 
-    // Poll every 15 seconds to match score update frequency
-    const interval = setInterval(fetchDetails, 15000);
-    // Also fetch immediately on tab switch
-    fetchDetails();
+    /**
+     * Start (or restart) the fixed 15s polling cycle.
+     * Clears any pending interval first to prevent duplicates.
+     */
+    const startInterval = () => {
+      if (gamecastIntervalRef.current) clearInterval(gamecastIntervalRef.current);
+      gamecastIntervalRef.current = setInterval(() => fetchDetails('timer'), POLL_INTERVAL);
+    };
 
-    return () => clearInterval(interval);
-  }, [expandedGame, detailTab, selectedSport]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Fetch immediately, then start the polling interval
+    fetchDetails('timer');
+    startInterval();
+
+    /**
+     * Socket listener: when a score-update arrives for the expanded game,
+     * trigger an early gamecast fetch (with debounce) and reset the baseline timer.
+     */
+    const handleScoreUpdateForGamecast = (data) => {
+      if (data.sport !== selectedSport) return;
+      if (!data.games || data.games.length === 0) return;
+
+      // Check if any of the updated games match the one we have expanded
+      const currentExpandedGame = expandedGameRef.current;
+      if (!currentExpandedGame) return;
+      const currentDetailTab = detailTabRef.current;
+      if (currentDetailTab !== 'gamecast' && currentDetailTab !== 'shotchart') return;
+
+      const updatedGame = data.games.find(g => g.id === currentExpandedGame);
+      if (!updatedGame) return;
+
+      // Only trigger early fetch on meaningful changes (score, status, period).
+      // Clock-only ticks happen every ~15s and would just duplicate the baseline poll.
+      // Uses its own snapshot ref (earlyFetchSnapshotRef) separate from the debug
+      // logger's snapshot, so the two listeners don't interfere with each other.
+      const prevSnap = earlyFetchSnapshotRef.current;
+      if (prevSnap) {
+        const scoreChanged =
+          prevSnap.homeScore !== updatedGame.homeTeam?.score ||
+          prevSnap.awayScore !== updatedGame.awayTeam?.score;
+        const statusChanged = prevSnap.status !== updatedGame.status;
+        const periodChanged = prevSnap.period !== updatedGame.period;
+        if (!scoreChanged && !statusChanged && !periodChanged) return;
+      }
+
+      // Update the early fetch snapshot so next event can diff against this one
+      earlyFetchSnapshotRef.current = {
+        homeScore: updatedGame.homeTeam?.score,
+        awayScore: updatedGame.awayTeam?.score,
+        status: updatedGame.status,
+        period: updatedGame.period,
+      };
+
+      // Debounce: if we fetched less than 5s ago, schedule a delayed fetch instead
+      // of dropping the event entirely. This handles the common case where a score
+      // update arrives right after a timer fetch.
+      const elapsed = Date.now() - lastGamecastFetchRef.current;
+      if (elapsed < DEBOUNCE_MS) {
+        // Clear any existing pending fetch to avoid duplicates
+        if (pendingEarlyFetchRef.current) clearTimeout(pendingEarlyFetchRef.current);
+        // Use whichever is longer: the remaining debounce time or the ESPN
+        // play-by-play delay, so we always wait at least SCORE_FETCH_DELAY
+        const delay = Math.max(DEBOUNCE_MS - elapsed, SCORE_FETCH_DELAY);
+        const delaySeconds = (delay / 1000).toFixed(1);
+
+        // Log the delayed fetch in the debug panel so the user can see it was queued
+        setGamecastDebug(prev => ({
+          ...prev,
+          fetchEvents: [
+            { time: Date.now(), trigger: 'score-update', delayed: delaySeconds },
+            ...(prev.fetchEvents || []),
+          ].slice(0, 10),
+        }));
+
+        pendingEarlyFetchRef.current = setTimeout(() => {
+          pendingEarlyFetchRef.current = null;
+          fetchDetails('score-update');
+          startInterval();
+        }, delay);
+        return;
+      }
+
+      // Delay score-triggered fetch by 3s to let ESPN's play-by-play endpoint
+      // catch up with the scoreboard. Without this delay, we'd often get stale
+      // play-by-play data because ESPN updates the scoreboard before the play-by-play.
+      if (pendingEarlyFetchRef.current) clearTimeout(pendingEarlyFetchRef.current);
+      pendingEarlyFetchRef.current = setTimeout(() => {
+        pendingEarlyFetchRef.current = null;
+        fetchDetails('score-update');
+        startInterval(); // restart 15s countdown from the fetch
+      }, SCORE_FETCH_DELAY);
+    };
+
+    // Attach the socket listener if connected
+    if (scoresSocket && scoresConnected) {
+      scoresSocket.on('score-update', handleScoreUpdateForGamecast);
+    }
+
+    return () => {
+      if (gamecastIntervalRef.current) clearInterval(gamecastIntervalRef.current);
+      gamecastIntervalRef.current = null;
+      if (pendingEarlyFetchRef.current) clearTimeout(pendingEarlyFetchRef.current);
+      pendingEarlyFetchRef.current = null;
+      if (scoresSocket) {
+        scoresSocket.off('score-update', handleScoreUpdateForGamecast);
+      }
+    };
+  }, [expandedGame, expandedGameStatus, detailTab, selectedSport, scoresSocket, scoresConnected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync selected sport/week/date → URL query params
   useEffect(() => {
@@ -757,14 +1043,14 @@ export default function Schedule() {
     }
     if (isGamePast(game)) {
       return (
-        <span className="text-xs font-medium text-fg/50 bg-fg/10 px-2 py-1 rounded-full">
+        <span className="text-xs font-medium text-fg/80 bg-fg/10 px-2 py-1 rounded-full">
           Final
         </span>
       );
     }
     const date = new Date(game.date);
     return (
-      <span className="text-sm text-fg/60">
+      <span className="text-sm text-fg/80">
         {date.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
@@ -838,7 +1124,7 @@ export default function Schedule() {
   const ClickableTeam = ({ team, children, className = '' }) => (
     <button
       onClick={(e) => openTeamInfo(team, e)}
-      className={`hover:opacity-80 transition-opacity cursor-pointer ${className}`}
+      className={`hover:opacity-80 transition-opacity cursor-pointer text-left ${className}`}
     >
       {children}
     </button>
@@ -1146,8 +1432,9 @@ export default function Schedule() {
                               <span className="text-fg/50 w-5 sm:w-5 sm:text-sm sm:text-fg/40 flex-shrink-0 text-center">{g.atVs === 'vs' ? 'vs.' : '@'}</span>
                               {g.opponentLogo && <img src={tl(g.opponentLogo)} alt="" className="w-4 h-4 sm:w-5 sm:h-5 object-contain flex-shrink-0" />}
                               <span className="text-fg/70 truncate">
-                                <span className="sm:hidden">{g.opponentName || g.opponent}</span>
-                                <span className="hidden sm:inline">{g.opponent || g.opponentName}</span>
+                                <span className="hidden min-[400px]:inline sm:hidden">{g.opponentName || g.opponent}</span>
+                                <span className="min-[400px]:hidden">{g.opponent || g.opponentName}</span>
+                                <span className="hidden sm:inline">{g.opponentName || g.opponent}</span>
                                 {g.opponentRecord && <span className="text-fg/40 ml-1">({g.opponentRecord})</span>}
                               </span>
                             </div>
@@ -1451,6 +1738,7 @@ export default function Schedule() {
                 game.status === 'STATUS_END_PERIOD' ||
                 /timeout|time.?out/i.test(game.statusDetail || '')
               }
+              gamecastDebug={gamecastDebug}
             />
           </div>
         )}
@@ -1604,6 +1892,13 @@ export default function Schedule() {
     );
   };
 
+  /** Inline rank prefix for mobile — returns a span with "#N " or null */
+  const rankPrefix = (team) => {
+    const r = Number(team?.ranking?.current);
+    if (!Number.isFinite(r) || r <= 0 || r >= 99) return null;
+    return <span className="text-fg/50 font-semibold">#{r} </span>;
+  };
+
   // Render a single game card
   const renderGameCard = (game, index) => {
     const isPast = isGamePast(game);
@@ -1634,7 +1929,7 @@ export default function Schedule() {
             {/* Teams Column */}
             <div className="flex-1 space-y-2">
               {/* Away Team */}
-              <div className={`flex items-center gap-2.5 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
+              <div className={`flex items-start gap-2.5 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
                 <ClickableTeam team={game.awayTeam}>
                   {game.awayTeam?.logo ? (
                     <img
@@ -1667,27 +1962,17 @@ export default function Schedule() {
                     />
                   </>
                 ) : (
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      {selectedSport === 'ncaab' && <TeamRankBadge team={game.awayTeam} />}
-                      <ClickableTeam team={game.awayTeam}>
-                        <span className="text-fg font-medium text-base hover:underline">
-                          {game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
-                        </span>
-                      </ClickableTeam>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-sm text-fg/45 mt-0.5">
-                      {game.awayTeam?.record && <span className="font-medium">{game.awayTeam.record}</span>}
-                      {getTeamStandingBadges(game.awayTeam).map((b, i) => (
-                        <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
-                      ))}
-                    </div>
-                  </div>
+                  <span className="flex-1 min-w-0 text-base leading-snug">
+                      <span className="text-fg font-medium hover:underline hover:opacity-80 cursor-pointer" onClick={(e) => openTeamInfo(game.awayTeam, e)}>
+                        {selectedSport === 'ncaab' && rankPrefix(game.awayTeam)}{game.awayTeam?.name || game.awayTeam?.abbreviation || 'TBD'}
+                      </span>
+                      {game.awayTeam?.record && <span className="text-sm text-fg/45 font-medium ml-1.5 whitespace-nowrap">{game.awayTeam.record}</span>}
+                  </span>
                 )}
               </div>
 
               {/* Home Team */}
-              <div className={`flex items-center gap-2.5 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
+              <div className={`flex items-start gap-2.5 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
                 <ClickableTeam team={game.homeTeam}>
                   {game.homeTeam?.logo ? (
                     <img
@@ -1720,22 +2005,12 @@ export default function Schedule() {
                     />
                   </>
                 ) : (
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      {selectedSport === 'ncaab' && <TeamRankBadge team={game.homeTeam} />}
-                      <ClickableTeam team={game.homeTeam}>
-                        <span className="text-fg font-medium text-base hover:underline">
-                          {game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
+                  <span className="flex-1 min-w-0 text-base leading-snug">
+                        <span className="text-fg font-medium hover:underline hover:opacity-80 cursor-pointer" onClick={(e) => openTeamInfo(game.homeTeam, e)}>
+                          {selectedSport === 'ncaab' && rankPrefix(game.homeTeam)}{game.homeTeam?.name || game.homeTeam?.abbreviation || 'TBD'}
                         </span>
-                      </ClickableTeam>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-sm text-fg/45 mt-0.5">
-                      {game.homeTeam?.record && <span className="font-medium">{game.homeTeam.record}</span>}
-                      {getTeamStandingBadges(game.homeTeam).map((b, i) => (
-                        <StandingBadge key={`${b.label}-${b.rank}-${i}`} label={b.label} rank={b.rank} />
-                      ))}
-                    </div>
-                  </div>
+                        {game.homeTeam?.record && <span className="text-sm text-fg/45 font-medium ml-1.5 whitespace-nowrap">{game.homeTeam.record}</span>}
+                  </span>
                 )}
               </div>
             </div>
@@ -1789,14 +2064,14 @@ export default function Schedule() {
               {getStatusDisplay(game)}
               {game.broadcast && !isPast && <BroadcastIcon broadcast={game.broadcast} />}
               {game.notes && (
-                <span className="text-xs text-fg/50 bg-fg/5 px-2 py-0.5 rounded-full font-medium">
+                <span className="text-xs text-fg/70 bg-fg/5 px-2 py-0.5 rounded-full font-medium">
                   {game.notes}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2">
               {game.venue && (
-                <span className="text-sm text-fg/40 truncate max-w-[200px]">
+                <span className="text-xs text-fg/60 truncate max-w-[200px]">
                   {game.venue}
                 </span>
               )}

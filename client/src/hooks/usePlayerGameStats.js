@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 
 // ESPN type IDs
-const OFF_REBOUND_ID = '155';
-const DEF_REBOUND_ID = '156';
+const DEF_REBOUND_ID = '155';
+const OFF_REBOUND_ID = '156';
 const REBOUND_IDS = new Set([OFF_REBOUND_ID, DEF_REBOUND_ID]);
 const FOUL_IDS = new Set(['42', '43', '44', '45']);
 const TURNOVER_IDS = new Set(['62', '63', '84', '86', '90']);
@@ -117,9 +117,13 @@ export function getPlayLabel(play, playerStats) {
 
   // Rebounds
   if (REBOUND_IDS.has(tid)) {
+    const playText = (play.text || '').toLowerCase();
+    const isOff = playText.includes('offensive') || (!playText.includes('defensive') && tid === OFF_REBOUND_ID);
+    const specific = isOff ? s.offRebounds : s.defRebounds;
+    const abbr = isOff ? 'OREB' : 'DREB';
     return {
-      line1: 'REB',
-      line2: `${s.rebounds} REB`,
+      line1: isOff ? 'OFF REB' : 'DEF REB',
+      line2: `${specific} ${abbr} · ${s.rebounds} REB`,
       color: '#ffffff',
     };
   }

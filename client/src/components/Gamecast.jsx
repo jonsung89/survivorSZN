@@ -412,6 +412,7 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
   const queueTimerRef = useRef(null);                 // setTimeout ID for next reveal
   const revealQueueRef = useRef([]);                  // pending plays+delays to reveal
   const isInitialLoadRef = useRef(true);              // skip queuing on first mount
+  const [isRevealing, setIsRevealing] = useState(false); // true while reveal queue is processing
   const { isDark } = useTheme();
   const { user } = useAuth();
 
@@ -668,6 +669,7 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
       visibleCountRef.current = plays.length;
       setVisibleCount(plays.length);
       setRevealingPlay(null);
+      setIsRevealing(false);
       return;
     }
 
@@ -700,10 +702,12 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
     if (queueTimerRef.current) return;
 
     // Start reveal loop
+    setIsRevealing(true);
     const revealNext = () => {
       const queue = revealQueueRef.current;
       if (queue.length === 0) {
         setRevealingPlay(null);
+        setIsRevealing(false);
         queueTimerRef.current = null;
         return;
       }
@@ -728,6 +732,7 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
             revealNext();
           } else {
             setRevealingPlay(null);
+            setIsRevealing(false);
             queueTimerRef.current = null;
           }
         }, 500);
@@ -748,10 +753,12 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
 
   // Banner system — updates on each revealed play (not all plays at once).
   // Uses visibleReversedPlays so the banner changes as each queued play is revealed.
+  // When the reveal queue is still processing, we defer the isPaused banner so
+  // plays that arrived before the status change still animate on the court.
   useEffect(() => {
     // Determine banner from isPaused state or latest visible play
     let newBanner = null;
-    if (isPaused) {
+    if (isPaused && !isRevealing) {
       const status = game?.status;
       if (status === 'STATUS_HALFTIME') {
         newBanner = { text: 'HALFTIME', subtext: '', color: '#ffffff', persistent: true };
@@ -798,8 +805,8 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
       return;
     }
 
-    setBanner({ ...newBanner, key: `${visibleCount}-${isPaused}` });
-  }, [visibleCount, isPaused, game?.status]);
+    setBanner({ ...newBanner, key: `${visibleCount}-${isPaused}-${isRevealing}` });
+  }, [visibleCount, isPaused, isRevealing, game?.status]);
 
   return (
     <div className="relative">
@@ -988,7 +995,7 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
 
         {/* Fading-out ghost of previous court marker */}
         {prevMarker && !highlightedPlay && !isFinal
-          && !(isPaused && (game?.status === 'STATUS_END_PERIOD' || game?.status === 'STATUS_HALFTIME'))
+          && !((isPaused && !isRevealing) && (game?.status === 'STATUS_END_PERIOD' || game?.status === 'STATUS_HALFTIME'))
           && (() => {
           const { pt, color, headshot, key } = prevMarker;
           const r = 28;
@@ -1022,7 +1029,7 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
             marker follows along as plays are revealed one by one.
             Hidden during end of period / halftime / final — court should be clean. */}
         {(activeRevealPlay || mostRecentPlay) && !highlightedPlay && !isFinal
-          && !(isPaused && (game?.status === 'STATUS_END_PERIOD' || game?.status === 'STATUS_HALFTIME'))
+          && !((isPaused && !isRevealing) && (game?.status === 'STATUS_END_PERIOD' || game?.status === 'STATUS_HALFTIME'))
           && (() => {
           const shot = activeRevealPlay || mostRecentPlay;
           const pt = mapPlay(shot);

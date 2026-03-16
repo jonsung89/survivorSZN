@@ -249,22 +249,27 @@ router.get('/reports', async (req, res) => {
       // Tournament data may not be available
     }
 
-    // Get existing reports
+    // Get existing reports with concise_report to detect incomplete ones
     const reports = await db.getAll(
-      'SELECT team_id, generated_at FROM scouting_reports WHERE season = $1',
+      'SELECT team_id, generated_at, concise_report, report FROM scouting_reports WHERE season = $1',
       [parseInt(season)]
     );
 
     const reportMap = {};
+    let incompleteCount = 0;
     for (const r of reports) {
-      reportMap[r.team_id] = r.generated_at;
+      const isIncomplete = !r.report || !r.concise_report ||
+        (r.concise_report && !/[.!?]$/.test(r.concise_report.trim()));
+      reportMap[r.team_id] = { generatedAt: r.generated_at, isIncomplete };
+      if (isIncomplete) incompleteCount++;
     }
 
     // Merge team info with report status
     const teamsWithStatus = teams.map(t => ({
       ...t,
       hasReport: !!reportMap[t.id],
-      generatedAt: reportMap[t.id] || null,
+      isIncomplete: reportMap[t.id]?.isIncomplete || false,
+      generatedAt: reportMap[t.id]?.generatedAt || null,
     }));
 
     // Sort: missing reports first, then by seed
@@ -277,6 +282,7 @@ router.get('/reports', async (req, res) => {
       season: parseInt(season),
       totalTeams: teams.length,
       reportsGenerated: reports.length,
+      incompleteCount,
       teams: teamsWithStatus,
     });
   } catch (error) {
@@ -310,10 +316,10 @@ router.get('/reports/:teamId', async (req, res) => {
 
 router.post('/reports/generate', async (req, res) => {
   try {
-    const { season = new Date().getFullYear(), teamId, force = false } = req.body;
-    console.log(`[Admin] Generating scouting reports for season ${season}${teamId ? ` (team ${teamId})` : ''}${force ? ' (force)' : ''}`);
+    const { season = new Date().getFullYear(), teamId, force = false, incompleteOnly = false } = req.body;
+    console.log(`[Admin] Generating scouting reports for season ${season}${teamId ? ` (team ${teamId})` : ''}${force ? ' (force)' : ''}${incompleteOnly ? ' (incomplete only)' : ''}`);
 
-    const result = await generateAllReports(parseInt(season), { teamId, force });
+    const result = await generateAllReports(parseInt(season), { teamId, force, incompleteOnly });
     res.json(result);
   } catch (error) {
     console.error('Admin report generation error:', error);

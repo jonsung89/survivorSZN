@@ -477,7 +477,7 @@ async function getStoredReport(teamId, season) {
  *   teamId — generate for a single team only
  *   force  — regenerate even if a report already exists
  */
-async function generateAllReports(season, { teamId: singleTeamId, force = false } = {}) {
+async function generateAllReports(season, { teamId: singleTeamId, force = false, incompleteOnly = false } = {}) {
   const bracket = await getTournamentBracket(season);
   if (!bracket?.teams || Object.keys(bracket.teams).length === 0) {
     throw new Error(`No tournament data available for season ${season}`);
@@ -495,15 +495,28 @@ async function generateAllReports(season, { teamId: singleTeamId, force = false 
     const label = `${teamMeta?.name || tid} (${i + 1}/${total})`;
 
     try {
-      // Skip if report already exists (unless force)
+      // Skip logic based on mode
+      const existing = await getStoredReport(tid, season);
       if (!force) {
-        const existing = await getStoredReport(tid, season);
-        if (existing) {
+        if (incompleteOnly) {
+          // Only regenerate if report/concise is missing or concise looks truncated
+          const isIncomplete = !existing?.report || !existing?.conciseReport ||
+            (existing.conciseReport && !/[.!?]$/.test(existing.conciseReport.trim()));
+          if (!isIncomplete) {
+            skipped++;
+            continue;
+          }
+          console.log(`[Scouting] Regenerating incomplete report for ${label}`);
+        } else if (existing) {
           console.log(`[Scouting] Skipping ${label} — report exists`);
           skipped++;
           continue;
         }
       }
+
+      // Clear in-memory cache so we don't return stale/truncated data
+      aiReportCache.delete(`ai-report-${tid}`);
+      aiReportCache.delete(`ai-concise-${tid}`);
 
       console.log(`[Scouting] Generating report for ${label}...`);
 

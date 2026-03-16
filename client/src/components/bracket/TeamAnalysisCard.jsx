@@ -176,7 +176,7 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                   {/* Stats line — directly under the name */}
                   {player.stats?.ppg && (
                     <>
-                      {/* Mobile: compact stat line */}
+                      {/* Mobile: show top 4 stats by value to keep one line */}
                       <div className="flex items-center gap-3 mt-0.5 md:hidden flex-wrap">
                         {[
                           { val: player.stats.ppg, label: 'PTS' },
@@ -184,7 +184,19 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                           { val: player.stats.apg, label: 'AST' },
                           { val: player.stats.spg, label: 'STL' },
                           { val: player.stats.bpg, label: 'BLK' },
-                        ].filter(s => s.val && parseFloat(s.val) > 0).map(s => (
+                        ].filter(s => s.val && parseFloat(s.val) > 0)
+                         .sort((a, b) => {
+                           // Sort by composite impact value (stat × weight)
+                           const weight = { PTS: 1.0, REB: 1.2, AST: 1.5, STL: 2.0, BLK: 2.0 };
+                           return (parseFloat(b.val) * (weight[b.label] || 1)) - (parseFloat(a.val) * (weight[a.label] || 1));
+                         })
+                         .slice(0, 4)
+                         .sort((a, b) => {
+                           // Re-sort to canonical order: PTS, REB, AST, STL, BLK
+                           const order = ['PTS', 'REB', 'AST', 'STL', 'BLK'];
+                           return order.indexOf(a.label) - order.indexOf(b.label);
+                         })
+                         .map(s => (
                           <span key={s.label} className="text-sm font-mono text-fg/60">
                             <span className="text-fg/80 font-semibold">{s.val}</span> <span className="text-fg/50">{s.label}</span>
                           </span>

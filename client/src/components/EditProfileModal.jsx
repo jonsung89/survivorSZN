@@ -136,7 +136,12 @@ export default function EditProfileModal({ onClose }) {
     try {
       // Handle image changes
       if (imageData) {
-        await uploadProfileImage(imageData);
+        const imgResult = await uploadProfileImage(imageData);
+        if (!imgResult.success) {
+          setError(imgResult.error || 'Failed to upload image');
+          setSaving(false);
+          return;
+        }
       } else if (imageRemoved) {
         await removeProfileImage();
       }

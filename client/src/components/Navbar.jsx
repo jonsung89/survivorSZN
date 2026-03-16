@@ -247,7 +247,7 @@ export default function Navbar() {
                         <p className="text-fg font-medium">
                           {user?.displayName || 'Player'}
                         </p>
-                        <p className="text-fg/50 text-sm">{user?.phone || user?.email}</p>
+                        <p className="text-fg/50 text-sm">{user?.email || user?.phone}</p>
                       </div>
                     </div>
 

@@ -46,7 +46,7 @@ app.use(cors({
   origin: corsOrigins,
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 // Make io accessible to routes
 app.set('io', io);

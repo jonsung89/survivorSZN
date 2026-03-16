@@ -1364,6 +1364,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             ref={messagesContainerRef}
             onScroll={handleScroll}
             className="flex-1 overflow-y-auto p-4"
+            style={{ overscrollBehavior: 'contain' }}
           >
             {renderMessages()}
           </div>

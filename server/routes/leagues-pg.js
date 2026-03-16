@@ -675,6 +675,8 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
         lm.joined_at,
         lm.has_paid,
         u.display_name,
+        u.first_name,
+        u.last_name,
         u.email,
         u.phone,
         u.profile_image_url
@@ -708,6 +710,8 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
           id: m.member_id,
           userId: m.user_id,
           displayName: m.display_name || `User-${m.user_id.slice(0, 6)}`,
+          firstName: m.first_name || null,
+          lastName: m.last_name || null,
           email: m.email || null,
           profileImageUrl: m.profile_image_url || null,
           strikes: m.strikes,
@@ -1309,6 +1313,8 @@ router.get('/:leagueId/standings', authMiddleware, async (req, res) => {
         lm.status,
         lm.has_paid,
         u.display_name,
+        u.first_name,
+        u.last_name,
         u.email,
         u.profile_image_url
       FROM league_members lm
@@ -1402,6 +1408,8 @@ router.get('/:leagueId/standings', authMiddleware, async (req, res) => {
         memberId: member.member_id,
         userId: member.user_id,
         displayName: member.display_name || `User-${member.user_id.slice(0, 6)}`,
+        firstName: member.first_name || null,
+        lastName: member.last_name || null,
         email: member.email || null,
         profileImageUrl: member.profile_image_url || null,
         strikes: member.strikes,

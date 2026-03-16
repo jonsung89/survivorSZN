@@ -281,9 +281,12 @@ export default function BracketFill() {
   const isComplete = pickCount >= TOTAL_GAMES;
 
   return (
-    <div className={`max-w-[1400px] mx-auto px-3 sm:px-4 -mt-4 md:mt-0 pb-4 md:py-4 sm:py-6 transition-[padding] duration-300 lg:mx-0 lg:max-w-none lg:pl-6 ${
-      chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
-    }`}>
+    <div
+      className={`max-w-[1400px] mx-auto px-3 sm:px-4 -mt-4 md:mt-0 pb-4 md:py-4 sm:py-6 transition-[padding] duration-300 lg:mx-0 lg:max-w-none lg:pl-6 ${
+        chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
+      }`}
+      style={{ paddingBottom: 'calc(var(--chat-bar-height, 0px) + 24px)' }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between -mx-3 px-3 sm:-mx-4 sm:px-4 pt-4 pb-3 md:py-3 bg-surface md:rounded-xl md:border md:border-fg/10">
         <div>

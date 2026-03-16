@@ -1516,9 +1516,11 @@ export default function LeagueDetail() {
                         {member.isMe && <span className="text-xs text-nfl-blue">(You)</span>}
                         {member.userId === league?.commissionerId && <CommishBadge />}
                       </p>
-                      {member.email && (
-                        <p className="text-fg/40 text-xs truncate max-w-[150px]">{member.email}</p>
-                      )}
+                      <p className="text-fg/40 text-xs truncate max-w-[150px]">
+                        {member.firstName && member.lastName
+                          ? `${member.firstName} ${member.lastName}`
+                          : member.email}
+                      </p>
                     </div>
                   </div>
                   {isLoadingWeek ? (
@@ -1666,9 +1668,11 @@ export default function LeagueDetail() {
                             )}
                             {member.userId === league?.commissionerId && <CommishBadge />}
                           </p>
-                          {member.email && (
-                            <p className="text-fg/40 text-xs">{member.email}</p>
-                          )}
+                          <p className="text-fg/40 text-xs">
+                            {member.firstName && member.lastName
+                              ? `${member.firstName} ${member.lastName}`
+                              : member.email}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -2240,9 +2244,11 @@ export default function LeagueDetail() {
                           />
                           <div>
                             <span className="text-fg text-sm">{member.displayName}</span>
-                            {member.email && (
-                              <p className="text-fg/40 text-xs">{member.email}</p>
-                            )}
+                            <p className="text-fg/40 text-xs">
+                              {member.firstName && member.lastName
+                                ? `${member.firstName} ${member.lastName}`
+                                : member.email}
+                            </p>
                           </div>
                         </div>
                         <button

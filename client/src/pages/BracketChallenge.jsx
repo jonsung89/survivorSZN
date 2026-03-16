@@ -239,9 +239,12 @@ export default function BracketChallenge() {
   });
 
   return (
-    <div className={`max-w-4xl mx-auto px-4 py-6 transition-[padding] duration-300 lg:max-w-6xl lg:px-6 ${
-      chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
-    }`}>
+    <div
+      className={`max-w-4xl mx-auto px-4 py-6 transition-[padding] duration-300 lg:max-w-6xl lg:px-6 ${
+        chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
+      }`}
+      style={{ paddingBottom: 'calc(var(--chat-bar-height, 0px) + 24px)' }}
+    >
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex items-center gap-3">
@@ -595,9 +598,11 @@ export default function BracketChallenge() {
                         </span>
                       )}
                     </div>
-                    {member.email && (
-                      <p className="text-sm text-fg/40 mt-0.5 truncate">{member.email}</p>
-                    )}
+                    <p className="text-sm text-fg/40 mt-0.5 truncate">
+                      {member.firstName && member.lastName
+                        ? `${member.firstName} ${member.lastName}`
+                        : member.email}
+                    </p>
                   </div>
                 </div>
 
@@ -757,9 +762,11 @@ function SettingsModal({ challenge, league, members, onClose, onUpdate, onToggle
                         </div>
                         <div>
                           <span className="text-fg text-sm">{member.displayName}</span>
-                          {member.email && (
-                            <p className="text-fg/40 text-xs">{member.email}</p>
-                          )}
+                          <p className="text-fg/40 text-xs">
+                            {member.firstName && member.lastName
+                              ? `${member.firstName} ${member.lastName}`
+                              : member.email}
+                          </p>
                         </div>
                       </div>
                       <button

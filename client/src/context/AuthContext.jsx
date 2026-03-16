@@ -11,11 +11,22 @@ export function AuthProvider({ children }) {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
+    // Safety timeout - never stay stuck on loading screen
+    const loadingTimeout = setTimeout(() => {
+      setLoading(prev => {
+        if (prev) {
+          console.warn('Auth loading timed out after 10s — forcing load');
+          return false;
+        }
+        return prev;
+      });
+    }, 10000);
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          // Force refresh to always get a valid token
-          const token = await firebaseUser.getIdToken(true);
+          // Use cached token first (fast), authFetch will refresh on 401
+          const token = await firebaseUser.getIdToken();
           localStorage.setItem('token', token);
 
           const userData = await userAPI.getOrCreateUser({
@@ -43,7 +54,10 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(loadingTimeout);
+      unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {

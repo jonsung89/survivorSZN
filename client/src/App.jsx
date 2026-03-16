@@ -21,7 +21,6 @@ import BracketFill from './pages/BracketFill';
 import Schedule from './pages/Schedule';
 import Loading from './components/Loading';
 import Onboarding from './components/Onboarding';
-import EmailPrompt from './components/EmailPrompt';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
@@ -31,27 +30,22 @@ import AdminBracketTest from './pages/admin/AdminBracketTest';
 
 // Protected route wrapper
 function ProtectedRoute({ children }) {
-  const { user, loading, showOnboarding, showEmailPrompt } = useAuth();
-  
+  const { user, loading, showOnboarding } = useAuth();
+
   if (loading) {
     return <Loading fullScreen />;
   }
-  
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // Show onboarding for new users
+  // Show onboarding for users who haven't completed it
   if (showOnboarding) {
     return <Onboarding />;
   }
-  
-  return (
-    <>
-      {children}
-      {showEmailPrompt && <EmailPrompt />}
-    </>
-  );
+
+  return children;
 }
 
 // Public route (redirect to dashboard if logged in)

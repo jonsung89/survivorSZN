@@ -667,7 +667,7 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
 
     // Get members with their status
     const members = await db.getAll(`
-      SELECT 
+      SELECT
         lm.id as member_id,
         lm.user_id,
         lm.strikes,
@@ -676,7 +676,8 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
         lm.has_paid,
         u.display_name,
         u.email,
-        u.phone
+        u.phone,
+        u.profile_image_url
       FROM league_members lm
       LEFT JOIN users u ON lm.user_id = u.id
       WHERE lm.league_id = $1
@@ -708,6 +709,7 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
           userId: m.user_id,
           displayName: m.display_name || `User-${m.user_id.slice(0, 6)}`,
           email: m.email || null,
+          profileImageUrl: m.profile_image_url || null,
           strikes: m.strikes,
           status: m.status,
           joinedAt: m.joined_at,
@@ -1300,14 +1302,15 @@ router.get('/:leagueId/standings', authMiddleware, async (req, res) => {
 
     // Get all members with their picks
     const standings = await db.getAll(`
-      SELECT 
+      SELECT
         lm.id as member_id,
         lm.user_id,
         lm.strikes,
         lm.status,
         lm.has_paid,
         u.display_name,
-        u.email
+        u.email,
+        u.profile_image_url
       FROM league_members lm
       LEFT JOIN users u ON lm.user_id = u.id
       WHERE lm.league_id = $1
@@ -1400,6 +1403,7 @@ router.get('/:leagueId/standings', authMiddleware, async (req, res) => {
         userId: member.user_id,
         displayName: member.display_name || `User-${member.user_id.slice(0, 6)}`,
         email: member.email || null,
+        profileImageUrl: member.profile_image_url || null,
         strikes: member.strikes,
         status: member.status,
         hasPaid: member.has_paid || false,

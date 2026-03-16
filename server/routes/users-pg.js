@@ -4,6 +4,7 @@ const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
 const { getProvider } = require('../sports');
 const { v4: uuidv4 } = require('uuid');
+const { uploadAvatar, deleteAvatar, isConfigured: isR2Configured } = require('../services/r2');
 
 // Sync user from Firebase (called after Firebase auth)
 router.post('/sync', authMiddleware, async (req, res) => {
@@ -67,6 +68,10 @@ router.post('/sync', authMiddleware, async (req, res) => {
       phone: user.phone,
       email: user.email,
       displayName: user.display_name,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      profileImageUrl: user.profile_image_url,
+      onboardingComplete: user.onboarding_complete || false,
       createdAt: user.created_at,
       isAdmin: user.is_admin || false,
       isNewUser
@@ -130,6 +135,112 @@ router.put('/email', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Update email error:', error);
     res.status(500).json({ error: 'Failed to update email' });
+  }
+});
+
+// Update profile (first name, last name, display name, email, phone)
+router.put('/profile', authMiddleware, async (req, res) => {
+  try {
+    const { firstName, lastName, displayName, email, phone } = req.body;
+
+    if (!firstName || !firstName.trim()) {
+      return res.status(400).json({ error: 'First name is required' });
+    }
+    if (!lastName || !lastName.trim()) {
+      return res.status(400).json({ error: 'Last name is required' });
+    }
+    if (!displayName || displayName.trim().length < 2 || displayName.trim().length > 20) {
+      return res.status(400).json({ error: 'Display name must be 2-20 characters' });
+    }
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'A valid email is required' });
+    }
+
+    await db.run(`
+      UPDATE users SET
+        first_name = $1, last_name = $2, display_name = $3,
+        email = $4, phone = $5, updated_at = NOW()
+      WHERE firebase_uid = $6
+    `, [firstName.trim(), lastName.trim(), displayName.trim(), email.trim().toLowerCase(), phone?.trim() || null, req.firebaseUser.uid]);
+
+    const user = await db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
+
+    res.json({
+      success: true,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      displayName: user.display_name,
+      email: user.email,
+      phone: user.phone
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// Upload profile image
+router.post('/profile-image', authMiddleware, async (req, res) => {
+  try {
+    const { imageData } = req.body;
+    if (!imageData) {
+      return res.status(400).json({ error: 'No image data provided' });
+    }
+
+    if (!isR2Configured()) {
+      return res.status(500).json({ error: 'Image storage not configured' });
+    }
+
+    const user = await db.getOne('SELECT id FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // imageData is base64 string (with or without data URL prefix)
+    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // Limit to ~500KB
+    if (buffer.length > 500 * 1024) {
+      return res.status(400).json({ error: 'Image too large. Maximum 500KB.' });
+    }
+
+    const url = await uploadAvatar(user.id, buffer);
+
+    await db.run('UPDATE users SET profile_image_url = $1, updated_at = NOW() WHERE id = $2', [url, user.id]);
+
+    res.json({ success: true, profileImageUrl: url });
+  } catch (error) {
+    console.error('Upload profile image error:', error);
+    res.status(500).json({ error: 'Failed to upload profile image' });
+  }
+});
+
+// Delete profile image
+router.delete('/profile-image', authMiddleware, async (req, res) => {
+  try {
+    const user = await db.getOne('SELECT id FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (isR2Configured()) {
+      try { await deleteAvatar(user.id); } catch (e) { /* ignore if doesn't exist */ }
+    }
+
+    await db.run('UPDATE users SET profile_image_url = NULL, updated_at = NOW() WHERE id = $1', [user.id]);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete profile image error:', error);
+    res.status(500).json({ error: 'Failed to delete profile image' });
+  }
+});
+
+// Mark onboarding as complete
+router.put('/onboarding-complete', authMiddleware, async (req, res) => {
+  try {
+    await db.run('UPDATE users SET onboarding_complete = TRUE, updated_at = NOW() WHERE firebase_uid = $1', [req.firebaseUser.uid]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Complete onboarding error:', error);
+    res.status(500).json({ error: 'Failed to complete onboarding' });
   }
 });
 

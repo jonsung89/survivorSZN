@@ -36,7 +36,7 @@ function setupSocketHandlers(io) {
 
       // Get user from database
       const user = await db.getOne(
-        'SELECT id, display_name FROM users WHERE firebase_uid = $1',
+        'SELECT id, display_name, profile_image_url FROM users WHERE firebase_uid = $1',
         [payload.sub]
       );
 
@@ -46,6 +46,7 @@ function setupSocketHandlers(io) {
 
       socket.userId = user.id;
       socket.displayName = user.display_name || 'Anonymous';
+      socket.profileImageUrl = user.profile_image_url || null;
       socket.firebaseUid = payload.sub;
       
       next();
@@ -148,6 +149,7 @@ function setupSocketHandlers(io) {
           user_id: socket.userId, // Include both formats for compatibility
           displayName: socket.displayName,
           display_name: socket.displayName,
+          profileImageUrl: socket.profileImageUrl,
           message: message ? message.trim() : null,
           gif: gif || null,
           replyTo: replyTo || null,
@@ -392,17 +394,24 @@ async function processMentions(io, { leagueId, messageId, senderId, senderName, 
       [leagueId]
     );
 
+    // Check for @everyone — notify all members
+    const isEveryone = /@everyone(?:\s|$|[.,!?])/i.test(messageText);
+
     // Find mentioned users by matching @displayName patterns
     const mentionedUsers = [];
-    
-    for (const member of members) {
-      const displayName = member.display_name;
-      if (!displayName) continue;
-      
-      // Check if this user's name appears after @ in the message (case insensitive)
-      const mentionPattern = new RegExp(`@${escapeRegex(displayName)}(?:\\s|$|[.,!?])`, 'i');
-      if (mentionPattern.test(messageText)) {
-        mentionedUsers.push(member);
+
+    if (isEveryone) {
+      mentionedUsers.push(...members);
+    } else {
+      for (const member of members) {
+        const displayName = member.display_name;
+        if (!displayName) continue;
+
+        // Check if this user's name appears after @ in the message (case insensitive)
+        const mentionPattern = new RegExp(`@${escapeRegex(displayName)}(?:\\s|$|[.,!?])`, 'i');
+        if (mentionPattern.test(messageText)) {
+          mentionedUsers.push(member);
+        }
       }
     }
 

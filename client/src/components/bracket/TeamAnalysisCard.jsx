@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { bracketAPI } from '../../api';
+import ReactMarkdown from 'react-markdown';
 
 const STAT_DISPLAY = [
   { key: 'avgPoints', alt: 'points', label: 'PPG' },
@@ -64,7 +65,7 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
 
   if (!team) {
     return (
-      <div className="flex-1 flex items-center justify-center py-12 text-fg/30">
+      <div className="flex-1 flex items-center justify-center py-12 text-fg/50">
         Loading team data...
       </div>
     );
@@ -78,6 +79,53 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
 
   return (
     <div className="flex-1 min-w-0">
+      {/* Scouting Report */}
+      {team.summary && (
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider">Scouting Report</h4>
+            <div className="flex rounded-full bg-fg/10 p-0.5 text-sm font-medium">
+              <button
+                onClick={() => reportMode !== 'detailed' && toggleReportMode()}
+                className={`px-2.5 py-0.5 rounded-full transition-colors ${
+                  reportMode === 'detailed' ? 'bg-fg/15 text-fg/80' : 'text-fg/40 hover:text-fg/60'
+                }`}
+              >
+                Full
+              </button>
+              <button
+                onClick={() => reportMode !== 'concise' && toggleReportMode()}
+                className={`px-2.5 py-0.5 rounded-full transition-colors ${
+                  reportMode === 'concise' ? 'bg-fg/15 text-fg/80' : 'text-fg/40 hover:text-fg/60'
+                }`}
+              >
+                TL;DR
+              </button>
+            </div>
+          </div>
+          {reportMode === 'concise' ? (
+            loadingConcise ? (
+              <div className="flex items-center gap-2 text-sm text-fg/40 py-2">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                Generating concise report...
+              </div>
+            ) : conciseReport?.teamId === team.id ? (
+              <div className="text-base text-fg/60 leading-relaxed prose-scout">
+                <ReactMarkdown>{conciseReport.text}</ReactMarkdown>
+              </div>
+            ) : (
+              <div className="text-base text-fg/60 leading-relaxed prose-scout">
+                <ReactMarkdown>{team.summary}</ReactMarkdown>
+              </div>
+            )
+          ) : (
+            <div className="text-base text-fg/60 leading-relaxed prose-scout">
+              <ReactMarkdown>{team.summary}</ReactMarkdown>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Season Stats */}
       <div className="mb-5">
         <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider mb-2">Season Averages</h4>
@@ -87,10 +135,10 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
             if (!stat) return null;
             return (
               <div key={key} className="text-center">
-                <div className="text-xs md:text-sm text-fg/35">{label}</div>
+                <div className="text-sm text-fg/50">{label}</div>
                 <div className="text-sm md:text-lg font-mono font-medium text-fg/80">{stat.value || '—'}</div>
                 {stat.rank && (
-                  <div className={`text-xs md:text-sm font-mono ${getRankColor(stat.rank, invertRank)}`}>
+                  <div className={`text-sm font-mono ${getRankColor(stat.rank, invertRank)}`}>
                     #{stat.rank}
                   </div>
                 )}
@@ -111,7 +159,7 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                 {player.headshot ? (
                   <img src={player.headshot} alt="" className="w-9 h-9 md:w-11 md:h-11 rounded-full object-cover flex-shrink-0 bg-fg/10 mt-0.5" />
                 ) : (
-                  <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-fg/10 flex-shrink-0 flex items-center justify-center text-xs md:text-sm text-fg/30 mt-0.5">
+                  <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-fg/10 flex-shrink-0 flex items-center justify-center text-sm text-fg/50 mt-0.5">
                     {player.jersey || '?'}
                   </div>
                 )}
@@ -120,9 +168,9 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                   {/* Name row */}
                   <div className="flex items-center text-sm md:text-base">
                     <span className="text-fg/80 font-medium truncate">{player.name}</span>
-                    <span className="text-fg/30 ml-1 text-xs md:text-sm">{player.position}</span>
+                    <span className="text-fg/50 ml-1 text-sm">{player.position}</span>
                     {player.year && (
-                      <span className="text-xs md:text-sm text-fg/30 flex-shrink-0 ml-auto">{player.year}</span>
+                      <span className="text-sm text-fg/50 flex-shrink-0 ml-auto">{player.year}</span>
                     )}
                   </div>
                   {/* Stats line — directly under the name */}
@@ -130,17 +178,17 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                     <>
                       {/* Mobile: compact PTS / REB / AST */}
                       <div className="flex items-center gap-3 mt-0.5 md:hidden">
-                        <span className="text-xs font-mono text-fg/60">
-                          <span className="text-fg/80 font-semibold">{player.stats.ppg}</span> <span className="text-fg/35">PTS</span>
+                        <span className="text-sm font-mono text-fg/60">
+                          <span className="text-fg/80 font-semibold">{player.stats.ppg}</span> <span className="text-fg/50">PTS</span>
                         </span>
                         {player.stats.rpg && (
-                          <span className="text-xs font-mono text-fg/60">
-                            <span className="text-fg/80 font-semibold">{player.stats.rpg}</span> <span className="text-fg/35">REB</span>
+                          <span className="text-sm font-mono text-fg/60">
+                            <span className="text-fg/80 font-semibold">{player.stats.rpg}</span> <span className="text-fg/50">REB</span>
                           </span>
                         )}
                         {player.stats.apg && (
-                          <span className="text-xs font-mono text-fg/60">
-                            <span className="text-fg/80 font-semibold">{player.stats.apg}</span> <span className="text-fg/35">AST</span>
+                          <span className="text-sm font-mono text-fg/60">
+                            <span className="text-fg/80 font-semibold">{player.stats.apg}</span> <span className="text-fg/50">AST</span>
                           </span>
                         )}
                       </div>
@@ -155,7 +203,7 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                         ].filter(s => s.val).map(s => (
                           <span key={s.label} className="text-sm font-mono text-fg/60">
                             <span className="text-fg/80 font-semibold">{s.val}{s.suffix && !String(s.val).includes('%') ? s.suffix : ''}</span>{' '}
-                            <span className="text-fg/35 text-xs">{s.label}</span>
+                            <span className="text-fg/50 text-sm">{s.label}</span>
                           </span>
                         ))}
                       </div>
@@ -178,7 +226,7 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                 <span className={`font-bold w-4 md:w-5 text-center ${game.result === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
                   {game.result}
                 </span>
-                <span className="text-fg/30 w-4 md:w-5 text-center">{game.atVs}</span>
+                <span className="text-fg/50 w-4 md:w-5 text-center">{game.atVs}</span>
                 {game.opponent?.logo && (
                   <img src={game.opponent.logo} alt="" className="w-4 h-4 md:w-5 md:h-5 object-contain" />
                 )}
@@ -209,7 +257,7 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                   <span className={`font-bold w-4 md:w-5 text-center ${game.result === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
                     {game.result}
                   </span>
-                  <span className="text-fg/30 w-4 md:w-5">{game.atVs}</span>
+                  <span className="text-fg/50 w-4 md:w-5">{game.atVs}</span>
                   {game.opponent?.logo && <img src={game.opponent.logo} alt="" className="w-4 h-4 md:w-5 md:h-5 object-contain" />}
                   <span className="flex-1 text-fg/60 truncate">
                     #{game.opponent?.rank} {game.opponent?.name}
@@ -220,7 +268,7 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
               {team.vsTop25.games.length > 3 && (
                 <button
                   onClick={() => setShowAllGames(!showAllGames)}
-                  className="text-xs md:text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1 mt-1"
+                  className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1 mt-1"
                 >
                   {showAllGames ? <><ChevronUp className="w-3 h-3 md:w-4 md:h-4" /> Show less</> : <><ChevronDown className="w-3 h-3 md:w-4 md:h-4" /> Show all {team.vsTop25.games.length} games</>}
                 </button>
@@ -242,14 +290,14 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
               { label: 'Defense', val: team.bpiData.bpiDefense?.value, rank: team.bpiData.bpiDefense?.rank },
             ].map(({ label, val, rank }) => (
               <div key={label} className="text-center py-2 rounded-lg bg-fg/5">
-                <div className="text-xs md:text-sm text-fg/35">{label}</div>
+                <div className="text-sm text-fg/50">{label}</div>
                 <div className="text-base md:text-xl font-mono font-bold text-fg/80">{val || '—'}</div>
-                {rank && <div className={`text-xs md:text-sm font-mono ${getRankColor(rank.replace(/\D/g, ''))}`}>#{rank.replace(/\D/g, '')}</div>}
+                {rank && <div className={`text-sm font-mono ${getRankColor(rank.replace(/\D/g, ''))}`}>#{rank.replace(/\D/g, '')}</div>}
               </div>
             ))}
           </div>
           {/* SOS + Quality Wins */}
-          <div className="flex items-center gap-4 text-xs md:text-sm mb-3">
+          <div className="flex items-center gap-4 text-sm mb-3">
             {team.bpiData.sos?.rank && (
               <span className="text-fg/50">
                 SOS: <span className="font-mono font-semibold text-fg/70">{team.bpiData.sos.rank}</span>
@@ -269,7 +317,7 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
           {/* Tournament Projections */}
           {team.bpiData.projections && Object.values(team.bpiData.projections).some(v => v) && (
             <div>
-              <div className="text-xs md:text-sm text-fg/35 mb-1.5">Tournament Projections</div>
+              <div className="text-sm text-fg/50 mb-1.5">Tournament Projections</div>
               <div className="flex flex-wrap gap-2">
                 {[
                   { label: 'Sweet 16', val: team.bpiData.projections.sweet16 },
@@ -278,52 +326,13 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                   { label: 'Title Game', val: team.bpiData.projections.championship },
                   { label: 'Champion', val: team.bpiData.projections.titleWin },
                 ].filter(p => p.val).map(({ label, val }) => (
-                  <div key={label} className="px-2.5 py-1 rounded-full bg-fg/5 text-xs md:text-sm">
+                  <div key={label} className="px-2.5 py-1 rounded-full bg-fg/5 text-sm">
                     <span className="text-fg/40">{label}</span>{' '}
                     <span className="font-mono font-semibold text-fg/70">{val}</span>
                   </div>
                 ))}
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Team Summary with Detailed/Concise Toggle */}
-      {team.summary && (
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm md:text-base font-bold text-fg/50 uppercase tracking-wider">Scouting Report</h4>
-            <button
-              onClick={toggleReportMode}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors bg-fg/10 text-fg/60 hover:bg-fg/15 hover:text-fg/80"
-            >
-              {reportMode === 'detailed' ? (
-                <>
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h8m-8 6h16" /></svg>
-                  TL;DR
-                </>
-              ) : (
-                <>
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-8 6h8" /></svg>
-                  Full Report
-                </>
-              )}
-            </button>
-          </div>
-          {reportMode === 'concise' ? (
-            loadingConcise ? (
-              <div className="flex items-center gap-2 text-sm text-fg/40 py-2">
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                Generating concise report...
-              </div>
-            ) : conciseReport?.teamId === team.id ? (
-              <p className="text-sm md:text-base text-fg/60 leading-relaxed">{conciseReport.text}</p>
-            ) : (
-              <p className="text-sm md:text-base text-fg/60 leading-relaxed">{team.summary}</p>
-            )
-          ) : (
-            <p className="text-sm md:text-base text-fg/60 leading-relaxed">{team.summary}</p>
           )}
         </div>
       )}

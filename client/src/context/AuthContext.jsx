@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showEmailPrompt, setShowEmailPrompt] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -17,27 +16,19 @@ export function AuthProvider({ children }) {
         try {
           const token = await firebaseUser.getIdToken();
           localStorage.setItem('token', token);
-          
+
           const userData = await userAPI.getOrCreateUser({
             firebaseUid: firebaseUser.uid,
             phone: firebaseUser.phoneNumber,
             email: firebaseUser.email,
             displayName: firebaseUser.displayName
           });
-          
-          console.log('User data from sync:', userData);
-          console.log('Email value:', userData.email, '| Is falsy:', !userData.email);
-          
+
           setUser({ ...userData, firebaseUser });
-          
-          // Show onboarding for new users
-          if (userData.isNewUser) {
+
+          // Show onboarding for users who haven't completed it
+          if (!userData.onboardingComplete) {
             setShowOnboarding(true);
-          } else if (!userData.email && !firebaseUser.email) {
-            // Show email prompt for existing users without email
-            // Skip if Firebase user has email (e.g. Google sign-in) since sync will save it
-            console.log('Showing email prompt - no email found');
-            setShowEmailPrompt(true);
           }
         } catch (err) {
           console.error('Failed to sync user:', err);
@@ -47,7 +38,6 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('token');
         setUser(null);
         setShowOnboarding(false);
-        setShowEmailPrompt(false);
       }
       setLoading(false);
     });
@@ -59,7 +49,6 @@ export function AuthProvider({ children }) {
     await firebaseSignOut(auth);
     setUser(null);
     setShowOnboarding(false);
-    setShowEmailPrompt(false);
   };
 
   const updateDisplayName = async (displayName) => {
@@ -74,21 +63,49 @@ export function AuthProvider({ children }) {
     const result = await userAPI.updateEmail(email);
     if (result.success) {
       setUser(prev => ({ ...prev, email: result.email }));
-      setShowEmailPrompt(false);
     }
     return result;
   };
 
-  const completeOnboarding = () => {
-    setShowOnboarding(false);
-    // Show email prompt if they still don't have one after onboarding
-    if (!user?.email) {
-      setShowEmailPrompt(true);
+  const updateProfile = async (data) => {
+    const result = await userAPI.updateProfile(data);
+    if (result.success) {
+      setUser(prev => ({
+        ...prev,
+        firstName: result.firstName,
+        lastName: result.lastName,
+        displayName: result.displayName,
+        email: result.email,
+        phone: result.phone
+      }));
     }
+    return result;
   };
 
-  const dismissEmailPrompt = () => {
-    setShowEmailPrompt(false);
+  const uploadProfileImage = async (imageData) => {
+    const result = await userAPI.uploadProfileImage(imageData);
+    if (result.success) {
+      setUser(prev => ({ ...prev, profileImageUrl: result.profileImageUrl }));
+    }
+    return result;
+  };
+
+  const removeProfileImage = async () => {
+    const result = await userAPI.removeProfileImage();
+    if (result.success) {
+      setUser(prev => ({ ...prev, profileImageUrl: null }));
+    }
+    return result;
+  };
+
+  const completeOnboarding = async () => {
+    try {
+      await userAPI.completeOnboarding();
+      setUser(prev => ({ ...prev, onboardingComplete: true }));
+      setShowOnboarding(false);
+    } catch (err) {
+      console.error('Failed to complete onboarding:', err);
+    }
   };
 
   const refreshToken = async () => {
@@ -107,18 +124,19 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      loading, 
-      signOut, 
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      signOut,
       updateDisplayName,
       updateEmail,
+      updateProfile,
+      uploadProfileImage,
+      removeProfileImage,
       refreshToken,
-      getIdToken,  // Added for chat/socket authentication
+      getIdToken,
       showOnboarding,
-      completeOnboarding,
-      showEmailPrompt,
-      dismissEmailPrompt
+      completeOnboarding
     }}>
       {children}
     </AuthContext.Provider>

@@ -391,7 +391,7 @@ ${last5Lines || '  (No recent games)'}
 
 VS RANKED: ${vs25.wins || 0}-${vs25.losses || 0}
 
-Write the scouting report now. No headers or bullet points — just flowing paragraphs.`;
+Write the scouting report now using markdown formatting. Use **bold** for key stats and player names. Separate paragraphs with blank lines. No headers — just flowing paragraphs with bold emphasis on important details.`;
 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -432,7 +432,7 @@ async function generateConciseReport(teamId, teamName, detailedReport) {
       max_tokens: 150,
       messages: [{
         role: 'user',
-        content: `Condense this scouting report into a punchy 2-3 sentence TL;DR. Keep the most important insights — playing style, biggest strength, biggest concern, and tournament outlook. Be direct and specific.\n\nTEAM: ${teamName}\n\nDETAILED REPORT:\n${detailedReport}`,
+        content: `Condense this scouting report into a punchy 2-3 sentence TL;DR. Keep the most important insights — playing style, biggest strength, biggest concern, and tournament outlook. Be direct and specific. Use **bold** for key stats. Do NOT prefix with "TL;DR:" or any label — just write the sentences directly.\n\nTEAM: ${teamName}\n\nDETAILED REPORT:\n${detailedReport}`,
       }],
     });
 
@@ -586,6 +586,11 @@ async function getTeamBreakdown(teamId, season) {
   const breakdownKey = `${teamId}-${season}`;
   const cachedBreakdown = breakdownCache.get(breakdownKey);
   if (cachedBreakdown && Date.now() - cachedBreakdown.timestamp < BREAKDOWN_CACHE_TTL) {
+    // Re-check DB for fresh AI report (admin may have regenerated it)
+    const stored = await getStoredReport(teamId, season);
+    if (stored?.report) {
+      cachedBreakdown.data.summary = stored.report;
+    }
     return cachedBreakdown.data;
   }
 
@@ -1030,6 +1035,35 @@ async function getSelectionSundayDate(season) {
   }
 }
 
+/**
+ * Get the start time of the first Round of 64 game.
+ * Used to determine when brackets should lock.
+ */
+async function getFirstGameTime(season) {
+  const events = await fetchTournamentGames(season);
+  if (!events.length) return null;
+
+  let earliest = null;
+
+  for (const event of events) {
+    const { round } = parseRegionAndRound(event);
+    // Only consider Round of 64 games (round 0)
+    if (round !== 0) continue;
+
+    const startDate = event.date;
+    if (!startDate) continue;
+
+    const dt = new Date(startDate);
+    if (isNaN(dt.getTime())) continue;
+
+    if (!earliest || dt < earliest) {
+      earliest = dt;
+    }
+  }
+
+  return earliest ? earliest.toISOString() : null;
+}
+
 module.exports = {
   getTournamentBracket,
   getTeamBreakdown,
@@ -1037,6 +1071,7 @@ module.exports = {
   getTournamentResults,
   fetchTournamentGames,
   getSelectionSundayDate,
+  getFirstGameTime,
   generateConciseReport,
   generateAllReports,
   getStoredReport,

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, generateConciseReport, generateAllReports, getStoredReport } = require('../services/ncaab-tournament');
+const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateAllReports, getStoredReport } = require('../services/ncaab-tournament');
 const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, countPicks } = require('../utils/bracket-slots');
 
 // Total games in the bracket (derived from round boundaries)
@@ -10,6 +10,13 @@ const TOTAL_BRACKET_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
 
 const getUser = async (req) => {
   return db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
+};
+
+// Check if tournament has started based on first R64 game time
+const checkTournamentStarted = async (season) => {
+  const firstGameTime = await getFirstGameTime(season);
+  if (!firstGameTime) return false;
+  return new Date() >= new Date(firstGameTime);
 };
 
 // ─── Challenge Management (Commissioner) ─────────────────────────────────────
@@ -230,6 +237,11 @@ router.post('/challenges/:challengeId/brackets', authMiddleware, async (req, res
       return res.status(400).json({ error: 'Entry deadline has passed' });
     }
 
+    // Check if tournament has started
+    if (await checkTournamentStarted(challenge.season)) {
+      return res.status(400).json({ error: 'Tournament has already started — brackets are locked' });
+    }
+
     // Verify user is league member
     const member = await db.getOne('SELECT * FROM league_members WHERE league_id = $1 AND user_id = $2', [challenge.league_id, user.id]);
     if (!member) return res.status(403).json({ error: 'You must be a league member to create a bracket' });
@@ -262,14 +274,18 @@ router.put('/:bracketId', authMiddleware, async (req, res) => {
     const user = await getUser(req);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const bracket = await db.getOne('SELECT b.*, bc.status as challenge_status, bc.entry_deadline FROM brackets b JOIN bracket_challenges bc ON b.challenge_id = bc.id WHERE b.id = $1', [req.params.bracketId]);
+    const bracket = await db.getOne('SELECT b.*, bc.status as challenge_status, bc.entry_deadline, bc.season FROM brackets b JOIN bracket_challenges bc ON b.challenge_id = bc.id WHERE b.id = $1', [req.params.bracketId]);
     if (!bracket) return res.status(404).json({ error: 'Bracket not found' });
     if (bracket.user_id !== user.id) return res.status(403).json({ error: 'Not your bracket' });
-    if (bracket.is_submitted) return res.status(400).json({ error: 'Bracket has already been submitted and cannot be edited' });
     if (bracket.challenge_status !== 'open') return res.status(400).json({ error: 'This bracket challenge is no longer accepting changes' });
 
     if (bracket.entry_deadline && new Date() > new Date(bracket.entry_deadline)) {
       return res.status(400).json({ error: 'Entry deadline has passed' });
+    }
+
+    // Check if tournament has started — no edits after tipoff
+    if (await checkTournamentStarted(bracket.season)) {
+      return res.status(400).json({ error: 'Tournament has already started — brackets are locked' });
     }
 
     const { picks, tiebreakerValue, name } = req.body;
@@ -321,7 +337,7 @@ router.post('/:bracketId/submit', authMiddleware, async (req, res) => {
     const user = await getUser(req);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const bracket = await db.getOne('SELECT b.*, bc.status as challenge_status, bc.entry_deadline, bc.tiebreaker_type FROM brackets b JOIN bracket_challenges bc ON b.challenge_id = bc.id WHERE b.id = $1', [req.params.bracketId]);
+    const bracket = await db.getOne('SELECT b.*, bc.status as challenge_status, bc.entry_deadline, bc.tiebreaker_type, bc.season FROM brackets b JOIN bracket_challenges bc ON b.challenge_id = bc.id WHERE b.id = $1', [req.params.bracketId]);
     if (!bracket) return res.status(404).json({ error: 'Bracket not found' });
     if (bracket.user_id !== user.id) return res.status(403).json({ error: 'Not your bracket' });
     if (bracket.is_submitted) return res.status(400).json({ error: 'Already submitted' });
@@ -329,6 +345,11 @@ router.post('/:bracketId/submit', authMiddleware, async (req, res) => {
 
     if (bracket.entry_deadline && new Date() > new Date(bracket.entry_deadline)) {
       return res.status(400).json({ error: 'Entry deadline has passed' });
+    }
+
+    // Check if tournament has started
+    if (await checkTournamentStarted(bracket.season)) {
+      return res.status(400).json({ error: 'Tournament has already started — brackets are locked' });
     }
 
     // Validate all picks are filled
@@ -350,6 +371,33 @@ router.post('/:bracketId/submit', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error submitting bracket:', error);
     res.status(500).json({ error: 'Failed to submit bracket' });
+  }
+});
+
+// Reset bracket (clear all picks)
+router.post('/:bracketId/reset', authMiddleware, async (req, res) => {
+  try {
+    const user = await getUser(req);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const bracket = await db.getOne('SELECT b.*, bc.status as challenge_status, bc.season FROM brackets b JOIN bracket_challenges bc ON b.challenge_id = bc.id WHERE b.id = $1', [req.params.bracketId]);
+    if (!bracket) return res.status(404).json({ error: 'Bracket not found' });
+    if (bracket.user_id !== user.id) return res.status(403).json({ error: 'Not your bracket' });
+    if (bracket.challenge_status !== 'open') return res.status(400).json({ error: 'Challenge is no longer accepting changes' });
+
+    if (await checkTournamentStarted(bracket.season)) {
+      return res.status(400).json({ error: 'Tournament has already started — brackets are locked' });
+    }
+
+    const updated = await db.getOne(`
+      UPDATE brackets SET picks = '{}', tiebreaker_value = NULL, is_submitted = false, submitted_at = NULL, updated_at = NOW()
+      WHERE id = $1 RETURNING *
+    `, [bracket.id]);
+
+    res.json({ success: true, bracket: updated });
+  } catch (error) {
+    console.error('Error resetting bracket:', error);
+    res.status(500).json({ error: 'Failed to reset bracket' });
   }
 });
 
@@ -406,6 +454,17 @@ router.get('/tournament/:season/selection-date', async (req, res) => {
   } catch (error) {
     console.error('Error fetching selection date:', error);
     res.status(500).json({ error: 'Failed to fetch selection date' });
+  }
+});
+
+// Get first game time (for countdown / lock logic)
+router.get('/tournament/:season/first-game-time', async (req, res) => {
+  try {
+    const firstGameTime = await getFirstGameTime(parseInt(req.params.season));
+    res.json({ firstGameTime });
+  } catch (error) {
+    console.error('Error fetching first game time:', error);
+    res.status(500).json({ error: 'Failed to fetch first game time' });
   }
 });
 

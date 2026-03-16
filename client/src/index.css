@@ -217,6 +217,21 @@ body {
   box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
 }
 
+/* ── Scouting Report Markdown ────────────────────────────────── */
+.prose-scout p { margin-bottom: 0.75rem; }
+.prose-scout p:last-child { margin-bottom: 0; }
+.prose-scout strong { color: rgb(var(--color-fg) / 0.8); font-weight: 600; }
+.prose-scout em { font-style: italic; }
+.prose-scout ul, .prose-scout ol { margin: 0.5rem 0; padding-left: 1.25rem; }
+.prose-scout li { margin-bottom: 0.25rem; }
+.prose-scout h1, .prose-scout h2, .prose-scout h3, .prose-scout h4 {
+  color: rgb(var(--color-fg) / 0.8);
+  font-weight: 700;
+  margin: 1rem 0 0.5rem;
+}
+.prose-scout h3 { font-size: 1rem; }
+.prose-scout h4 { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
 .badge-active {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;

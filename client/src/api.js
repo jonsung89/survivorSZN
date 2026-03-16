@@ -295,6 +295,36 @@ export const userAPI = {
   getStats: async () => {
     const res = await authFetch('/users/stats');
     return res.json();
+  },
+
+  updateProfile: async (data) => {
+    const res = await authFetch('/users/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  uploadProfileImage: async (imageData) => {
+    const res = await authFetch('/users/profile-image', {
+      method: 'POST',
+      body: JSON.stringify({ imageData })
+    });
+    return res.json();
+  },
+
+  removeProfileImage: async () => {
+    const res = await authFetch('/users/profile-image', {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  completeOnboarding: async () => {
+    const res = await authFetch('/users/onboarding-complete', {
+      method: 'PUT'
+    });
+    return res.json();
   }
 };
 
@@ -406,6 +436,14 @@ export const bracketAPI = {
   },
   getSelectionDate: async (season) => {
     const res = await fetch(`${API_URL}/brackets/tournament/${season}/selection-date`);
+    return res.json();
+  },
+  getFirstGameTime: async (season) => {
+    const res = await fetch(`${API_URL}/brackets/tournament/${season}/first-game-time`);
+    return res.json();
+  },
+  resetBracket: async (bracketId) => {
+    const res = await authFetch(`/brackets/${bracketId}/reset`, { method: 'POST' });
     return res.json();
   },
   getLeaderboard: async (challengeId) => {

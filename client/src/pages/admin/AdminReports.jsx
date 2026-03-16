@@ -101,11 +101,11 @@ export default function AdminReports() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-fg">Scouting Reports</h1>
-          <p className="text-sm text-fg/40 mt-1">
+          <p className="text-sm text-fg/50 mt-1">
             {generated} / {total} reports generated ({pct}%)
           </p>
           {lastGenerated && (
-            <p className="text-xs text-fg/30 mt-0.5">
+            <p className="text-sm text-fg/50 mt-0.5">
               Last ran: {lastGenerated.toLocaleString()}
             </p>
           )}
@@ -145,7 +145,7 @@ export default function AdminReports() {
 
       {/* Teams grid */}
       {total === 0 ? (
-        <div className="text-center py-12 text-fg/40">
+        <div className="text-center py-12 text-fg/50">
           <FileText className="w-8 h-8 mx-auto mb-3 opacity-40" />
           <p>No tournament data available for {season}</p>
         </div>
@@ -172,7 +172,7 @@ export default function AdminReports() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   {team.seed && (
-                    <span className="text-xs font-bold text-fg/40">#{team.seed}</span>
+                    <span className="text-sm font-bold text-fg/50">#{team.seed}</span>
                   )}
                   <span className="text-sm font-medium text-fg truncate">
                     {team.name || team.abbreviation}
@@ -181,14 +181,14 @@ export default function AdminReports() {
                 {team.hasReport ? (
                   <div className="flex items-center gap-1 mt-0.5">
                     <Check className="w-3 h-3 text-emerald-400" />
-                    <span className="text-xs text-fg/40">
-                      {new Date(team.generatedAt).toLocaleDateString()}
+                    <span className="text-sm text-fg/50">
+                      {new Date(team.generatedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                     </span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 mt-0.5">
                     <Clock className="w-3 h-3 text-amber-400" />
-                    <span className="text-xs text-amber-400">Not generated</span>
+                    <span className="text-sm text-amber-400">Not generated</span>
                   </div>
                 )}
               </div>
@@ -197,7 +197,7 @@ export default function AdminReports() {
               {team.hasReport && (
                 <button
                   onClick={(e) => { e.stopPropagation(); viewReport(team); }}
-                  className="p-2 rounded-lg text-fg/30 hover:text-fg hover:bg-fg/10 transition-colors flex-shrink-0"
+                  className="p-2 rounded-lg text-fg/50 hover:text-fg hover:bg-fg/10 transition-colors flex-shrink-0"
                   title="View report"
                 >
                   <Eye className="w-4 h-4" />
@@ -208,7 +208,7 @@ export default function AdminReports() {
               <button
                 onClick={(e) => { e.stopPropagation(); handleGenerateOne(team.id); }}
                 disabled={generatingTeamId === team.id || generating}
-                className="p-2 rounded-lg text-fg/30 hover:text-fg hover:bg-fg/10 disabled:opacity-30 transition-colors flex-shrink-0"
+                className="p-2 rounded-lg text-fg/50 hover:text-fg hover:bg-fg/10 disabled:opacity-30 transition-colors flex-shrink-0"
                 title="Regenerate report"
               >
                 <RefreshCw className={`w-4 h-4 ${generatingTeamId === team.id ? 'animate-spin' : ''}`} />
@@ -234,14 +234,14 @@ export default function AdminReports() {
                   {selectedTeam.name || selectedTeam.abbreviation}
                 </h2>
                 {report?.generatedAt && (
-                  <p className="text-xs text-fg/40">
+                  <p className="text-sm text-fg/50">
                     Generated {new Date(report.generatedAt).toLocaleString()}
                   </p>
                 )}
               </div>
               <button
                 onClick={closeReport}
-                className="p-2 rounded-lg text-fg/40 hover:text-fg hover:bg-fg/10 transition-colors"
+                className="p-2 rounded-lg text-fg/50 hover:text-fg hover:bg-fg/10 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -255,7 +255,7 @@ export default function AdminReports() {
                   className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
                     reportTab === 'full'
                       ? 'text-amber-400 border-b-2 border-amber-400'
-                      : 'text-fg/40 hover:text-fg'
+                      : 'text-fg/50 hover:text-fg'
                   }`}
                 >
                   Full Report
@@ -266,7 +266,7 @@ export default function AdminReports() {
                     className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
                       reportTab === 'concise'
                         ? 'text-amber-400 border-b-2 border-amber-400'
-                        : 'text-fg/40 hover:text-fg'
+                        : 'text-fg/50 hover:text-fg'
                     }`}
                   >
                     Concise Report
@@ -284,7 +284,7 @@ export default function AdminReports() {
                   {reportTab === 'full' ? report.report : report.conciseReport}
                 </div>
               ) : (
-                <p className="text-fg/40 text-center py-8">No report data</p>
+                <p className="text-fg/50 text-center py-8">No report data</p>
               )}
             </div>
           </div>

@@ -10,29 +10,25 @@ import {
   Home,
   ChevronDown,
   Edit3,
-  Loader2,
   Sun,
   Moon
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { useToast } from './Toast';
 import { useTheme } from '../context/ThemeContext';
 import Avatar from './Avatar';
 import NotificationPanel from './NotificationPanel';
 import BrandLogo from './BrandLogo';
+import EditProfileModal from './EditProfileModal';
 
 export default function Navbar() {
-  const { user, signOut, updateDisplayName } = useAuth();
+  const { user, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { showToast } = useToast();
   const { isDark, toggleTheme } = useTheme();
-  
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [displayName, setDisplayName] = useState('');
-  const [saving, setSaving] = useState(false);
   
   const dropdownRef = useRef(null);
   const navRef = useRef(null);
@@ -67,27 +63,9 @@ export default function Navbar() {
   };
 
   const openEditModal = () => {
-    setDisplayName(user?.displayName || '');
     setEditModalOpen(true);
     setDropdownOpen(false);
     setMobileMenuOpen(false);
-  };
-
-  const handleSaveDisplayName = async () => {
-    if (!displayName.trim()) {
-      showToast('Please enter a display name', 'error');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await updateDisplayName(displayName.trim());
-      showToast('Display name updated!', 'success');
-      setEditModalOpen(false);
-    } catch (error) {
-      showToast('Failed to update display name', 'error');
-    }
-    setSaving(false);
   };
 
   const navLinks = user
@@ -159,6 +137,7 @@ export default function Navbar() {
                   <Avatar
                     userId={user?.id}
                     name={user?.displayName || 'Player'}
+                    imageUrl={user?.profileImageUrl}
                     size="sm"
                   />
                   <span className="hidden lg:inline text-sm text-fg/80">
@@ -261,6 +240,7 @@ export default function Navbar() {
                       <Avatar
                         userId={user?.id}
                         name={user?.displayName || 'Player'}
+                        imageUrl={user?.profileImageUrl}
                         size="md"
                       />
                       <div>
@@ -305,50 +285,7 @@ export default function Navbar() {
 
       {/* Edit Profile Modal */}
       {editModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setEditModalOpen(false)}
-          />
-          <div className="relative bg-elevated border border-fg/10 rounded-2xl w-full max-w-md p-6 animate-in">
-            <h2 className="text-xl font-display font-bold text-fg mb-4">Edit Profile</h2>
-            
-            <div className="mb-6">
-              <label className="block text-fg/60 text-sm mb-2">Display Name</label>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Enter your display name"
-                className="w-full px-4 py-3 bg-fg/5 border border-fg/10 rounded-lg text-fg placeholder-fg/40 focus:outline-none focus:border-nfl-blue"
-                maxLength={20}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveDisplayName()}
-                autoFocus
-              />
-              <p className="text-fg/40 text-xs mt-2">This is how other players will see you</p>
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => setEditModalOpen(false)}
-                className="flex-1 px-4 py-3 rounded-lg bg-fg/5 text-fg/70 hover:bg-fg/10 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveDisplayName}
-                disabled={saving || !displayName.trim()}
-                className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-green-600/50 text-white px-4 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
-              >
-                {saving ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  'Save'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+        <EditProfileModal onClose={() => setEditModalOpen(false)} />
       )}
     </>
   );

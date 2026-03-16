@@ -1506,6 +1506,7 @@ export default function LeagueDetail() {
                     <Avatar
                       userId={member.userId}
                       name={member.displayName}
+                      imageUrl={member.profileImageUrl}
                       size="sm"
                       isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
                     />
@@ -1653,6 +1654,7 @@ export default function LeagueDetail() {
                         <Avatar
                           userId={member.userId}
                           name={member.displayName}
+                          imageUrl={member.profileImageUrl}
                           size="md"
                           isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
                         />
@@ -2229,9 +2231,10 @@ export default function LeagueDetail() {
                         className="flex items-center justify-between p-3 bg-fg/5 rounded-lg"
                       >
                         <div className="flex items-center gap-2">
-                          <Avatar 
+                          <Avatar
                             userId={member.userId}
                             name={member.displayName}
+                            imageUrl={member.profileImageUrl}
                             size="sm"
                             isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
                           />

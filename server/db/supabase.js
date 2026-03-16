@@ -183,6 +183,14 @@ async function initDb() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`);
 
+    // Profile fields
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_url TEXT`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT FALSE`);
+    // Auto-mark existing users with display_name as onboarding complete
+    await client.query(`UPDATE users SET onboarding_complete = TRUE WHERE display_name IS NOT NULL AND onboarding_complete = FALSE`);
+
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_league_members_user ON league_members(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_league_members_league ON league_members(league_id)`);

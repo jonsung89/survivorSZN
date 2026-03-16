@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil, Save } from 'lucide-react';
+import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil, Save, RotateCcw } from 'lucide-react';
 import { bracketAPI } from '../api';
 import { ROUND_BOUNDARIES } from '../utils/bracketSlots';
 import { useAuth } from '../context/AuthContext';
@@ -45,12 +45,13 @@ export default function BracketFill() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
   const [chatCollapsed, setChatCollapsed] = useState(true);
+  const [tournamentStarted, setTournamentStarted] = useState(false);
 
   const saveTimeoutRef = useRef(null);
   const lastSavedPicksRef = useRef('{}');
 
   const isOwner = bracket?.user_id === user?.id;
-  const isReadOnly = bracket?.is_submitted || challenge?.status === 'completed' || !isOwner;
+  const isReadOnly = (tournamentStarted || challenge?.status !== 'open') || !isOwner;
   const pickCount = countPicks(picks);
   const scoringSystem = challenge?.scoring_system || SCORING_PRESETS.standard.points;
 
@@ -86,8 +87,19 @@ export default function BracketFill() {
       // Get challenge data (includes tournament_data)
       if (b.challenge_id) {
         const challengeData = await bracketAPI.getChallenge(b.challenge_id);
-        setChallenge(challengeData.challenge);
-        setTournamentData(challengeData.challenge?.tournament_data || null);
+        const ch = challengeData.challenge;
+        setChallenge(ch);
+        setTournamentData(ch?.tournament_data || null);
+
+        // Check if tournament has started
+        if (ch?.season) {
+          try {
+            const { firstGameTime } = await bracketAPI.getFirstGameTime(ch.season);
+            if (firstGameTime && new Date() >= new Date(firstGameTime)) {
+              setTournamentStarted(true);
+            }
+          } catch { /* ignore */ }
+        }
       }
     } catch (err) {
       showToast('Failed to load bracket', 'error');
@@ -224,6 +236,24 @@ export default function BracketFill() {
       showToast('Failed to submit bracket', 'error');
     }
     setSubmitting(false);
+  };
+
+  const handleReset = async () => {
+    if (!confirm('Reset this bracket? All picks will be cleared.')) return;
+    try {
+      const result = await bracketAPI.resetBracket(bracketId);
+      if (result.success) {
+        setPicks({});
+        setTiebreakerValue(null);
+        setBracket(prev => ({ ...prev, picks: {}, tiebreaker_value: null, is_submitted: false, submitted_at: null }));
+        lastSavedPicksRef.current = '{}';
+        showToast('Bracket reset', 'success');
+      } else {
+        showToast(result.error || 'Failed to reset bracket', 'error');
+      }
+    } catch {
+      showToast('Failed to reset bracket', 'error');
+    }
   };
 
   if (loading) return <Loading fullScreen />;
@@ -363,32 +393,51 @@ export default function BracketFill() {
               </div>
             </div>
 
-            {/* Submit — hidden on mobile when not ready */}
-            {isComplete ? (
-              <button
-                onClick={() => setShowSubmitConfirm(true)}
-                disabled={challenge?.tiebreaker_type === 'total_score' && !tiebreakerValue}
-                className="btn-primary w-full flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(139,92,246,0.3)] disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <Send className="w-4 h-4" />
-                Submit Bracket
-              </button>
+            {bracket?.is_submitted ? (
+              /* Already submitted — show status + reset option */
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 text-sm font-medium">
+                  <Check className="w-4 h-4" />
+                  Submitted — edits save automatically
+                </div>
+                <button
+                  onClick={handleReset}
+                  className="px-4 py-2.5 rounded-xl bg-fg/5 text-fg/50 hover:text-fg/70 hover:bg-fg/10 transition-colors text-sm font-medium flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset
+                </button>
+              </div>
             ) : (
-              <button
-                disabled
-                className="btn-primary w-full hidden md:flex items-center justify-center gap-2 opacity-30 cursor-not-allowed"
-              >
-                <Send className="w-4 h-4" />
-                Submit Bracket
-              </button>
-            )}
+              <>
+                {/* Submit — hidden on mobile when not ready */}
+                {isComplete ? (
+                  <button
+                    onClick={() => setShowSubmitConfirm(true)}
+                    disabled={challenge?.tiebreaker_type === 'total_score' && !tiebreakerValue}
+                    className="btn-primary w-full flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(139,92,246,0.3)] disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Send className="w-4 h-4" />
+                    Submit Bracket
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="btn-primary w-full hidden md:flex items-center justify-center gap-2 opacity-30 cursor-not-allowed"
+                  >
+                    <Send className="w-4 h-4" />
+                    Submit Bracket
+                  </button>
+                )}
 
-            {/* Auto-save hint — mobile only, when not complete */}
-            {!isComplete && (
-              <p className="md:hidden text-center text-xs text-fg/40 mt-1 flex items-center justify-center gap-1">
-                <Save className="w-3 h-3" />
-                Picks are saved automatically — come back anytime to finish
-              </p>
+                {/* Auto-save hint — mobile only, when not complete */}
+                {!isComplete && (
+                  <p className="md:hidden text-center text-xs text-fg/40 mt-1 flex items-center justify-center gap-1">
+                    <Save className="w-3 h-3" />
+                    Picks are saved automatically — come back anytime to finish
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -429,7 +478,7 @@ export default function BracketFill() {
             <AlertCircle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
             <h3 className="text-lg font-display font-bold text-fg mb-2">Submit Bracket?</h3>
             <p className="text-sm text-fg/50 mb-5">
-              Once submitted, your bracket is locked. You will not be able to make any changes.
+              You can still edit your picks until the tournament starts. All brackets lock at tipoff.
             </p>
             <div className="flex gap-3">
               <button

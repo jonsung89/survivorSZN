@@ -32,7 +32,7 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
 
     // Build query - now includes gif, reply_to, reactions, and deleted fields
     let query = `
-      SELECT 
+      SELECT
         cm.id,
         cm.user_id,
         cm.message,
@@ -42,7 +42,8 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
         cm.deleted_at,
         cm.deleted_by,
         cm.created_at,
-        u.display_name
+        u.display_name,
+        u.profile_image_url
       FROM chat_messages cm
       JOIN users u ON cm.user_id = u.id
       WHERE cm.league_id = $1

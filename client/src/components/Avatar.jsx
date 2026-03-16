@@ -39,18 +39,19 @@ export const getAvatarGradient = (identifier) => {
  * @param {function} onClick - Click handler
  * @param {string} className - Additional CSS classes
  */
-export default function Avatar({ 
-  userId, 
-  name, 
-  size = 'md', 
-  isOnline = false, 
+export default function Avatar({
+  userId,
+  name,
+  imageUrl,
+  size = 'md',
+  isOnline = false,
   showOnlineRing = false,
   onClick,
   className = ''
 }) {
   const gradient = getAvatarGradient(userId || name);
   const initial = name?.[0]?.toUpperCase() || '?';
-  
+
   const sizeClasses = {
     xs: 'w-6 h-6 text-[10px]',
     sm: 'w-8 h-8 text-xs',
@@ -70,23 +71,27 @@ export default function Avatar({
   };
 
   const Component = onClick ? 'button' : 'div';
-  
+
   return (
     <div className={`relative inline-flex ${className}`}>
       <Component
         onClick={onClick}
         className={`
-          ${sizeClasses[size]} 
-          rounded-full 
-          flex items-center justify-center 
-          font-semibold text-white 
-          bg-gradient-to-br ${gradient} 
-          shadow-lg
+          ${sizeClasses[size]}
+          rounded-full
+          flex items-center justify-center
+          font-semibold text-white
+          bg-gradient-to-br ${gradient}
+          shadow-lg overflow-hidden
           ${onClick ? 'transition-transform hover:scale-110 cursor-pointer' : ''}
           ${showOnlineRing && isOnline ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-slate-900' : ''}
         `}
       >
-        {initial}
+        {imageUrl ? (
+          <img src={imageUrl} alt={name || ''} className="w-full h-full object-cover" />
+        ) : (
+          initial
+        )}
       </Component>
       {isOnline && (
         <span className={`absolute ${onlineDotSizes[size]} bg-emerald-500 rounded-full border-2 border-slate-900`} />

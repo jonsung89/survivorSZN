@@ -157,7 +157,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-sm font-medium text-fg">{player.name}</span>
           {showPosition && (
-            <span className="text-xs text-fg/50">({player.position})</span>
+            <span className="text-sm text-fg/50">({player.position})</span>
           )}
           <InjuryBadge injury={player.injury} />
         </div>
@@ -179,7 +179,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
 
     return (
       <div className="flex gap-0 sm:gap-3">
-        <span className="text-xs font-medium text-fg/30 w-7 sm:w-8 pt-2 flex-shrink-0">{label}</span>
+        <span className="text-sm font-medium text-fg/50 w-7 sm:w-8 pt-2 flex-shrink-0">{label}</span>
         <div className="flex-1 space-y-3">
           {players.map((p, i) => (
             <PlayerRow key={i} player={p} showPosition={showPosition} />
@@ -197,19 +197,19 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
         <div className="grid grid-cols-4 gap-2">
           <div className="bg-fg/5 rounded-lg p-2.5 text-center">
             <div className="text-lg font-bold text-fg">{data.team.record || '-'}</div>
-            <div className="text-[10px] text-fg/40">Record</div>
+            <div className="text-sm text-fg/50">Record</div>
           </div>
           <div className="bg-fg/5 rounded-lg p-2.5 text-center">
             <div className="text-lg font-bold text-fg">{data.team.streak || '-'}</div>
-            <div className="text-[10px] text-fg/40">Streak</div>
+            <div className="text-sm text-fg/50">Streak</div>
           </div>
           <div className="bg-fg/5 rounded-lg p-2.5 text-center">
             <div className="text-lg font-bold text-fg">{data.team.homeRecord || '-'}</div>
-            <div className="text-[10px] text-fg/40">Home</div>
+            <div className="text-sm text-fg/50">Home</div>
           </div>
           <div className="bg-fg/5 rounded-lg p-2.5 text-center">
             <div className="text-lg font-bold text-fg">{data.team.awayRecord || '-'}</div>
-            <div className="text-[10px] text-fg/40">Away</div>
+            <div className="text-sm text-fg/50">Away</div>
           </div>
         </div>
       )}
@@ -217,20 +217,20 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
       {/* Team Stats Summary */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-fg/5 rounded-lg p-3">
-          <div className="text-xs text-fg/40 mb-1">Points/Game</div>
+          <div className="text-sm text-fg/50 mb-1">Points/Game</div>
           <div className="text-lg font-semibold text-fg">
             {data?.stats?.offense?.pointsPerGame?.displayValue || '-'}
             {data?.stats?.rankings?.pointsFor && (
-              <span className={`text-xs ml-1 ${getRankColor(data.stats.rankings.pointsFor)}`}>({data.stats.rankings.pointsFor})</span>
+              <span className={`text-sm ml-1 ${getRankColor(data.stats.rankings.pointsFor)}`}>({data.stats.rankings.pointsFor})</span>
             )}
           </div>
         </div>
         <div className="bg-fg/5 rounded-lg p-3">
-          <div className="text-xs text-fg/40 mb-1">Pts Allowed/Game</div>
+          <div className="text-sm text-fg/50 mb-1">Pts Allowed/Game</div>
           <div className="text-lg font-semibold text-fg">
             {data?.stats?.defense?.pointsAllowedPerGame?.displayValue || '-'}
             {data?.stats?.rankings?.pointsAgainst && (
-              <span className={`text-xs ml-1 ${getRankColor(data.stats.rankings.pointsAgainst)}`}>({data.stats.rankings.pointsAgainst})</span>
+              <span className={`text-sm ml-1 ${getRankColor(data.stats.rankings.pointsAgainst)}`}>({data.stats.rankings.pointsAgainst})</span>
             )}
           </div>
         </div>
@@ -239,7 +239,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
       {/* Key Players - Categorized by Position */}
       {data?.topPlayers && (
         <div className="bg-fg/5 rounded-lg p-3">
-          <h4 className="text-xs font-medium text-fg/40 uppercase tracking-wide mb-3">Key Players</h4>
+          <h4 className="text-sm font-medium text-fg/50 uppercase tracking-wide mb-3">Key Players</h4>
           <div className="space-y-3">
             <PositionGroup label="QB" players={data.topPlayers.qb} />
             <PositionGroup label="RB" players={data.topPlayers.rb} />
@@ -254,14 +254,14 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
       <div className="grid grid-cols-2 gap-3">
         {data?.stats?.passing && (
           <div className="bg-fg/5 rounded-lg p-3">
-            <div className="text-xs text-fg/40 uppercase tracking-wide mb-2">Passing</div>
+            <div className="text-sm text-fg/50 uppercase tracking-wide mb-2">Passing</div>
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-fg/50">Yds/G</span>
                 <span className="text-fg">
                   {data.stats.passing.yardsPerGame?.displayValue || '-'}
                   {data.stats.rankings?.passingYPG && (
-                    <span className={`text-xs ml-1 ${getRankColor(data.stats.rankings.passingYPG)}`}>({data.stats.rankings.passingYPG})</span>
+                    <span className={`text-sm ml-1 ${getRankColor(data.stats.rankings.passingYPG)}`}>({data.stats.rankings.passingYPG})</span>
                   )}
                 </span>
               </div>
@@ -270,7 +270,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                 <span className="text-fg">
                   {data.stats.passing.touchdownsPerGame?.displayValue || '-'}
                   {data.stats.rankings?.passingTD && (
-                    <span className={`text-xs ml-1 ${getRankColor(data.stats.rankings.passingTD)}`}>({data.stats.rankings.passingTD})</span>
+                    <span className={`text-sm ml-1 ${getRankColor(data.stats.rankings.passingTD)}`}>({data.stats.rankings.passingTD})</span>
                   )}
                 </span>
               </div>
@@ -280,14 +280,14 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
 
         {data?.stats?.rushing && (
           <div className="bg-fg/5 rounded-lg p-3">
-            <div className="text-xs text-fg/40 uppercase tracking-wide mb-2">Rushing</div>
+            <div className="text-sm text-fg/50 uppercase tracking-wide mb-2">Rushing</div>
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-fg/50">Yds/G</span>
                 <span className="text-fg">
                   {data.stats.rushing.yardsPerGame?.displayValue || '-'}
                   {data.stats.rankings?.rushingYPG && (
-                    <span className={`text-xs ml-1 ${getRankColor(data.stats.rankings.rushingYPG)}`}>({data.stats.rankings.rushingYPG})</span>
+                    <span className={`text-sm ml-1 ${getRankColor(data.stats.rankings.rushingYPG)}`}>({data.stats.rankings.rushingYPG})</span>
                   )}
                 </span>
               </div>
@@ -296,7 +296,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                 <span className="text-fg">
                   {data.stats.rushing.touchdownsPerGame?.displayValue || '-'}
                   {data.stats.rankings?.rushingTD && (
-                    <span className={`text-xs ml-1 ${getRankColor(data.stats.rankings.rushingTD)}`}>({data.stats.rankings.rushingTD})</span>
+                    <span className={`text-sm ml-1 ${getRankColor(data.stats.rankings.rushingTD)}`}>({data.stats.rankings.rushingTD})</span>
                   )}
                 </span>
               </div>
@@ -305,7 +305,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                 <span className="text-fg">
                   {data.stats.rushing.yardsPerCarry?.displayValue || '-'}
                   {data.stats.rankings?.rushingYPC && (
-                    <span className={`text-xs ml-1 ${getRankColor(data.stats.rankings.rushingYPC)}`}>({data.stats.rankings.rushingYPC})</span>
+                    <span className={`text-sm ml-1 ${getRankColor(data.stats.rankings.rushingYPC)}`}>({data.stats.rankings.rushingYPC})</span>
                   )}
                 </span>
               </div>
@@ -326,19 +326,19 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
           <div className="grid grid-cols-4 gap-2">
             <div className="bg-fg/5 rounded-lg p-2.5 text-center">
               <div className="text-lg font-bold text-fg">{data.team.record || '-'}</div>
-              <div className="text-[10px] text-fg/40">Record</div>
+              <div className="text-sm text-fg/50">Record</div>
             </div>
             <div className="bg-fg/5 rounded-lg p-2.5 text-center">
               <div className="text-lg font-bold text-fg">{data.team.streak || '-'}</div>
-              <div className="text-[10px] text-fg/40">Streak</div>
+              <div className="text-sm text-fg/50">Streak</div>
             </div>
             <div className="bg-fg/5 rounded-lg p-2.5 text-center">
               <div className="text-lg font-bold text-fg">{data.team.homeRecord || '-'}</div>
-              <div className="text-[10px] text-fg/40">Home</div>
+              <div className="text-sm text-fg/50">Home</div>
             </div>
             <div className="bg-fg/5 rounded-lg p-2.5 text-center">
               <div className="text-lg font-bold text-fg">{data.team.awayRecord || '-'}</div>
-              <div className="text-[10px] text-fg/40">Away</div>
+              <div className="text-sm text-fg/50">Away</div>
             </div>
           </div>
         )}
@@ -348,18 +348,18 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
           <div className="grid grid-cols-2 gap-2">
             {statsEntries.map(([label, stat]) => (
               <div key={label} className="bg-fg/5 rounded-lg p-3">
-                <div className="text-xs text-fg/40 mb-1">{label}</div>
+                <div className="text-sm text-fg/50 mb-1">{label}</div>
                 <div className="text-lg font-semibold text-fg">
                   {stat.displayValue || '-'}
                   {stat.rank && (
-                    <span className={`text-xs ml-1 ${getRankColor(stat.rank)}`}>({stat.rank})</span>
+                    <span className={`text-sm ml-1 ${getRankColor(stat.rank)}`}>({stat.rank})</span>
                   )}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-6 text-fg/40">
+          <div className="text-center py-6 text-fg/50">
             <BarChart3 className="w-10 h-10 mx-auto mb-2 opacity-50" />
             <p>No stats available</p>
           </div>
@@ -393,7 +393,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
               {/* Week Number */}
               <div className="w-8 flex-shrink-0 text-center">
                 <div className="text-base font-bold text-fg">{game.week}</div>
-                <div className="text-xs text-fg/40">Week</div>
+                <div className="text-sm text-fg/50">Week</div>
               </div>
 
               {/* vs/@ indicator */}
@@ -415,13 +415,13 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
               {/* Opponent Name */}
               <div className="flex-1 min-w-0">
                 <div className="sm:hidden">
-                  <div className="text-xs text-fg/50 leading-tight">
+                  <div className="text-sm text-fg/50 leading-tight">
                     {game.opponent?.name?.split(' ').slice(0, -1).join(' ') || ''}
                   </div>
                   <div className="text-base font-medium text-fg leading-tight">
                     {game.opponent?.name?.split(' ').pop() || opponentAbbr}
                     {game.opponent?.record && (
-                      <span className="text-sm text-fg/40 font-normal ml-1.5">({game.opponent.record})</span>
+                      <span className="text-sm text-fg/50 font-normal ml-1.5">({game.opponent.record})</span>
                     )}
                   </div>
                 </div>
@@ -429,7 +429,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                   {game.opponent?.name || game.opponent?.displayName || opponentAbbr}
                 </span>
                 {game.opponent?.record && (
-                  <span className="text-sm text-fg/40 ml-1.5 hidden sm:inline">({game.opponent.record})</span>
+                  <span className="text-sm text-fg/50 ml-1.5 hidden sm:inline">({game.opponent.record})</span>
                 )}
               </div>
 
@@ -444,14 +444,14 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                         </span>
                         <span className="text-base text-fg font-semibold">{game.teamScore}-{game.oppScore}</span>
                       </div>
-                      {game.teamRecord && <div className="text-sm text-fg/40 mt-0.5">{game.teamRecord}</div>}
+                      {game.teamRecord && <div className="text-sm text-fg/50 mt-0.5">{game.teamRecord}</div>}
                     </div>
                     <div className="hidden sm:flex items-center justify-end gap-2">
                       <span className={`text-base font-bold ${game.result === 'W' ? 'text-green-500' : 'text-red-500'}`}>
                         {game.result}
                       </span>
                       <span className="text-base text-fg font-semibold">{game.teamScore}-{game.oppScore}</span>
-                      {game.teamRecord && <span className="text-sm text-fg/40">({game.teamRecord})</span>}
+                      {game.teamRecord && <span className="text-sm text-fg/50">({game.teamRecord})</span>}
                     </div>
                   </>
                 ) : (
@@ -459,7 +459,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                     <span className="sm:hidden">{formatShortDate(game.date)}</span>
                     <span className="hidden sm:inline">{formatGameDate(game.date)}</span>
                     {' '}
-                    <span className="text-fg/40">
+                    <span className="text-fg/50">
                       {new Date(game.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                     </span>
                   </div>
@@ -469,7 +469,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
           );
         })
       ) : (
-        <div className="text-center py-12 text-fg/40">
+        <div className="text-center py-12 text-fg/50">
           <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p className="text-base">No schedule available</p>
         </div>
@@ -509,7 +509,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
             >
               {/* Date */}
               <div className="w-9 sm:w-12 flex-shrink-0 text-center">
-                <div className="text-[10px] sm:text-xs font-bold text-fg">
+                <div className="text-sm font-bold text-fg">
                   {new Date(game.date).toLocaleDateString('en-US', { month: 'short' })}
                 </div>
                 <div className="text-base sm:text-lg font-bold text-fg leading-tight">
@@ -533,7 +533,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                   />
                 ) : null}
                 <div
-                  className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-[10px] sm:text-xs font-bold overflow-hidden"
+                  className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-sm font-bold overflow-hidden"
                   style={opponentLogo ? { display: 'none' } : {}}
                 >
                   {(opponentAbbr || '?').slice(0, 3)}
@@ -543,7 +543,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
               {/* Opponent Name */}
               <div className="flex-1 min-w-0">
                 <div className="sm:hidden">
-                  <div className="text-xs text-fg/50 leading-tight">
+                  <div className="text-sm text-fg/50 leading-tight">
                     {game.opponent?.name?.split(' ').slice(0, -1).join(' ') || ''}
                   </div>
                   <div className="text-sm font-medium text-fg leading-tight">
@@ -552,7 +552,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                     )}
                     {game.opponent?.name?.split(' ').pop() || game.opponent?.abbreviation || '?'}
                     {game.opponent?.record && (
-                      <span className="text-xs text-fg/40 font-normal ml-1 whitespace-nowrap">({game.opponent.record})</span>
+                      <span className="text-sm text-fg/50 font-normal ml-1 whitespace-nowrap">({game.opponent.record})</span>
                     )}
                   </div>
                 </div>
@@ -563,7 +563,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                   {game.opponent?.name || game.opponent?.abbreviation || '?'}
                 </span>
                 {game.opponent?.record && (
-                  <span className="text-sm text-fg/40 ml-1.5 hidden sm:inline">({game.opponent.record})</span>
+                  <span className="text-sm text-fg/50 ml-1.5 hidden sm:inline">({game.opponent.record})</span>
                 )}
               </div>
 
@@ -587,7 +587,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                       {new Date(game.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </span>
                     {' '}
-                    <span className="text-fg/40">
+                    <span className="text-fg/50">
                       {new Date(game.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                     </span>
                   </div>
@@ -597,7 +597,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
           );
         })
       ) : (
-        <div className="text-center py-12 text-fg/40">
+        <div className="text-center py-12 text-fg/50">
           <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p className="text-base">No schedule available</p>
         </div>
@@ -638,7 +638,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
               )}
             </div>
             {data?.team?.division && (
-              <div className="text-xs text-fg/40 mt-0.5">{data.team.division}</div>
+              <div className="text-sm text-fg/50 mt-0.5">{data.team.division}</div>
             )}
           </div>
           <button onClick={onClose} className="p-2 hover:bg-fg/10 rounded-full transition-colors">
@@ -668,7 +668,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
         <div ref={contentRef} className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-fg/30 animate-spin" />
+              <Loader2 className="w-8 h-8 text-fg/50 animate-spin" />
             </div>
           ) : (
             <>
@@ -715,22 +715,22 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
                                     {sourceInfo.icon && (
                                       <img src={sourceInfo.icon} alt={sourceInfo.name} className="w-3.5 h-3.5 rounded-sm" />
                                     )}
-                                    <span className="text-xs text-fg/50">{sourceInfo.name}</span>
+                                    <span className="text-sm text-fg/50">{sourceInfo.name}</span>
                                   </span>
                                 )}
-                                <span className="text-xs text-fg/40">{formatDate(article.published)}</span>
+                                <span className="text-sm text-fg/50">{formatDate(article.published)}</span>
                                 {article.premium && (
                                   <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded font-medium">ESPN+</span>
                                 )}
                               </div>
                             </div>
-                            <ExternalLink className="w-4 h-4 text-fg/20 flex-shrink-0 group-hover:text-fg/40 transition-colors" />
+                            <ExternalLink className="w-4 h-4 text-fg/40 flex-shrink-0 group-hover:text-fg/50 transition-colors" />
                           </div>
                         </a>
                       );
                     })
                   ) : (
-                    <div className="text-center py-8 text-fg/40">
+                    <div className="text-center py-8 text-fg/50">
                       <Newspaper className="w-10 h-10 mx-auto mb-2 opacity-50" />
                       <p>No recent news available</p>
                     </div>

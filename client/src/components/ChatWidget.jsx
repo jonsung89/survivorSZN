@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
 import CommishBadge from './CommishBadge';
 import { useThemedLogo } from '../utils/logo';
+import { useTheme } from '../context/ThemeContext';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Free tier API key
@@ -43,7 +44,7 @@ const parseMentions = (text, members) => {
   const escapedNames = memberNames.map(name => 
     name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   );
-  const pattern = new RegExp(`(@(?:${escapedNames.join('|')}))`, 'gi');
+  const pattern = new RegExp(`(@(?:everyone|${escapedNames.join('|')}))`, 'gi');
   
   // Split text by mentions
   const parts = text.split(pattern);
@@ -52,7 +53,7 @@ const parseMentions = (text, members) => {
     // Check if this part is a mention (starts with @ and matches a member name)
     if (part.startsWith('@')) {
       const nameAfterAt = part.substring(1).toLowerCase();
-      const isValidMention = memberNames.some(
+      const isValidMention = nameAfterAt === 'everyone' || memberNames.some(
         name => name.toLowerCase() === nameAfterAt
       );
       if (isValidMention) {
@@ -99,9 +100,10 @@ const NFL_TEAMS = {
   '34': { name: 'Texans', abbreviation: 'HOU', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/hou.png' },
 };
 
-export default function ChatWidget({ leagueId, leagueName, commissionerId, members = [], maxStrikes = 1, onCollapsedChange }) {
+export default function ChatWidget({ leagueId, leagueName, commissionerId, members: membersProp = [], maxStrikes = 1, onCollapsedChange }) {
   const { user, getIdToken } = useAuth();
   const tl = useThemedLogo();
+  const { isDark } = useTheme();
   const { socket, connected, onlineUsers, typingUsers, sendMessage, startTyping, stopTyping, on, joinLeague, leaveLeague } = useSocket();
   
   const [isOpen, setIsOpen] = useState(false);
@@ -169,6 +171,30 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const openedAtRef = useRef(0); // timestamp to prevent immediate close
   const bottomBarRef = useRef(null); // measure bottom bar height
   const [bottomBarHeight, setBottomBarHeight] = useState(0);
+
+  // Self-fetch members if not provided via props
+  const [fetchedMembers, setFetchedMembers] = useState([]);
+  const members = membersProp.length > 0 ? membersProp : fetchedMembers;
+
+  useEffect(() => {
+    if (membersProp.length === 0 && leagueId) {
+      const fetchMembers = async () => {
+        try {
+          const token = await getIdToken();
+          const res = await fetch(`${API_URL}/leagues/${leagueId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setFetchedMembers(data.league?.members || []);
+          }
+        } catch (err) {
+          console.error('Failed to fetch chat members:', err);
+        }
+      };
+      fetchMembers();
+    }
+  }, [leagueId, membersProp.length, getIdToken]);
 
   // Derive sheetSize from height for feature gating (full = > 50% viewport, half = smaller)
   const sheetSize = typeof window !== 'undefined' && sheetHeight > window.innerHeight * 0.5 ? 'full' : 'half';
@@ -484,12 +510,16 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     }
   };
 
-  // Filter members for mentions (exclude self)
-  const filteredMembers = members.filter(m => 
-    m.id !== user?.id && 
-    m.userId !== user?.id &&
-    (m.displayName || m.display_name || '').toLowerCase().includes(mentionQuery)
-  ).slice(0, 5);
+  // Filter members for mentions (exclude self), with @everyone option
+  const everyoneOption = { id: '__everyone__', userId: '__everyone__', displayName: 'everyone' };
+  const filteredMembers = [
+    ...('everyone'.includes(mentionQuery) ? [everyoneOption] : []),
+    ...members.filter(m =>
+      m.id !== user?.id &&
+      m.userId !== user?.id &&
+      (m.displayName || m.display_name || '').toLowerCase().includes(mentionQuery)
+    )
+  ].slice(0, 5);
 
   // Insert mention into input
   const insertMention = (member) => {
@@ -787,6 +817,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     setSelectedProfile({
       userId,
       displayName,
+      profileImageUrl: member?.profileImageUrl || member?.profile_image_url || null,
       strikes: member?.strikes || 0,
       status: member?.status || 'active',
       picks: picksArray
@@ -932,9 +963,10 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           {/* Avatar & Name */}
           <div className="flex flex-col items-center mb-6">
             <div className="mb-3">
-              <Avatar 
+              <Avatar
                 userId={profile.userId}
                 name={profile.displayName}
+                imageUrl={profile.profileImageUrl}
                 size="2xl"
                 isOnline={isOnline}
                 showOnlineRing={true}
@@ -1092,9 +1124,10 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
                 {/* Avatar */}
                 <div className={`flex-shrink-0 ${showName ? '' : 'invisible'}`}>
-                  <Avatar 
+                  <Avatar
                     userId={messageUserId}
                     name={displayName}
+                    imageUrl={message.profile_image_url || message.profileImageUrl}
                     size="sm"
                     onClick={() => handleAvatarClick(messageUserId, displayName)}
                   />
@@ -1103,7 +1136,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 <div className="flex-1 min-w-0">
                   {showName && (
                     <p className="text-sm mb-1 ml-1 flex items-center gap-2">
-                      <span className={`font-medium ${isOwn ? 'text-emerald-400' : 'text-fg/70'}`}>
+                      <span className={`font-medium ${isOwn ? (isDark ? 'text-emerald-400' : 'text-emerald-700') : 'text-fg/70'}`}>
                         {displayName}
                         {isOwn && <span className="text-fg/40 font-normal ml-1">(you)</span>}
                       </span>
@@ -1363,8 +1396,17 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       idx === mentionIndex ? 'bg-emerald-600/30 border-l-2 border-emerald-500' : 'hover:bg-fg/5'
                     }`}
                   >
-                    <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} size="xs" />
-                    <span className="text-fg">{member.displayName || member.display_name}</span>
+                    {member.userId === '__everyone__' ? (
+                      <>
+                        <span className="text-fg font-medium">@everyone</span>
+                        <span className="text-fg/40 ml-auto text-sm">Notify everyone in this league</span>
+                      </>
+                    ) : (
+                      <>
+                        <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} imageUrl={member.profileImageUrl || member.profile_image_url} size="xs" />
+                        <span className="text-fg">{member.displayName || member.display_name}</span>
+                      </>
+                    )}
                   </button>
                 ))}
               </div>
@@ -1564,10 +1606,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               {/* Left: Avatar or Icon */}
               <div className="relative flex-shrink-0">
                 {messages.length > 0 && (messages[messages.length - 1]?.user_id || messages[messages.length - 1]?.userId) ? (
-                  <Avatar 
-                    userId={messages[messages.length - 1].user_id || messages[messages.length - 1].userId} 
-                    name={messages[messages.length - 1].display_name || messages[messages.length - 1].displayName || 'User'} 
-                    size="sm" 
+                  <Avatar
+                    userId={messages[messages.length - 1].user_id || messages[messages.length - 1].userId}
+                    name={messages[messages.length - 1].display_name || messages[messages.length - 1].displayName || 'User'}
+                    imageUrl={messages[messages.length - 1].profile_image_url || messages[messages.length - 1].profileImageUrl}
+                    size="sm"
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-fg/10 flex items-center justify-center">
@@ -1791,8 +1834,17 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                           idx === mentionIndex ? 'bg-emerald-600/30 border-l-2 border-emerald-500' : 'hover:bg-fg/5'
                         }`}
                       >
-                        <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} size="xs" />
-                        <span className="text-sm text-fg">{member.displayName || member.display_name}</span>
+                        {member.userId === '__everyone__' ? (
+                          <>
+                            <span className="text-sm text-fg font-medium">@everyone</span>
+                            <span className="text-fg/40 ml-auto text-sm">Notify everyone in this league</span>
+                          </>
+                        ) : (
+                          <>
+                            <Avatar userId={member.userId || member.user_id} name={member.displayName || member.display_name} imageUrl={member.profileImageUrl || member.profile_image_url} size="xs" />
+                            <span className="text-sm text-fg">{member.displayName || member.display_name}</span>
+                          </>
+                        )}
                       </button>
                     ))}
                   </div>

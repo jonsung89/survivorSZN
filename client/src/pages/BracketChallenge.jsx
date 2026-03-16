@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil } from 'lucide-react';
+import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil, Lock, RotateCcw } from 'lucide-react';
 import { bracketAPI, leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
 import BracketLeaderboard from '../components/bracket/BracketLeaderboard';
@@ -20,6 +21,7 @@ export default function BracketChallenge() {
   const { leagueId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isDark } = useTheme();
   const { showToast } = useToast();
 
   const [league, setLeague] = useState(null);
@@ -38,8 +40,11 @@ export default function BracketChallenge() {
   const [editName, setEditName] = useState('');
   const [togglingPayment, setTogglingPayment] = useState(null);
   const [chatCollapsed, setChatCollapsed] = useState(true);
+  const [tournamentStartTime, setTournamentStartTime] = useState(null);
+  const [lockCountdown, setLockCountdown] = useState(null);
 
   const isCommissioner = league?.commissionerId === user?.id || league?.commissioner_id === user?.id;
+  const isTournamentLocked = tournamentStartTime && new Date() >= new Date(tournamentStartTime);
   const entryFee = parseFloat(challenge?.entry_fee) || 0;
   const members = league?.members || [];
 
@@ -70,6 +75,29 @@ export default function BracketChallenge() {
     return () => clearInterval(id);
   }, [fieldAnnounced, selectionDate]);
 
+  // Tournament lock countdown
+  useEffect(() => {
+    if (!tournamentStartTime || isTournamentLocked) return;
+
+    const target = new Date(tournamentStartTime);
+    if (isNaN(target.getTime())) return;
+
+    const update = () => {
+      const diff = target - new Date();
+      if (diff <= 0) { setLockCountdown(null); return; }
+      setLockCountdown({
+        days: Math.floor(diff / 86400000),
+        hours: Math.floor((diff % 86400000) / 3600000),
+        minutes: Math.floor((diff % 3600000) / 60000),
+        seconds: Math.floor((diff % 60000) / 1000),
+      });
+    };
+
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [tournamentStartTime, isTournamentLocked]);
+
   const loadData = async () => {
     try {
       const [leagueData, challengeData] = await Promise.all([
@@ -85,9 +113,10 @@ export default function BracketChallenge() {
       // Check if tournament field has been announced + fetch selection date
       try {
         const season = leagueObj.season || new Date().getFullYear();
-        const [tournamentData, selectionData] = await Promise.all([
+        const [tournamentData, selectionData, firstGameData] = await Promise.all([
           bracketAPI.getTournamentData(season),
           bracketAPI.getSelectionDate(season).catch(() => null),
+          bracketAPI.getFirstGameTime(season).catch(() => null),
         ]);
         const realTeams = Object.values(tournamentData.teams || {}).filter(t => t.name !== 'TBD');
         setFieldAnnounced(realTeams.length >= 64);
@@ -95,6 +124,11 @@ export default function BracketChallenge() {
         // Use ESPN-derived date, or null if not available
         if (selectionData?.dateTime) {
           setSelectionDate(selectionData.dateTime);
+        }
+
+        // Set tournament start time for countdown/lock
+        if (firstGameData?.firstGameTime) {
+          setTournamentStartTime(firstGameData.firstGameTime);
         }
       } catch {
         setFieldAnnounced(false);
@@ -127,6 +161,24 @@ export default function BracketChallenge() {
       showToast('Failed to create bracket', 'error');
     }
     setCreating(false);
+  };
+
+  const handleResetBracket = async (bracketId, e) => {
+    e.stopPropagation();
+    if (!confirm('Reset this bracket? All picks will be cleared.')) return;
+    try {
+      const result = await bracketAPI.resetBracket(bracketId);
+      if (result.success) {
+        setMyBrackets(prev => prev.map(b =>
+          b.id === bracketId ? { ...b, picks: {}, tiebreaker_value: null, is_submitted: false, submitted_at: null } : b
+        ));
+        showToast('Bracket reset', 'success');
+      } else {
+        showToast(result.error || 'Failed to reset bracket', 'error');
+      }
+    } catch {
+      showToast('Failed to reset bracket', 'error');
+    }
   };
 
   const handleLeagueNameSave = async () => {
@@ -234,13 +286,13 @@ export default function BracketChallenge() {
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <SportBadge sportId="ncaab" label="March Madness" />
               <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-bold uppercase ${
-                isOpen ? 'bg-emerald-500/15 text-emerald-400' :
-                challenge.status === 'locked' ? 'bg-amber-500/15 text-amber-400' :
+                isOpen ? (isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-gray-100 text-gray-700') :
+                challenge.status === 'locked' ? (isDark ? 'bg-amber-500/15 text-amber-400' : 'bg-gray-100 text-gray-700') :
                 'bg-fg/10 text-fg/50'
               }`}>
                 {isOpen ? 'Open' : challenge.status === 'locked' ? 'Locked' : 'Completed'}
               </span>
-              <span className="text-xs text-fg/40">{challenge.scoring_preset} scoring</span>
+              <span className="text-sm text-fg/40">{challenge.scoring_preset} scoring</span>
             </div>
           </div>
         </div>
@@ -260,45 +312,96 @@ export default function BracketChallenge() {
         </div>
       </div>
 
-      {/* Prize Pot Card */}
-      {entryFee > 0 && (
-        <div className="glass-card rounded-xl p-4 sm:p-5 mb-5 animate-in">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
-                <DollarSign className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-fg/60 text-sm">Prize Pot</p>
-                <p className="text-2xl font-bold text-fg">
-                  ${(entryFee * leaderboard.length).toLocaleString()}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-4 sm:gap-6">
-              <div className="text-center">
-                <p className="text-fg/60 text-xs">Per Bracket</p>
-                <p className="text-lg font-semibold text-fg">${entryFee}</p>
-              </div>
-              {isCommissioner && (
-                <div className="text-center">
-                  <p className="text-fg/60 text-xs">Paid</p>
-                  <p className="text-lg font-semibold text-green-500">
-                    {paidCount}/{members.length}
-                  </p>
-                </div>
-              )}
-              <div className="text-center">
-                <p className="text-fg/60 text-xs">Entries</p>
-                <p className="text-lg font-semibold text-fg">{leaderboard.length}</p>
-              </div>
-            </div>
+      {/* Tournament Locked Banner (standalone, not in grid) */}
+      {isTournamentLocked && isOpen && (
+        <div className="glass-card rounded-xl p-4 sm:p-5 mb-5 animate-in border border-fg/10" style={{ animationDelay: '25ms' }}>
+          <div className="flex items-center gap-2 justify-center">
+            <Lock className="w-4 h-4 text-fg/60" />
+            <p className="text-fg/70 text-sm font-medium">Brackets are locked — the tournament has started</p>
           </div>
-          <p className="text-fg/40 text-xs mt-3 pt-3 border-t border-fg/10">
-            💰 Pot splits evenly among winners. Each submitted bracket = one ${entryFee} entry.
-          </p>
         </div>
       )}
+
+      {/* Countdown + Prize Pot — side by side on desktop */}
+      {(() => {
+        const showCountdown = isOpen && !isTournamentLocked && lockCountdown && fieldAnnounced;
+        const showPrizePot = entryFee > 0;
+        if (!showCountdown && !showPrizePot) return null;
+
+        return (
+          <div className={`grid gap-4 mb-5 ${showCountdown && showPrizePot ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
+            {showCountdown && (
+              <div className="glass-card rounded-xl p-4 sm:p-5 animate-in" style={{ animationDelay: '25ms' }}>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-fg/60" />
+                    <p className="text-fg/70 text-sm font-medium">Brackets lock when the tournament starts</p>
+                  </div>
+                  <div className="flex justify-center gap-2">
+                    {lockCountdown.days > 0 && (
+                      <div className={`text-center px-3 py-2 rounded-lg min-w-[3.5rem] ${isDark ? 'bg-fg/10' : 'bg-gray-100'}`}>
+                        <p className="text-lg font-bold text-fg tabular-nums">{lockCountdown.days}</p>
+                        <p className="text-fg/40 text-sm">day{lockCountdown.days !== 1 ? 's' : ''}</p>
+                      </div>
+                    )}
+                    <div className={`text-center px-3 py-2 rounded-lg min-w-[3.5rem] ${isDark ? 'bg-fg/10' : 'bg-gray-100'}`}>
+                      <p className="text-lg font-bold text-fg tabular-nums">{String(lockCountdown.hours).padStart(2, '0')}</p>
+                      <p className="text-fg/40 text-sm">hrs</p>
+                    </div>
+                    <div className={`text-center px-3 py-2 rounded-lg min-w-[3.5rem] ${isDark ? 'bg-fg/10' : 'bg-gray-100'}`}>
+                      <p className="text-lg font-bold text-fg tabular-nums">{String(lockCountdown.minutes).padStart(2, '0')}</p>
+                      <p className="text-fg/40 text-sm">min</p>
+                    </div>
+                    <div className={`text-center px-3 py-2 rounded-lg min-w-[3.5rem] ${isDark ? 'bg-fg/10' : 'bg-gray-100'}`}>
+                      <p className="text-lg font-bold text-fg tabular-nums">{String(lockCountdown.seconds).padStart(2, '0')}</p>
+                      <p className="text-fg/40 text-sm">sec</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showPrizePot && (
+              <div className="glass-card rounded-xl p-4 sm:p-5 animate-in">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
+                      <DollarSign className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-fg/60 text-sm">Prize Pot</p>
+                      <p className="text-2xl font-bold text-fg">
+                        ${(entryFee * leaderboard.length).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-4 sm:gap-6">
+                    <div className="text-center">
+                      <p className="text-fg/60 text-sm">Per Bracket</p>
+                      <p className="text-lg font-semibold text-fg">${entryFee}</p>
+                    </div>
+                    {isCommissioner && (
+                      <div className="text-center">
+                        <p className="text-fg/60 text-sm">Paid</p>
+                        <p className="text-lg font-semibold text-green-500">
+                          {paidCount}/{members.length}
+                        </p>
+                      </div>
+                    )}
+                    <div className="text-center">
+                      <p className="text-fg/60 text-sm">Entries</p>
+                      <p className="text-lg font-semibold text-fg">{leaderboard.length}</p>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-fg/40 text-sm mt-3 pt-3 border-t border-fg/10">
+                  💰 Pot splits evenly among winners. Each submitted bracket = one ${entryFee} entry.
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-5 border-b border-fg/10 pb-px">
@@ -354,23 +457,34 @@ export default function BracketChallenge() {
                     </div>
                   </div>
 
-                  {!bracket.is_submitted && (
-                    <div className="w-12 h-12 relative">
-                      <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
-                        <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
-                        <circle
-                          cx="18" cy="18" r="15" fill="none"
-                          stroke="rgb(139, 92, 246)"
-                          strokeWidth="3"
-                          strokeDasharray={`${progress * 0.94} 100`}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <span className="absolute inset-0 flex items-center justify-center text-xs font-mono font-bold text-fg/50">
-                        {progress}%
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {!isTournamentLocked && isOpen && pickCount > 0 && (
+                      <button
+                        onClick={(e) => handleResetBracket(bracket.id, e)}
+                        className="p-2 rounded-lg text-fg/30 hover:text-fg/60 hover:bg-fg/5 transition-colors"
+                        title="Reset bracket"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    )}
+                    {!bracket.is_submitted && (
+                      <div className="w-12 h-12 relative">
+                        <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
+                          <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
+                          <circle
+                            cx="18" cy="18" r="15" fill="none"
+                            stroke="rgb(139, 92, 246)"
+                            strokeWidth="3"
+                            strokeDasharray={`${progress * 0.94} 100`}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-xs font-mono font-bold text-fg/50">
+                          {progress}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -417,7 +531,7 @@ export default function BracketChallenge() {
           )}
 
           {/* Create New Bracket */}
-          {isOpen && canCreateMore && fieldAnnounced !== false && (
+          {isOpen && canCreateMore && fieldAnnounced !== false && !isTournamentLocked && (
             <button
               onClick={handleCreateBracket}
               disabled={creating}

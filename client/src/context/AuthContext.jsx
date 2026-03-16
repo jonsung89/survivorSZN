@@ -14,7 +14,8 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const token = await firebaseUser.getIdToken();
+          // Force refresh to always get a valid token
+          const token = await firebaseUser.getIdToken(true);
           localStorage.setItem('token', token);
 
           const userData = await userAPI.getOrCreateUser({

@@ -19,7 +19,7 @@ import MakePick from './pages/MakePick';
 import BracketChallenge from './pages/BracketChallenge';
 import BracketFill from './pages/BracketFill';
 import Schedule from './pages/Schedule';
-import Loading from './components/Loading';
+import Loading, { FullPageLoading } from './components/Loading';
 import Onboarding from './components/Onboarding';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -33,7 +33,7 @@ function ProtectedRoute({ children }) {
   const { user, loading, showOnboarding } = useAuth();
 
   if (loading) {
-    return <Loading fullScreen />;
+    return <FullPageLoading />;
   }
 
   if (!user) {
@@ -53,7 +53,7 @@ function PublicRoute({ children }) {
   const { user, loading } = useAuth();
   
   if (loading) {
-    return <Loading fullScreen />;
+    return <FullPageLoading />;
   }
   
   if (user) {
@@ -88,7 +88,7 @@ function AppLayout({ children, hideFooterMobile = false }) {
 // Admin route wrapper — requires admin role
 function AdminRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <Loading fullScreen />;
+  if (loading) return <FullPageLoading />;
   if (!user || !user.isAdmin) return <Navigate to="/dashboard" replace />;
   return children;
 }
@@ -96,7 +96,7 @@ function AdminRoute({ children }) {
 // Redirect root based on auth state
 function RootRedirect() {
   const { user, loading } = useAuth();
-  if (loading) return <Loading fullScreen />;
+  if (loading) return <FullPageLoading />;
   return <Navigate to={user ? "/dashboard" : "/schedule"} replace />;
 }
 

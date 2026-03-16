@@ -1,10 +1,12 @@
+import { auth } from './firebase';
+
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Get token from localStorage
 const getToken = () => localStorage.getItem('token');
 
-// Make authenticated request
-const authFetch = async (url, options = {}) => {
+// Make authenticated request with automatic token refresh on 401
+const authFetch = async (url, options = {}, _retried = false) => {
   const token = getToken();
   const headers = {
     'Content-Type': 'application/json',
@@ -17,7 +19,17 @@ const authFetch = async (url, options = {}) => {
     headers
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 && !_retried) {
+    // Try refreshing the token before giving up
+    if (auth.currentUser) {
+      try {
+        const newToken = await auth.currentUser.getIdToken(true);
+        localStorage.setItem('token', newToken);
+        return authFetch(url, options, true);
+      } catch (err) {
+        // Token refresh failed — session is truly expired
+      }
+    }
     localStorage.removeItem('token');
     window.location.href = '/login';
     throw new Error('Session expired');

@@ -269,6 +269,49 @@ export default function Schedule() {
   // logger's snapshot so they don't interfere with each other's diff detection.
   const earlyFetchSnapshotRef = useRef(null);
 
+  // Track recently finished games so they stay sorted with live games for a grace period.
+  // Map<gameId, finishedTimestamp>. Games are kept here for RECENTLY_FINISHED_MS (5 min)
+  // so the card doesn't jump position while the user is still watching final plays animate.
+  const RECENTLY_FINISHED_MS = 5 * 60 * 1000;
+  const recentlyFinishedRef = useRef(new Map());
+
+
+  // When games transition to final, record them in recentlyFinishedRef.
+  // Clean up entries older than RECENTLY_FINISHED_MS so the map doesn't grow forever.
+  useEffect(() => {
+    if (!liveGames.length) return;
+    const finished = recentlyFinishedRef.current;
+    for (const game of liveGames) {
+      const isFinal = game.status === 'STATUS_FINAL' || game.status === 'final';
+      if (isFinal && !finished.has(game.id)) {
+        finished.set(game.id, Date.now());
+      }
+    }
+    // Prune expired entries
+    const now = Date.now();
+    for (const [id, ts] of finished) {
+      if (now - ts > RECENTLY_FINISHED_MS) finished.delete(id);
+    }
+  }, [liveGames]);
+
+  // Periodic cleanup of recently finished map (every 60s)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const finished = recentlyFinishedRef.current;
+      let changed = false;
+      for (const [id, ts] of finished) {
+        if (now - ts > RECENTLY_FINISHED_MS) {
+          finished.delete(id);
+          changed = true;
+        }
+      }
+      // Force re-render so sorting updates when grace period expires
+      if (changed) setLiveGames(prev => [...prev]);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     if (!scoresSocket || !scoresConnected || !expandedGame) return;
 
@@ -375,16 +418,69 @@ export default function Schedule() {
       game.status === 'STATUS_SECOND_HALF' ||
       game.status === 'in_progress';
 
-    // Game is final — do one last fetch to capture any remaining plays, then stop
+    // Game just went final — keep polling until we receive the "End of Game" play
+    // (typeId 412 with game-ending text). ESPN's scoreboard goes final before the
+    // play-by-play is fully updated, so we can't stop immediately. We poll until:
+    //   1. The fetched plays contain an end-of-game marker (primary stop signal), OR
+    //   2. The recently-finished grace period expires (fallback safety net)
     if (isFinal) {
+      const FINAL_POLL_INTERVAL = 6000; // 6s between fetches
+      let cancelled = false;
+
       const sportTab = SPORT_TABS.find(s => s.id === selectedSport);
       const fetchFn = sportTab?.scheduleType === 'daily'
         ? () => scheduleAPI.getGameDetails(selectedSport, expandedGame, { live: true })
         : () => nflAPI.getGameDetails(expandedGame);
-      fetchFn().then(data => {
-        if (data) setGameDetails(prev => ({ ...prev, [expandedGame]: data }));
-      }).catch(() => {});
-      return;
+
+      // Check if plays contain the end-of-game marker (typeId 412 with final-period text)
+      const hasEndOfGamePlay = (plays) => {
+        if (!plays || plays.length === 0) return false;
+        const tail = plays.slice(-5);
+        return tail.some(p => {
+          const tid = String(p.typeId || p.type?.id || '');
+          if (tid !== '412') return false;
+          const text = (p.shortText || p.text || '').toLowerCase();
+          // Match "end of game", "end of 4th quarter", "end of 2nd half", "overtime", etc.
+          // but NOT mid-game markers like "end of 1st quarter" or "halftime"
+          return text.includes('game') ||
+            text.includes('4th') ||
+            text.includes('2nd half') ||
+            text.includes('overtime') ||
+            text.includes('ot');
+        });
+      };
+
+      const poll = () => {
+        if (cancelled) return;
+
+        // Fallback: stop if game is no longer in recently-finished grace period
+        const finishedAt = recentlyFinishedRef.current.get(expandedGame);
+        if (finishedAt && Date.now() - finishedAt > RECENTLY_FINISHED_MS) return;
+
+        fetchFn().then(data => {
+          if (cancelled) return;
+          if (data) {
+            setGameDetails(prev => ({ ...prev, [expandedGame]: data }));
+            // Primary stop: we have the end-of-game play
+            if (hasEndOfGamePlay(data.plays)) return;
+          }
+          if (!cancelled) {
+            gamecastIntervalRef.current = setTimeout(poll, FINAL_POLL_INTERVAL);
+          }
+        }).catch(() => {
+          if (!cancelled) {
+            gamecastIntervalRef.current = setTimeout(poll, FINAL_POLL_INTERVAL);
+          }
+        });
+      };
+
+      poll();
+
+      return () => {
+        cancelled = true;
+        if (gamecastIntervalRef.current) clearTimeout(gamecastIntervalRef.current);
+        gamecastIntervalRef.current = null;
+      };
     }
 
     if (!isLive) return;
@@ -1097,14 +1193,24 @@ export default function Schedule() {
   };
 
   const isGameLive = (game) => {
-    return (
+    if (
       game.status === 'STATUS_IN_PROGRESS' ||
       game.status === 'STATUS_HALFTIME' ||
       game.status === 'STATUS_END_PERIOD' ||
       game.status === 'STATUS_FIRST_HALF' ||
       game.status === 'STATUS_SECOND_HALF' ||
       game.status === 'in_progress'
-    );
+    ) return true;
+
+    // Recently finished games stay sorted with live games for a 5-minute grace period
+    // so the card doesn't jump away while the user is still watching final plays
+    const isFinal = game.status === 'STATUS_FINAL' || game.status === 'final';
+    if (isFinal && recentlyFinishedRef.current.has(game.id)) {
+      const finishedAt = recentlyFinishedRef.current.get(game.id);
+      if (Date.now() - finishedAt < RECENTLY_FINISHED_MS) return true;
+    }
+
+    return false;
   };
 
   // Sort: live games first, then by start time ascending

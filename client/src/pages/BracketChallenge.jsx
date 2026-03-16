@@ -481,18 +481,20 @@ export default function BracketChallenge() {
                         </span>
                       )}
                     </div>
-                    {isCommissioner && member.email && (
-                      <p className="text-xs text-fg/40 mt-0.5 truncate">{member.email}</p>
+                    {member.email && (
+                      <p className="text-sm text-fg/40 mt-0.5 truncate">{member.email}</p>
                     )}
-                    <div className="flex items-center gap-2 text-xs text-fg/40 mt-0.5">
-                      {bracketCount > 0 ? (
-                        <span className="text-emerald-400">{bracketCount} bracket{bracketCount !== 1 ? 's' : ''} submitted</span>
-                      ) : (
-                        <span>No brackets submitted</span>
-                      )}
-                    </div>
                   </div>
                 </div>
+
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <div className="text-sm text-fg/40 text-right">
+                    {bracketCount > 0 ? (
+                      <span className="text-emerald-400">{bracketCount} bracket{bracketCount !== 1 ? 's' : ''} submitted</span>
+                    ) : (
+                      <span>No brackets submitted</span>
+                    )}
+                  </div>
 
                 {/* Payment toggle (commissioner only, when entry fee > 0) */}
                 {isCommissioner && entryFee > 0 && (
@@ -520,6 +522,7 @@ export default function BracketChallenge() {
                     )}
                   </button>
                 )}
+                </div>
               </div>
             );
           })}

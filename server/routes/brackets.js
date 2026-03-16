@@ -136,6 +136,22 @@ router.get('/challenges/league/:leagueId', authMiddleware, async (req, res) => {
     const challenge = await db.getOne('SELECT * FROM bracket_challenges WHERE league_id = $1 ORDER BY season DESC LIMIT 1', [req.params.leagueId]);
     if (!challenge) return res.json({ challenge: null });
 
+    // Auto-refresh tournament data if stale (fewer than 64 teams means bracket wasn't released yet when challenge was created)
+    const storedTeams = Object.keys(challenge.tournament_data?.teams || {}).length;
+    if (storedTeams < 64) {
+      try {
+        const freshData = await getTournamentBracket(challenge.season);
+        const freshTeams = Object.keys(freshData.teams || {}).length;
+        if (freshTeams >= 64) {
+          await db.query('UPDATE bracket_challenges SET tournament_data = $1 WHERE id = $2', [JSON.stringify(freshData), challenge.id]);
+          challenge.tournament_data = freshData;
+          console.log(`Refreshed tournament data for challenge ${challenge.id}: ${storedTeams} → ${freshTeams} teams`);
+        }
+      } catch (refreshErr) {
+        console.error('Failed to refresh tournament data:', refreshErr.message);
+      }
+    }
+
     // Get user's brackets
     const myBrackets = await db.getAll('SELECT * FROM brackets WHERE challenge_id = $1 AND user_id = $2 ORDER BY bracket_number', [challenge.id, user.id]);
 
@@ -165,6 +181,22 @@ router.get('/challenges/:challengeId', authMiddleware, async (req, res) => {
 
     const challenge = await db.getOne('SELECT * FROM bracket_challenges WHERE id = $1', [req.params.challengeId]);
     if (!challenge) return res.status(404).json({ error: 'Challenge not found' });
+
+    // Auto-refresh tournament data if stale
+    const storedTeams = Object.keys(challenge.tournament_data?.teams || {}).length;
+    if (storedTeams < 64) {
+      try {
+        const freshData = await getTournamentBracket(challenge.season);
+        const freshTeams = Object.keys(freshData.teams || {}).length;
+        if (freshTeams >= 64) {
+          await db.query('UPDATE bracket_challenges SET tournament_data = $1 WHERE id = $2', [JSON.stringify(freshData), challenge.id]);
+          challenge.tournament_data = freshData;
+          console.log(`Refreshed tournament data for challenge ${challenge.id}: ${storedTeams} → ${freshTeams} teams`);
+        }
+      } catch (refreshErr) {
+        console.error('Failed to refresh tournament data:', refreshErr.message);
+      }
+    }
 
     const myBrackets = await db.getAll('SELECT * FROM brackets WHERE challenge_id = $1 AND user_id = $2 ORDER BY bracket_number', [challenge.id, user.id]);
     const results = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);

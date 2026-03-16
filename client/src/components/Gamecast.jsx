@@ -127,42 +127,42 @@ function parseClockToSeconds(displayValue) {
  * getMinDisplayTime — returns the minimum time (ms) a play should stay on screen
  * before the next play is revealed. Based on real game flow:
  *
- *   Scoring play (made shot)  → 3.0s  (celebration, inbound, bring ball up court)
- *   Defensive rebound         → 2.5s  (full court transition to other end)
- *   Missed shot               → 2.0s  (rebound scramble follows)
- *   Block                     → 2.0s  (recovery/scramble after block)
- *   Turnover / steal          → 2.0s  (transition play to other end)
- *   Offensive rebound         → 1.5s  (action stays near the basket)
- *   Foul                      → 1.5s  (stoppage, but quick)
- *   Everything else           → 1.5s  (default)
+ *   Scoring play (made shot)  → 5.0s  (celebration, inbound, bring ball up court)
+ *   Defensive rebound         → 4.0s  (full court transition to other end)
+ *   Missed shot               → 4.0s  (rebound scramble follows)
+ *   Block                     → 3.0s  (recovery/scramble after block)
+ *   Turnover / steal          → 3.0s  (transition play to other end)
+ *   Offensive rebound         → 3.0s  (action stays near the basket)
+ *   Foul                      → 3.0s  (stoppage)
+ *   Everything else           → 2.0s  (default)
  */
 function getMinDisplayTime(play) {
-  if (!play) return 1500;
+  if (!play) return 2000;
   const tid = String(play.typeId || play.type?.id || '');
   const text = play.text?.toLowerCase() || '';
 
   // Scoring play — longest hold (inbound + bring ball up)
-  if (play.scoringPlay) return 3000;
+  if (play.scoringPlay) return 5000;
 
   // Defensive rebound — full court transition
-  if (tid === '155' || (text.includes('defensive') && text.includes('rebound'))) return 2500;
+  if (tid === '155' || (text.includes('defensive') && text.includes('rebound'))) return 4000;
 
   // Missed shot
-  if (play.shootingPlay && !play.scoringPlay) return 2000;
+  if (play.shootingPlay && !play.scoringPlay) return 4000;
 
   // Block
-  if (text.includes('block')) return 2000;
+  if (text.includes('block')) return 3000;
 
   // Turnover / steal — transition play
-  if (TURNOVER_IDS.has(tid) || text.includes('turnover') || text.includes('steal')) return 2000;
+  if (TURNOVER_IDS.has(tid) || text.includes('turnover') || text.includes('steal')) return 3000;
 
   // Offensive rebound — action stays near basket
-  if (tid === '156' || (text.includes('offensive') && text.includes('rebound'))) return 1500;
+  if (tid === '156' || (text.includes('offensive') && text.includes('rebound'))) return 3000;
 
   // Foul
-  if (FOUL_IDS.has(tid) || text.includes('foul')) return 1500;
+  if (FOUL_IDS.has(tid) || text.includes('foul')) return 3000;
 
-  return 1500;
+  return 2000;
 }
 
 /**
@@ -188,8 +188,8 @@ function getMinDisplayTime(play) {
  */
 function computeRevealTimings(newPlays) {
   const DEFAULT_GAP = 3.0;     // seconds, used for cross-period or missing clock data
-  const MIN_DELAY = 1500;      // ms — fastest a play can be shown (must be readable)
-  const MAX_DELAY = 6000;      // ms — longest a single play holds before the next
+  const MIN_DELAY = 2000;      // ms — fastest a play can be shown (must be readable)
+  const MAX_DELAY = 8000;      // ms — longest a single play holds before the next
   const SCALE_FACTOR = 150;    // ms per game-second (e.g. 10 game-sec = 1.5s display)
 
   if (newPlays.length === 0) return [];

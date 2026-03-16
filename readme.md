@@ -149,6 +149,14 @@ The baseline timer resets after each early fetch to avoid redundant requests.
 
 **Automatic cadence adjustment:** The polling useEffect depends on the live game state. When the game status changes (e.g., `STATUS_HALFTIME` → `STATUS_IN_PROGRESS`), the effect re-runs and automatically tightens or loosens the polling interval.
 
+### End-of-game handling
+
+ESPN's scoreboard endpoint reports a game as final *before* the play-by-play endpoint has all the final plays. Without special handling, the socket update would immediately stop Gamecast polling and the game card would re-sort away from the user mid-animation.
+
+**Recently finished grace period (5 min):** When a game goes final, it's tracked in a `recentlyFinishedRef` map with a timestamp. `isGameLive()` returns `true` for games finished less than 5 minutes ago, so they stay sorted at the top of the schedule and the card doesn't jump position. After 5 minutes, the game sorts with other final games.
+
+**Data-driven polling stop:** When the scoreboard says final, Gamecast polling continues at a relaxed 6s interval until the fetched play-by-play data contains the actual "End of Game" play (ESPN typeId `412` with game-ending text like "End of Game", "End of 4th Quarter", "End of 2nd Half", or "End of Overtime"). This is the only reliable signal that ESPN has finished propagating all plays. The recently-finished grace period acts as a fallback safety net in case the end-of-game marker never appears.
+
 ### Server: Cache layers
 
 | Data | Cache TTL | Notes |

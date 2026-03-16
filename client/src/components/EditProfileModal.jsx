@@ -169,12 +169,12 @@ export default function EditProfileModal({ onClose }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50">
+      <div className="fixed inset-0 z-[52]">
         <div
           className="absolute inset-0 bg-black/60 backdrop-blur-sm"
           onClick={onClose}
         />
-        <div className="absolute inset-0 overflow-y-auto flex justify-center p-4">
+        <div className="absolute inset-0 overflow-y-auto flex justify-center p-4 pb-20">
         <div className="relative bg-elevated border border-fg/10 rounded-2xl w-full max-w-md p-6 animate-in my-auto h-fit">
           {/* Header */}
           <div className="flex items-center justify-between mb-5">

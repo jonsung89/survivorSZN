@@ -160,8 +160,8 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="fixed inset-0 bg-nfl-dark z-50 overflow-y-auto">
-      <div className="min-h-full flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-nfl-dark z-[52] overflow-y-auto">
+      <div className="min-h-full flex items-center justify-center p-4 pb-20">
       <div className="w-full max-w-md my-8">
         {/* Progress indicator */}
         <div className="flex justify-center gap-2 mb-8">

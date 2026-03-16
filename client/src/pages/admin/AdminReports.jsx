@@ -52,14 +52,14 @@ export default function AdminReports() {
 
   useEffect(() => { fetchReports(); }, [season]);
 
-  const handleGenerateAll = async () => {
+  const handleGenerate = async (force) => {
     if (generating) return;
     setGenerating(true);
     abortRef.current = false;
-    showToast('Starting report generation for all teams...', 'info');
+    showToast(force ? 'Regenerating all reports...' : 'Generating missing reports...', 'info');
 
     try {
-      const result = await adminAPI.generateReports({ season, force: false });
+      const result = await adminAPI.generateReports({ season, force });
       showToast(`Generated ${result.generated || 0} reports. ${result.failed || 0} failed.`, result.failed ? 'error' : 'success');
       fetchReports();
     } catch (err) {
@@ -123,12 +123,21 @@ export default function AdminReports() {
           </select>
 
           <button
-            onClick={handleGenerateAll}
-            disabled={generating}
+            onClick={() => handleGenerate(false)}
+            disabled={generating || generated === total}
             className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
-            {generating ? 'Generating...' : 'Generate All'}
+            {generating ? 'Generating...' : `Generate Missing (${total - generated})`}
+          </button>
+
+          <button
+            onClick={() => handleGenerate(true)}
+            disabled={generating}
+            className="flex items-center gap-2 px-4 py-2 bg-surface border border-fg/10 hover:bg-fg/5 disabled:opacity-50 text-fg rounded-lg text-sm font-medium transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
+            Regenerate All
           </button>
         </div>
       </div>

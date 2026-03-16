@@ -16,6 +16,58 @@ export default function AdminReports() {
   const [report, setReport] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportTab, setReportTab] = useState('full');
+  const [generationProgress, setGenerationProgress] = useState(null); // { completed, total, current }
+  const pollRef = useRef(null);
+  const generationStartRef = useRef(null);
+
+  // Poll reports during generation to show live progress
+  const startPolling = (totalToGenerate) => {
+    generationStartRef.current = new Date();
+    setGenerationProgress({ completed: 0, total: totalToGenerate, current: null });
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const result = await adminAPI.getReports(season);
+        if (!result?.teams) return;
+
+        // Count how many were generated after we started
+        const startTime = generationStartRef.current;
+        const newlyGenerated = result.teams.filter(t =>
+          t.generatedAt && new Date(t.generatedAt) >= startTime
+        );
+
+        // Find the most recently generated team name
+        const latest = result.teams
+          .filter(t => t.generatedAt && new Date(t.generatedAt) >= startTime)
+          .sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt))[0];
+
+        setGenerationProgress({
+          completed: newlyGenerated.length,
+          total: totalToGenerate,
+          current: latest?.name || latest?.abbreviation || null,
+        });
+
+        // Update the main data so cards refresh in real-time
+        setData(result);
+      } catch (err) {
+        // Ignore polling errors
+      }
+    }, 3000);
+  };
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    setGenerationProgress(null);
+    generationStartRef.current = null;
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
 
   const viewReport = async (team) => {
     if (!team.hasReport) return;
@@ -56,7 +108,9 @@ export default function AdminReports() {
     if (generating) return;
     setGenerating(true);
     abortRef.current = false;
-    showToast(force ? 'Regenerating all reports...' : 'Generating missing reports...', 'info');
+
+    const totalToGenerate = force ? total : (total - generated);
+    startPolling(totalToGenerate);
 
     try {
       const result = await adminAPI.generateReports({ season, force });
@@ -65,6 +119,7 @@ export default function AdminReports() {
     } catch (err) {
       showToast('Failed to generate reports: ' + err.message, 'error');
     } finally {
+      stopPolling();
       setGenerating(false);
     }
   };
@@ -144,11 +199,28 @@ export default function AdminReports() {
 
       {/* Progress bar */}
       {total > 0 && (
-        <div className="bg-fg/5 rounded-full h-2 mb-6 overflow-hidden">
-          <div
-            className="bg-amber-400 h-full rounded-full transition-all duration-500"
-            style={{ width: `${pct}%` }}
-          />
+        <div className="mb-6">
+          <div className="bg-fg/5 rounded-full h-2 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${generating ? 'bg-amber-400 animate-pulse' : 'bg-amber-400'}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          {generationProgress && (
+            <div className="flex items-center justify-between mt-2">
+              <p className="text-sm text-fg/60">
+                Generating: {generationProgress.completed} / {generationProgress.total}
+                {generationProgress.current && (
+                  <span className="text-fg/40 ml-2">— last: {generationProgress.current}</span>
+                )}
+              </p>
+              <p className="text-sm text-fg/40">
+                {generationProgress.total > 0
+                  ? Math.round((generationProgress.completed / generationProgress.total) * 100)
+                  : 0}%
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -160,14 +232,19 @@ export default function AdminReports() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {data.teams.map((team) => (
+          {data.teams.map((team) => {
+            const justUpdated = generationStartRef.current && team.generatedAt &&
+              new Date(team.generatedAt) >= generationStartRef.current;
+            return (
             <div
               key={team.id}
               onClick={() => viewReport(team)}
               className={`bg-surface rounded-xl border p-4 flex items-center gap-3 transition-colors ${
-                team.hasReport
-                  ? 'border-fg/5 cursor-pointer hover:border-fg/20 hover:bg-fg/[0.02]'
-                  : 'border-amber-400/20'
+                justUpdated
+                  ? 'border-emerald-500/30 bg-emerald-500/[0.03]'
+                  : team.hasReport
+                    ? 'border-fg/5 cursor-pointer hover:border-fg/20 hover:bg-fg/[0.02]'
+                    : 'border-amber-400/20'
               }`}
             >
               {/* Team logo */}
@@ -223,7 +300,8 @@ export default function AdminReports() {
                 <RefreshCw className={`w-4 h-4 ${generatingTeamId === team.id ? 'animate-spin' : ''}`} />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -429,12 +429,18 @@ async function generateConciseReport(teamId, teamName, detailedReport) {
 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 150,
+      max_tokens: 1024,
       messages: [{
         role: 'user',
         content: `Condense this scouting report into a punchy 2-3 sentence TL;DR. Keep the most important insights — playing style, biggest strength, biggest concern, and tournament outlook. Be direct and specific. Use **bold** for key stats. Do NOT prefix with "TL;DR:" or any label — just write the sentences directly.\n\nTEAM: ${teamName}\n\nDETAILED REPORT:\n${detailedReport}`,
       }],
     });
+
+    // If truncated, the response is incomplete — don't use it
+    if (message.stop_reason === 'max_tokens') {
+      console.warn(`[AI Concise] Response truncated for ${teamName}, skipping`);
+      return null;
+    }
 
     const concise = message.content?.[0]?.text || null;
     if (concise) {

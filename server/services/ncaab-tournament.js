@@ -640,7 +640,8 @@ async function getTeamBreakdown(teamId, season) {
 
   // Parse key players from roster, then enrich with per-player stats
   const rawPlayers = parseKeyPlayers(rosterData, statsData);
-  const keyPlayers = await enrichPlayersWithStats(rawPlayers, 5);
+  // Fetch stats for top 15 roster players, then composite score picks the best 5
+  const keyPlayers = await enrichPlayersWithStats(rawPlayers, 15);
 
   // Parse news headlines
   const headlines = parseNews(newsData);
@@ -807,7 +808,7 @@ function parseKeyPlayers(rosterData, statsData) {
     });
   }
 
-  return players.slice(0, 10);
+  return players;
 }
 
 /**
@@ -855,19 +856,31 @@ async function enrichPlayersWithStats(players, maxPlayers = 5) {
     toFetch[i].stats = parsed;
   }
 
-  // Sort by PPG descending (players with stats first, then those without)
+  // Sort by composite impact score (not just PPG)
+  // Weights reflect relative value of each stat in college basketball
+  const computeImpactScore = (s) => {
+    if (!s) return 0;
+    const ppg = parseFloat(s.ppg) || 0;
+    const rpg = parseFloat(s.rpg) || 0;
+    const apg = parseFloat(s.apg) || 0;
+    const spg = parseFloat(s.spg) || 0;
+    const bpg = parseFloat(s.bpg) || 0;
+    const mpg = parseFloat(s.mpg) || 0;
+    // Composite: points + weighted rebounds/assists/stocks + minutes bonus
+    return ppg + (rpg * 1.2) + (apg * 1.5) + (spg * 2.0) + (bpg * 2.0) + (mpg * 0.3);
+  };
+
   const enriched = players.map(p => {
     const match = toFetch.find(t => t.id === p.id);
     return match || p;
   });
 
   enriched.sort((a, b) => {
-    const aPpg = parseFloat(a.stats?.ppg) || 0;
-    const bPpg = parseFloat(b.stats?.ppg) || 0;
-    return bPpg - aPpg;
+    return computeImpactScore(b.stats) - computeImpactScore(a.stats);
   });
 
-  return enriched;
+  // Return top 5 most impactful players
+  return enriched.slice(0, 5);
 }
 
 function parseNews(newsData) {

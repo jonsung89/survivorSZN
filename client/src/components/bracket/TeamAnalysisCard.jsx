@@ -176,21 +176,19 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                   {/* Stats line — directly under the name */}
                   {player.stats?.ppg && (
                     <>
-                      {/* Mobile: compact PTS / REB / AST */}
-                      <div className="flex items-center gap-3 mt-0.5 md:hidden">
-                        <span className="text-sm font-mono text-fg/60">
-                          <span className="text-fg/80 font-semibold">{player.stats.ppg}</span> <span className="text-fg/50">PTS</span>
-                        </span>
-                        {player.stats.rpg && (
-                          <span className="text-sm font-mono text-fg/60">
-                            <span className="text-fg/80 font-semibold">{player.stats.rpg}</span> <span className="text-fg/50">REB</span>
+                      {/* Mobile: compact stat line */}
+                      <div className="flex items-center gap-3 mt-0.5 md:hidden flex-wrap">
+                        {[
+                          { val: player.stats.ppg, label: 'PTS' },
+                          { val: player.stats.rpg, label: 'REB' },
+                          { val: player.stats.apg, label: 'AST' },
+                          { val: player.stats.spg, label: 'STL' },
+                          { val: player.stats.bpg, label: 'BLK' },
+                        ].filter(s => s.val && parseFloat(s.val) > 0).map(s => (
+                          <span key={s.label} className="text-sm font-mono text-fg/60">
+                            <span className="text-fg/80 font-semibold">{s.val}</span> <span className="text-fg/50">{s.label}</span>
                           </span>
-                        )}
-                        {player.stats.apg && (
-                          <span className="text-sm font-mono text-fg/60">
-                            <span className="text-fg/80 font-semibold">{player.stats.apg}</span> <span className="text-fg/50">AST</span>
-                          </span>
-                        )}
+                        ))}
                       </div>
                       {/* Desktop: fuller stat line */}
                       <div className="hidden md:flex items-center gap-4 mt-0.5">
@@ -198,9 +196,11 @@ export default function TeamAnalysisCard({ team, teamColor, season }) {
                           { val: player.stats.ppg, label: 'PTS' },
                           { val: player.stats.rpg, label: 'REB' },
                           { val: player.stats.apg, label: 'AST' },
+                          { val: player.stats.spg, label: 'STL' },
+                          { val: player.stats.bpg, label: 'BLK' },
                           { val: player.stats.fgPct, label: 'FG%', suffix: '%' },
                           { val: player.stats.mpg, label: 'MIN' },
-                        ].filter(s => s.val).map(s => (
+                        ].filter(s => s.val && parseFloat(s.val) > 0).map(s => (
                           <span key={s.label} className="text-sm font-mono text-fg/60">
                             <span className="text-fg/80 font-semibold">{s.val}{s.suffix && !String(s.val).includes('%') ? s.suffix : ''}</span>{' '}
                             <span className="text-fg/50 text-sm">{s.label}</span>

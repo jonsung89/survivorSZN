@@ -276,17 +276,31 @@ export default function Schedule() {
   const recentlyFinishedRef = useRef(new Map());
 
 
-  // When games transition to final, record them in recentlyFinishedRef.
-  // Clean up entries older than RECENTLY_FINISHED_MS so the map doesn't grow forever.
+  // Track previous game statuses so we can detect live → final transitions.
+  // Only games that we *witnessed* go from a live status to final get the grace period.
+  // Games that are already final on page load are NOT treated as recently finished.
+  const prevGameStatusesRef = useRef(new Map());
   useEffect(() => {
     if (!liveGames.length) return;
+    const prevStatuses = prevGameStatusesRef.current;
     const finished = recentlyFinishedRef.current;
+    const LIVE_STATUSES = new Set([
+      'STATUS_IN_PROGRESS', 'STATUS_HALFTIME', 'STATUS_END_PERIOD',
+      'STATUS_FIRST_HALF', 'STATUS_SECOND_HALF', 'in_progress'
+    ]);
+
     for (const game of liveGames) {
       const isFinal = game.status === 'STATUS_FINAL' || game.status === 'final';
-      if (isFinal && !finished.has(game.id)) {
+      const prevStatus = prevStatuses.get(game.id);
+
+      // Only mark as recently finished if we saw it transition from live → final
+      if (isFinal && prevStatus && LIVE_STATUSES.has(prevStatus) && !finished.has(game.id)) {
         finished.set(game.id, Date.now());
       }
+
+      prevStatuses.set(game.id, game.status);
     }
+
     // Prune expired entries
     const now = Date.now();
     for (const [id, ts] of finished) {

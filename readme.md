@@ -155,7 +155,7 @@ ESPN's scoreboard endpoint reports a game as final *before* the play-by-play end
 
 **Recently finished grace period (5 min):** When a game goes final, it's tracked in a `recentlyFinishedRef` map with a timestamp. `isGameLive()` returns `true` for games finished less than 5 minutes ago, so they stay sorted at the top of the schedule and the card doesn't jump position. After 5 minutes, the game sorts with other final games.
 
-**Data-driven polling stop:** When the scoreboard says final, Gamecast polling continues at a relaxed 6s interval until the fetched play-by-play data contains the actual "End of Game" play (ESPN typeId `412` with game-ending text like "End of Game", "End of 4th Quarter", "End of 2nd Half", or "End of Overtime"). This is the only reliable signal that ESPN has finished propagating all plays. The recently-finished grace period acts as a fallback safety net in case the end-of-game marker never appears.
+**Data-driven polling stop:** When the scoreboard says final, Gamecast polling continues at a relaxed 6s interval until the fetched play-by-play data contains the actual "End of Game" play (ESPN typeId `402` for "End Game", or typeId `412` with final-period text like "End of 4th Quarter", "End of 2nd Half", or "End of Overtime"). This is the only reliable signal that ESPN has finished propagating all plays. The recently-finished grace period acts as a fallback safety net in case the end-of-game marker never appears.
 
 ### Server: Cache layers
 

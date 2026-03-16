@@ -393,6 +393,7 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
   const [banner, setBanner] = useState(null);
   const [showDebug, setShowDebug] = useState(false);
   const [showDebugDots, setShowDebugDots] = useState(true); // toggle for court reference dots (only visible when debug is on)
+  const [debugPlayJson, setDebugPlayJson] = useState(null); // play object to show in JSON debug dialog
   const [prevMarker, setPrevMarker] = useState(null);       // fading-out ghost of previous court marker
   const prevMarkerTimerRef = useRef(null);
   const feedRef = useRef(null);
@@ -1102,7 +1103,9 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
                 <button
                   onClick={() => setShowDebugDots(d => !d)}
                   className={`px-2 py-0.5 text-[10px] font-mono rounded transition-colors ${
-                    showDebugDots ? 'bg-pink-500/20 text-pink-400 border border-pink-500/40' : 'bg-fg/5 text-fg/30 border border-fg/10'
+                    showDebugDots
+                      ? (isDark ? 'bg-pink-500/20 text-pink-400 border border-pink-500/40' : 'bg-gray-800 text-white border border-gray-900')
+                      : 'bg-fg/5 text-fg/30 border border-fg/10'
                   }`}
                 >
                   DOTS
@@ -1111,7 +1114,9 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
               <button
                 onClick={() => setShowDebug(d => !d)}
                 className={`px-2 py-0.5 text-[10px] font-mono rounded transition-colors ${
-                  showDebug ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-fg/5 text-fg/30 border border-fg/10'
+                  showDebug
+                    ? (isDark ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-gray-800 text-white border border-gray-900')
+                    : 'bg-fg/5 text-fg/30 border border-fg/10'
                 }`}
               >
                 DEBUG
@@ -1129,16 +1134,22 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
         {showDebug && (gamecastDebug?.socketEvents?.length > 0 || gamecastDebug?.fetchEvents?.length > 0) && (
           <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
             {/* Left column: Socket events */}
-            <div className="px-3 py-1.5 bg-purple-500/10 border border-purple-500/30 rounded text-[11px] font-mono space-y-1 max-h-[140px] overflow-y-auto">
-              <div className="text-purple-400 font-bold text-[10px] uppercase tracking-wide mb-0.5">
+            <div className={`px-3 py-1.5 border rounded text-[11px] font-mono space-y-1 max-h-[140px] overflow-y-auto ${
+              isDark ? 'bg-purple-500/10 border-purple-500/30' : 'bg-white border-gray-200'
+            }`}>
+              <div className={`font-bold text-[10px] uppercase tracking-wide mb-0.5 ${isDark ? 'text-purple-400' : 'text-gray-900'}`}>
                 Socket Updates
               </div>
               {(gamecastDebug.socketEvents || []).length === 0 && (
-                <div className="text-purple-300/30">Waiting for events...</div>
+                <div className={isDark ? 'text-purple-300/30' : 'text-gray-400'}>Waiting for events...</div>
               )}
               {(gamecastDebug.socketEvents || []).map((evt, i) => (
-                <div key={evt.time + '-' + i} className={`flex items-start gap-2 ${i === 0 ? 'text-purple-300' : 'text-purple-300/50'}`}>
-                  <span className="flex-shrink-0 text-purple-400/60">
+                <div key={evt.time + '-' + i} className={`flex items-start gap-2 ${
+                  i === 0
+                    ? (isDark ? 'text-purple-300' : 'text-gray-900')
+                    : (isDark ? 'text-purple-300/50' : 'text-gray-500')
+                }`}>
+                  <span className={`flex-shrink-0 ${isDark ? 'text-purple-400/60' : 'text-gray-400'}`}>
                     {new Date(evt.time).toLocaleTimeString()}
                   </span>
                   <span className="flex-1">
@@ -1151,14 +1162,16 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
             </div>
 
             {/* Right column: Fetch history + countdown */}
-            <div className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded text-[11px] font-mono space-y-1 max-h-[140px] overflow-y-auto">
-              <div className="text-amber-400 font-bold text-[10px] uppercase tracking-wide mb-0.5">
+            <div className={`px-3 py-1.5 border rounded text-[11px] font-mono space-y-1 max-h-[140px] overflow-y-auto ${
+              isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-white border-gray-200'
+            }`}>
+              <div className={`font-bold text-[10px] uppercase tracking-wide mb-0.5 ${isDark ? 'text-amber-400' : 'text-gray-900'}`}>
                 Gamecast Fetches
               </div>
               {/* Live countdown to next fetch */}
               {gamecastDebug?.nextFetchTime && (
-                <div className="text-amber-400 mb-1">
-                  Next fetch: <span className="text-amber-300 font-bold">
+                <div className={`mb-1 ${isDark ? 'text-amber-400' : 'text-gray-700'}`}>
+                  Next fetch: <span className={`font-bold ${isDark ? 'text-amber-300' : 'text-gray-900'}`}>
                     {debugCountdown != null ? `${(debugCountdown / 1000).toFixed(1)}s` : '—'}
                   </span>
                 </div>
@@ -1170,37 +1183,37 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
 
                 return (
                   <div key={evt.time + '-' + i} className={`flex items-center gap-2 ${i === 0 ? 'font-bold' : ''}`}>
-                    <span className="text-amber-400/60 flex-shrink-0">
+                    <span className={`flex-shrink-0 ${isDark ? 'text-amber-400/60' : 'text-gray-400'}`}>
                       {new Date(evt.time).toLocaleTimeString()}
                     </span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
                       evt.trigger === 'score-update'
-                        ? 'bg-green-500/20 text-green-400 border border-green-500/40'
-                        : 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                        ? (isDark ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-green-600 text-white border-green-700')
+                        : (isDark ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' : 'bg-blue-600 text-white border-blue-700')
                     }`}>
                       {evt.trigger === 'score-update' ? 'socket' : 'timer'}
                     </span>
                     {/* Number of new plays received in this fetch */}
                     {evt.newPlays > 0 && (
-                      <span className="text-emerald-400 text-[10px] font-bold">
+                      <span className={`text-[10px] font-bold ${isDark ? 'text-emerald-400' : 'text-gray-900'}`}>
                         +{evt.newPlays} play{evt.newPlays !== 1 ? 's' : ''}
                       </span>
                     )}
                     {/* How stale the first new play is (seconds between play wallclock and fetch time) */}
                     {evt.staleSec != null && (
-                      <span className="text-orange-400/70 text-[10px]">
+                      <span className={`text-[10px] ${isDark ? 'text-orange-400/70' : 'text-gray-600'}`}>
                         {evt.staleSec}s ago
                       </span>
                     )}
                     {/* Show delay duration when fetch was queued due to debounce */}
                     {evt.delayed && (
-                      <span className="text-yellow-400/70 text-[10px]">
+                      <span className={`text-[10px] ${isDark ? 'text-yellow-400/70' : 'text-gray-600'}`}>
                         delayed {evt.delayed}s
                       </span>
                     )}
                     {/* Time since previous fetch */}
                     {gap && (
-                      <span className="text-amber-400/50 text-xs">
+                      <span className={`text-xs ${isDark ? 'text-amber-400/50' : 'text-gray-400'}`}>
                         +{gap}s
                       </span>
                     )}
@@ -1283,13 +1296,22 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
                   <p className="text-sm text-fg/70 leading-snug mt-0.5 line-clamp-2">
                     {play.text || play.description || ''}
                   </p>
-                  {/* Debug: show raw ESPN coordinates for each play (green = has coords, red = none) */}
+                  {/* Debug: show raw ESPN coordinates + JSON inspect button */}
                   {showDebug && (
-                    <p className="text-xs font-mono mt-0.5" style={{ color: play.coordinate ? '#00ff99' : '#ff6666' }}>
-                      {play.coordinate
-                        ? `ESPN (${play.coordinate.x}, ${play.coordinate.y})`
-                        : 'no coords'}
-                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <p className={`text-xs font-mono ${play.coordinate ? (isDark ? 'text-emerald-400' : 'text-emerald-700') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
+                        {play.coordinate
+                          ? `ESPN (${play.coordinate.x}, ${play.coordinate.y})`
+                          : 'no coords'}
+                      </p>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDebugPlayJson(play); }}
+                        className="flex-shrink-0 p-0.5 rounded hover:bg-fg/10 text-fg/30 hover:text-fg/80 transition-colors"
+                        title="View play JSON"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                      </button>
+                    </div>
                   )}
                 </div>
               </button>
@@ -1297,6 +1319,32 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
           })}
           </div>
         </div>
+
+      {/* Debug JSON dialog — shows full prettified play data */}
+      {debugPlayJson && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setDebugPlayJson(null)}
+        >
+          <div
+            className={`relative w-[90vw] max-w-lg max-h-[80vh] rounded-xl border border-fg/10 shadow-2xl flex flex-col ${isDark ? 'bg-gray-900' : 'bg-white'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-fg/10">
+              <span className="text-sm font-medium text-fg/80">Play JSON</span>
+              <button
+                onClick={() => setDebugPlayJson(null)}
+                className="p-1 rounded hover:bg-fg/10 text-fg/40 hover:text-fg/80 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <pre className={`flex-1 overflow-auto p-4 text-xs font-mono whitespace-pre leading-relaxed ${isDark ? 'text-green-400 bg-gray-900' : 'text-gray-800 bg-gray-50'}`}>
+              {JSON.stringify(debugPlayJson, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -446,21 +446,26 @@ export default function Schedule() {
         ? () => scheduleAPI.getGameDetails(selectedSport, expandedGame, { live: true })
         : () => nflAPI.getGameDetails(expandedGame);
 
-      // Check if plays contain the end-of-game marker (typeId 412 with final-period text)
+      // Check if plays contain the end-of-game marker.
+      // ESPN uses typeId 402 (type: "End Game") for the actual game-ending play,
+      // and typeId 412 for end-of-period/half markers. We check for both to be safe.
       const hasEndOfGamePlay = (plays) => {
         if (!plays || plays.length === 0) return false;
         const tail = plays.slice(-5);
         return tail.some(p => {
           const tid = String(p.typeId || p.type?.id || '');
-          if (tid !== '412') return false;
           const text = (p.shortText || p.text || '').toLowerCase();
-          // Match "end of game", "end of 4th quarter", "end of 2nd half", "overtime", etc.
-          // but NOT mid-game markers like "end of 1st quarter" or "halftime"
-          return text.includes('game') ||
-            text.includes('4th') ||
-            text.includes('2nd half') ||
-            text.includes('overtime') ||
-            text.includes('ot');
+          // typeId 402 = "End Game" — the definitive end-of-game play
+          if (tid === '402') return true;
+          // typeId 412 = end-of-period — only counts if it's the final period
+          if (tid === '412') {
+            return text.includes('game') ||
+              text.includes('4th') ||
+              text.includes('2nd half') ||
+              text.includes('overtime') ||
+              text.includes('ot');
+          }
+          return false;
         });
       };
 

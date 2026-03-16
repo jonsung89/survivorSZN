@@ -342,7 +342,7 @@ async function fetchBpiData(teamId, season) {
  */
 async function generateAiScoutingReport(teamData, fallbackSummary) {
   // Read API key from dotenv parsed result (dotenv may not override existing empty env vars)
-  const dotenvResult = require('dotenv').config();
+  const dotenvResult = require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
   const apiKey = dotenvResult.parsed?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return fallbackSummary;
 
@@ -414,7 +414,7 @@ Write the scouting report now using markdown formatting. Use **bold** for key st
  * Cached separately for 12 hours.
  */
 async function generateConciseReport(teamId, teamName, detailedReport) {
-  const dotenvResult = require('dotenv').config();
+  const dotenvResult = require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
   const apiKey = dotenvResult.parsed?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
   if (!apiKey || !detailedReport) return null;
 

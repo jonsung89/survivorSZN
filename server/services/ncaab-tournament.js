@@ -539,7 +539,8 @@ async function generateAllReports(season, { teamId: singleTeamId, force = false 
 
       const { last5, vsTop25 } = parseTeamSchedule(scheduleData, tid);
       const rawPlayers = parseKeyPlayers(rosterData, statsData);
-      const keyPlayers = await enrichPlayersWithStats(rawPlayers, 5);
+      // Fetch stats for all roster players, then composite score picks the best 5
+      const keyPlayers = await enrichPlayersWithStats(rawPlayers, rawPlayers.length);
 
       const templateSummary = generateTeamSummary(basic, seasonStats);
       const fullTeamData = { ...basic, seasonStats, last5, vsTop25, keyPlayers, bpiData };

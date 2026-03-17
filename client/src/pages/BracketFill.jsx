@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil, Save, RotateCcw } from 'lucide-react';
 import { bracketAPI, trackingAPI } from '../api';
+import { trackEvent } from '../utils/analytics';
 import { ROUND_BOUNDARIES } from '../utils/bracketSlots';
 import { useAuth } from '../context/AuthContext';
 
@@ -232,6 +233,7 @@ export default function BracketFill() {
       team2Id: team2?.id || null,
       round: getSlotRound(slot),
     });
+    trackEvent('matchup_detail_open', { slot, round: getSlotRound(slot) });
   }, [picks, tournamentData, getPossibleTeams]);
 
   const handleDialogPick = useCallback((teamId) => {
@@ -527,10 +529,12 @@ export default function BracketFill() {
               team1Id: matchupDialog.team1?.id || null,
               team2Id: matchupDialog.team2?.id || null,
             });
+            trackEvent('matchup_tab_switch', { slot: matchupDialog.slot, tab });
           }}
           onClose={() => {
             const duration = matchupOpenedAtRef.current ? Math.round((Date.now() - matchupOpenedAtRef.current) / 1000) : 0;
             trackingAPI.event('matchup_detail_close', { slot: matchupDialog.slot }, duration);
+            trackEvent('matchup_detail_close', { slot: matchupDialog.slot, duration_seconds: duration });
             matchupOpenedAtRef.current = null;
             setMatchupDialog(null);
           }}

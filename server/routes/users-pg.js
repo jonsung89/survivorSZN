@@ -6,6 +6,49 @@ const { getProvider } = require('../sports');
 const { v4: uuidv4 } = require('uuid');
 const { uploadAvatar, deleteAvatar, isConfigured: isR2Configured } = require('../services/r2');
 
+// Parse device type from user agent string
+function getDeviceType(userAgent) {
+  if (!userAgent) return 'unknown';
+  const ua = userAgent.toLowerCase();
+  if (/mobile|android|iphone|ipod|blackberry|opera mini|iemobile|wpdesktop|windows phone/.test(ua)) return 'mobile';
+  if (/ipad|tablet|playbook|silk/.test(ua)) return 'tablet';
+  return 'desktop';
+}
+
+// Get geolocation from IP (fire-and-forget, non-blocking)
+async function getGeoFromIP(ip) {
+  try {
+    // Skip private/local IPs
+    if (!ip || ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+      return { city: null, region: null, country: null };
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const resp = await fetch(`http://ip-api.com/json/${ip}?fields=city,regionName,countryCode`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!resp.ok) return { city: null, region: null, country: null };
+    const data = await resp.json();
+    return { city: data.city || null, region: data.regionName || null, country: data.countryCode || null };
+  } catch {
+    return { city: null, region: null, country: null };
+  }
+}
+
+// Log a login event (fire-and-forget)
+function logLoginEvent(userId, req, isNewUser) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+  const deviceType = getDeviceType(req.headers['user-agent']);
+
+  // Don't await — run in background so it doesn't slow down login
+  getGeoFromIP(ip).then(geo => {
+    db.run(
+      `INSERT INTO login_events (user_id, ip_address, city, region, country, device_type, is_new_user)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, ip, geo.city, geo.region, geo.country, deviceType, isNewUser]
+    ).catch(err => console.error('Login event log error:', err.message));
+  });
+}
+
 // Sync user from Firebase (called after Firebase auth)
 router.post('/sync', authMiddleware, async (req, res) => {
   try {
@@ -62,6 +105,9 @@ router.post('/sync', authMiddleware, async (req, res) => {
       
       user = await db.getOne('SELECT * FROM users WHERE id = $1', [id]);
     }
+
+    // Log sign-in event (fire-and-forget, doesn't slow down response)
+    logLoginEvent(user.id, req, isNewUser);
 
     res.json({
       id: user.id,

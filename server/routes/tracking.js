@@ -3,6 +3,15 @@ const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 
+// Parse device type from user agent string
+function getDeviceType(userAgent) {
+  if (!userAgent) return 'unknown';
+  const ua = userAgent.toLowerCase();
+  if (/mobile|android|iphone|ipod|blackberry|opera mini|iemobile|wpdesktop|windows phone/.test(ua)) return 'mobile';
+  if (/ipad|tablet|playbook|silk/.test(ua)) return 'tablet';
+  return 'desktop';
+}
+
 // ─── Page View Tracking ─────────────────────────────────────────────────────
 
 router.post('/pageview', authMiddleware, async (req, res) => {
@@ -23,10 +32,12 @@ router.post('/pageview', authMiddleware, async (req, res) => {
       return res.json({ ok: true });
     }
 
+    const deviceType = getDeviceType(req.headers['user-agent']);
+
     // Insert page view (fire-and-forget style, but we await for error handling)
     await db.run(
-      'INSERT INTO page_views (user_id, page_path) VALUES ($1, $2)',
-      [user.id, path.substring(0, 255)]
+      'INSERT INTO page_views (user_id, page_path, device_type) VALUES ($1, $2, $3)',
+      [user.id, path.substring(0, 255), deviceType]
     );
 
     res.json({ ok: true });
@@ -65,15 +76,18 @@ router.post('/event', optionalAuth, async (req, res) => {
       return res.json({ ok: true });
     }
 
+    const deviceType = getDeviceType(req.headers['user-agent']);
+
     await db.run(
-      `INSERT INTO feature_events (user_id, session_id, event_name, event_data, duration_seconds)
-       VALUES ($1, $2, $3, $4, $5)`,
+      `INSERT INTO feature_events (user_id, session_id, event_name, event_data, duration_seconds, device_type)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         userId,
         userId ? null : (sessionId || null),
         event.substring(0, 100),
         JSON.stringify(data || {}),
         typeof duration === 'number' ? Math.round(duration) : null,
+        deviceType,
       ]
     );
 

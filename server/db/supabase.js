@@ -307,6 +307,27 @@ async function initDb() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_feature_events_user ON feature_events(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_feature_events_session ON feature_events(session_id)`);
 
+    // Add device_type column to tracking tables (safe to run repeatedly)
+    await client.query(`ALTER TABLE page_views ADD COLUMN IF NOT EXISTS device_type TEXT`);
+    await client.query(`ALTER TABLE feature_events ADD COLUMN IF NOT EXISTS device_type TEXT`);
+
+    // Login events tracking (sign-in history with geolocation)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS login_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id),
+        ip_address TEXT,
+        city TEXT,
+        region TEXT,
+        country TEXT,
+        device_type TEXT,
+        is_new_user BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_login_events_created ON login_events(created_at)`);
+
     console.log('✅ Supabase database initialized successfully');
   } catch (error) {
     console.error('Database initialization error:', error);

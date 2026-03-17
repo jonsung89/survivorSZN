@@ -506,19 +506,110 @@ router.get('/stats/anonymous-usage', async (req, res) => {
   }
 });
 
+// ─── Device Breakdown ─────────────────────────────────────────────────────────
+
+router.get('/stats/device-breakdown', async (req, res) => {
+  try {
+    const { range = 30 } = req.query;
+    const days = parseInt(range);
+
+    // Overall device split from page_views
+    const pageViewDevices = await db.getAll(`
+      SELECT COALESCE(device_type, 'unknown') as device_type, COUNT(*) as count
+      FROM page_views
+      WHERE created_at > NOW() - INTERVAL '${days} days'
+      GROUP BY COALESCE(device_type, 'unknown')
+      ORDER BY count DESC
+    `);
+
+    // Overall device split from feature_events
+    const eventDevices = await db.getAll(`
+      SELECT COALESCE(device_type, 'unknown') as device_type, COUNT(*) as count
+      FROM feature_events
+      WHERE created_at > NOW() - INTERVAL '${days} days'
+      GROUP BY COALESCE(device_type, 'unknown')
+      ORDER BY count DESC
+    `);
+
+    // Unique users by device from page_views
+    const uniqueUserDevices = await db.getAll(`
+      SELECT COALESCE(device_type, 'unknown') as device_type, COUNT(DISTINCT user_id) as unique_users
+      FROM page_views
+      WHERE created_at > NOW() - INTERVAL '${days} days' AND user_id IS NOT NULL
+      GROUP BY COALESCE(device_type, 'unknown')
+      ORDER BY unique_users DESC
+    `);
+
+    // Daily trend by device type (page views)
+    const dailyTrend = await db.getAll(`
+      SELECT created_at::date as date,
+             COALESCE(device_type, 'unknown') as device_type,
+             COUNT(*) as count
+      FROM page_views
+      WHERE created_at > NOW() - INTERVAL '${days} days'
+      GROUP BY created_at::date, COALESCE(device_type, 'unknown')
+      ORDER BY date
+    `);
+
+    // Transform daily trend into { date, desktop, mobile, tablet } format
+    const trendMap = {};
+    for (const row of dailyTrend) {
+      const dateStr = row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date;
+      if (!trendMap[dateStr]) trendMap[dateStr] = { date: dateStr, desktop: 0, mobile: 0, tablet: 0 };
+      const dt = row.device_type;
+      if (dt === 'desktop' || dt === 'mobile' || dt === 'tablet') {
+        trendMap[dateStr][dt] = parseInt(row.count);
+      }
+    }
+
+    // Top pages by device
+    const topPagesByDevice = await db.getAll(`
+      SELECT page_path, COALESCE(device_type, 'unknown') as device_type, COUNT(*) as count
+      FROM page_views
+      WHERE created_at > NOW() - INTERVAL '${days} days'
+      GROUP BY page_path, COALESCE(device_type, 'unknown')
+      ORDER BY count DESC
+      LIMIT 20
+    `);
+
+    res.json({
+      pageViewDevices: pageViewDevices.map(r => ({ deviceType: r.device_type, count: parseInt(r.count) })),
+      eventDevices: eventDevices.map(r => ({ deviceType: r.device_type, count: parseInt(r.count) })),
+      uniqueUserDevices: uniqueUserDevices.map(r => ({ deviceType: r.device_type, uniqueUsers: parseInt(r.unique_users) })),
+      dailyTrend: Object.values(trendMap).sort((a, b) => a.date.localeCompare(b.date)),
+      topPagesByDevice: topPagesByDevice.map(r => ({ pagePath: r.page_path, deviceType: r.device_type, count: parseInt(r.count) })),
+    });
+  } catch (error) {
+    console.error('Device breakdown error:', error);
+    res.status(500).json({ error: 'Failed to fetch device breakdown' });
+  }
+});
+
 // ─── Users ───────────────────────────────────────────────────────────────────
 
 router.get('/users', async (req, res) => {
   try {
-    const { search = '', page = 1, limit = 25 } = req.query;
+    const { search = '', page = 1, limit = 25, sort = 'last_login_at', order = 'desc' } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Whitelist sortable columns to prevent SQL injection
+    const SORTABLE_COLUMNS = {
+      name: 'u.display_name',
+      email: 'u.email',
+      leagues: 'league_count',
+      last_login_at: 'u.last_login_at',
+      created_at: 'u.created_at',
+    };
+    const sortColumn = SORTABLE_COLUMNS[sort] || 'u.last_login_at';
+    const sortOrder = order === 'asc' ? 'ASC' : 'DESC';
+    const nullsClause = sortOrder === 'DESC' ? 'NULLS LAST' : 'NULLS FIRST';
 
     let whereClause = '';
     const params = [];
 
     if (search) {
       params.push(`%${search}%`);
-      whereClause = `WHERE display_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1`;
+      whereClause = `WHERE display_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1 OR first_name ILIKE $1 OR last_name ILIKE $1`;
     }
 
     const countQuery = `SELECT COUNT(*) as count FROM users ${whereClause}`;
@@ -530,7 +621,7 @@ router.get('/users', async (req, res) => {
               (SELECT COUNT(*) FROM league_members lm WHERE lm.user_id = u.id) as league_count
        FROM users u
        ${whereClause}
-       ORDER BY u.last_login_at DESC NULLS LAST
+       ORDER BY ${sortColumn} ${sortOrder} ${nullsClause}
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       dataParams
     );
@@ -579,6 +670,43 @@ router.get('/users/:id', async (req, res) => {
       [req.params.id]
     );
 
+    // Fetch recent activity (last 10 items)
+    const recentActivity = await db.getAll(`
+      (
+        SELECT 'pageview' as type, page_path as description, NULL as extra, device_type, created_at
+        FROM page_views WHERE user_id = $1
+      )
+      UNION ALL
+      (
+        SELECT 'event' as type, event_name as description, event_data::text as extra, device_type, created_at
+        FROM feature_events WHERE user_id = $1
+      )
+      UNION ALL
+      (
+        SELECT 'chat' as type,
+               CASE WHEN deleted_at IS NOT NULL THEN '[deleted]' ELSE LEFT(message, 80) END as description,
+               json_build_object('leagueId', league_id)::text as extra,
+               NULL as device_type,
+               created_at
+        FROM chat_messages WHERE user_id = $1
+      )
+      UNION ALL
+      (
+        SELECT 'login' as type,
+               CASE
+                 WHEN city IS NOT NULL AND region IS NOT NULL THEN 'Signed in from ' || city || ', ' || region
+                 WHEN country IS NOT NULL THEN 'Signed in from ' || country
+                 ELSE 'Signed in'
+               END as description,
+               json_build_object('ip', ip_address, 'city', city, 'region', region, 'country', country, 'isNewUser', is_new_user)::text as extra,
+               device_type,
+               created_at
+        FROM login_events WHERE user_id = $1
+      )
+      ORDER BY created_at DESC
+      LIMIT 10
+    `, [req.params.id]);
+
     res.json({
       id: user.id,
       displayName: user.display_name,
@@ -603,10 +731,83 @@ router.get('/users/:id', async (req, res) => {
         isCommissioner: l.is_commissioner,
         joinedAt: l.joined_at,
       })),
+      recentActivity: recentActivity.map(a => ({
+        type: a.type,
+        description: a.description,
+        extra: a.extra ? (() => { try { return JSON.parse(a.extra); } catch { return a.extra; } })() : null,
+        deviceType: a.device_type,
+        createdAt: a.created_at,
+      })),
     });
   } catch (error) {
     console.error('Admin user detail error:', error);
     res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// User activity log (paginated)
+router.get('/users/:id/activity', async (req, res) => {
+  try {
+    const { page = 1, limit = 25, type = 'all' } = req.query;
+    const userId = req.params.id;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Build UNION based on type filter
+    const unions = [];
+    const countUnions = [];
+
+    if (type === 'all' || type === 'pageview') {
+      unions.push(`SELECT 'pageview' as type, page_path as description, NULL as extra, device_type, created_at FROM page_views WHERE user_id = $1`);
+      countUnions.push(`SELECT id FROM page_views WHERE user_id = $1`);
+    }
+    if (type === 'all' || type === 'event') {
+      unions.push(`SELECT 'event' as type, event_name as description, event_data::text as extra, device_type, created_at FROM feature_events WHERE user_id = $1`);
+      countUnions.push(`SELECT id FROM feature_events WHERE user_id = $1`);
+    }
+    if (type === 'all' || type === 'chat') {
+      unions.push(`SELECT 'chat' as type, CASE WHEN deleted_at IS NOT NULL THEN '[deleted]' ELSE LEFT(message, 80) END as description, json_build_object('leagueId', league_id)::text as extra, NULL as device_type, created_at FROM chat_messages WHERE user_id = $1`);
+      countUnions.push(`SELECT id FROM chat_messages WHERE user_id = $1`);
+    }
+    if (type === 'all' || type === 'login') {
+      unions.push(`SELECT 'login' as type, CASE WHEN city IS NOT NULL AND region IS NOT NULL THEN 'Signed in from ' || city || ', ' || region WHEN country IS NOT NULL THEN 'Signed in from ' || country ELSE 'Signed in' END as description, json_build_object('ip', ip_address, 'city', city, 'region', region, 'country', country, 'isNewUser', is_new_user)::text as extra, device_type, created_at FROM login_events WHERE user_id = $1`);
+      countUnions.push(`SELECT id FROM login_events WHERE user_id = $1`);
+    }
+
+    if (unions.length === 0) {
+      return res.json({ activities: [], total: 0, page: 1, totalPages: 1 });
+    }
+
+    const unionQuery = unions.join(' UNION ALL ');
+    const countQuery = countUnions.join(' UNION ALL ');
+
+    const [activities, totalResult] = await Promise.all([
+      db.getAll(
+        `SELECT * FROM (${unionQuery}) combined ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+        [userId, parseInt(limit), offset]
+      ),
+      db.getOne(
+        `SELECT COUNT(*) as count FROM (${countQuery}) combined`,
+        [userId]
+      ),
+    ]);
+
+    const total = parseInt(totalResult.count);
+
+    res.json({
+      activities: activities.map(a => ({
+        type: a.type,
+        description: a.description,
+        extra: a.extra ? (() => { try { return JSON.parse(a.extra); } catch { return a.extra; } })() : null,
+        deviceType: a.device_type,
+        createdAt: a.created_at,
+      })),
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit)),
+    });
+  } catch (error) {
+    console.error('Admin user activity error:', error);
+    res.status(500).json({ error: 'Failed to fetch user activity' });
   }
 });
 

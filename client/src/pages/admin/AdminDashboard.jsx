@@ -104,6 +104,7 @@ export default function AdminDashboard() {
   const [scheduleEngagement, setScheduleEngagement] = useState(null);
   const [bracketEngagement, setBracketEngagement] = useState(null);
   const [anonymousUsage, setAnonymousUsage] = useState(null);
+  const [deviceBreakdown, setDeviceBreakdown] = useState(null);
   const chartTheme = useChartTheme();
   const onlineIntervalRef = useRef(null);
 
@@ -130,14 +131,16 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchEngagement = async () => {
       try {
-        const [sched, bracket, anon] = await Promise.all([
+        const [sched, bracket, anon, devices] = await Promise.all([
           adminAPI.getScheduleEngagement(range),
           adminAPI.getBracketEngagement(range),
           adminAPI.getAnonymousUsage(range),
+          adminAPI.getDeviceBreakdown(range),
         ]);
         setScheduleEngagement(sched);
         setBracketEngagement(bracket);
         setAnonymousUsage(anon);
+        setDeviceBreakdown(devices);
       } catch { /* ignore */ }
     };
     fetchEngagement();
@@ -232,6 +235,27 @@ export default function AdminDashboard() {
     name: SPORT_LABELS[r.sportId] || r.sportId?.toUpperCase(),
     count: r.count,
   }));
+
+  // Device breakdown chart data
+  const devicePageViewData = (deviceBreakdown?.pageViewDevices || [])
+    .filter(r => r.deviceType !== 'unknown')
+    .map(r => ({
+      name: r.deviceType.charAt(0).toUpperCase() + r.deviceType.slice(1),
+      count: r.count,
+    }));
+  const deviceUniqueUserData = (deviceBreakdown?.uniqueUserDevices || [])
+    .filter(r => r.deviceType !== 'unknown')
+    .map(r => ({
+      name: r.deviceType.charAt(0).toUpperCase() + r.deviceType.slice(1),
+      count: r.uniqueUsers,
+    }));
+
+  // Compute device percentages for stat display
+  const totalDeviceViews = devicePageViewData.reduce((sum, d) => sum + d.count, 0);
+  const mobileViews = devicePageViewData.find(d => d.name === 'Mobile')?.count || 0;
+  const desktopViews = devicePageViewData.find(d => d.name === 'Desktop')?.count || 0;
+  const mobilePct = totalDeviceViews > 0 ? Math.round((mobileViews / totalDeviceViews) * 100) : 0;
+  const desktopPct = totalDeviceViews > 0 ? Math.round((desktopViews / totalDeviceViews) * 100) : 0;
 
   return (
     <div>
@@ -750,7 +774,70 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Row 10: Recent Signups & Quick Actions */}
+      {/* Row 10: Mobile vs Desktop */}
+      <div className="bg-surface rounded-xl p-5 border border-fg/5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-fg">Mobile vs Desktop</h3>
+          <Monitor className="w-4 h-4 text-fg/30" />
+        </div>
+
+        {/* Summary stats */}
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <p className="text-sm text-fg/40">Mobile</p>
+            <p className="text-2xl font-bold text-fg">{mobilePct}%</p>
+            <p className="text-sm text-fg/30">{mobileViews.toLocaleString()} views</p>
+          </div>
+          <div>
+            <p className="text-sm text-fg/40">Desktop</p>
+            <p className="text-2xl font-bold text-fg">{desktopPct}%</p>
+            <p className="text-sm text-fg/30">{desktopViews.toLocaleString()} views</p>
+          </div>
+          <div>
+            <p className="text-sm text-fg/40">Total</p>
+            <p className="text-2xl font-bold text-fg">{totalDeviceViews.toLocaleString()}</p>
+            <p className="text-sm text-fg/30">page views</p>
+          </div>
+        </div>
+
+        {/* Charts */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm text-fg/40 mb-2">Page Views by Device</p>
+            {devicePageViewData.length > 0 ? (
+              <HorizontalBarChart data={devicePageViewData} />
+            ) : (
+              <div className="h-[120px] flex items-center justify-center text-fg/30 text-sm">No data yet</div>
+            )}
+          </div>
+          <div>
+            <p className="text-sm text-fg/40 mb-2">Unique Users by Device</p>
+            {deviceUniqueUserData.length > 0 ? (
+              <HorizontalBarChart data={deviceUniqueUserData} />
+            ) : (
+              <div className="h-[120px] flex items-center justify-center text-fg/30 text-sm">No data yet</div>
+            )}
+          </div>
+        </div>
+
+        {/* Daily trend */}
+        {deviceBreakdown?.dailyTrend?.length > 0 && (
+          <div>
+            <p className="text-sm text-fg/40 mb-2">Daily Device Trend</p>
+            <DashboardAreaChart
+              data={deviceBreakdown.dailyTrend}
+              dataKeys={[
+                { key: 'desktop', label: 'Desktop', color: chartTheme.colors.primary },
+                { key: 'mobile', label: 'Mobile', color: chartTheme.colors.secondary },
+                { key: 'tablet', label: 'Tablet', color: chartTheme.colors.quaternary },
+              ]}
+              height={160}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Row 11: Recent Signups & Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Recent Signups */}
         <div className="bg-surface rounded-xl p-5 border border-fg/5">

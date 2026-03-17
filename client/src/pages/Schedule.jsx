@@ -16,7 +16,7 @@ import { useScoresSocket } from '../context/ScoresSocketContext';
 import useAnimatedScore from '../hooks/useAnimatedScore';
 import Gamecast from '../components/Gamecast';
 import ShotChart from '../components/ShotChart';
-import { trackSportTabClick, trackGamecastOpen, trackGamecastClose } from '../utils/analytics';
+import { trackSportTabClick, trackGamecastOpen, trackGamecastClose, trackEvent } from '../utils/analytics';
 import { trackingAPI } from '../api';
 
 /** Get today's date as YYYY-MM-DD in local timezone (not UTC) */
@@ -1951,6 +1951,7 @@ export default function Schedule() {
                 onClick={(e) => {
                   e.stopPropagation();
                   trackingAPI.event('game_tab_switch', { gameId: game.id, sportId: selectedSport, tab, fromTab: detailTab });
+                  trackEvent('game_tab_switch', { game_id: game.id, sport_id: selectedSport, tab, from_tab: detailTab });
                   setDetailTab(tab);
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${

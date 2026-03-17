@@ -659,6 +659,14 @@ export const adminAPI = {
     const res = await authFetch(`/admin/stats/anonymous-usage?range=${range}`);
     return res.json();
   },
+  getDeviceBreakdown: async (range = 30) => {
+    const res = await authFetch(`/admin/stats/device-breakdown?range=${range}`);
+    return res.json();
+  },
+  getUserActivity: async (userId, params = {}) => {
+    const res = await authFetch(`/admin/users/${userId}/activity?${new URLSearchParams(params)}`);
+    return res.json();
+  },
 };
 
 // Analytics API (public-facing)
@@ -687,32 +695,39 @@ export const analyticsAPI = {
 // Tracking API (lightweight, fire-and-forget)
 export const trackingAPI = {
   pageView: (path) => {
-    authFetch('/track/pageview', {
-      method: 'POST',
-      body: JSON.stringify({ path }),
-    }).catch(() => {}); // Silently fail
+    import('./utils/consent.js').then(({ shouldTrack }) => {
+      if (!shouldTrack()) return;
+      authFetch('/track/pageview', {
+        method: 'POST',
+        body: JSON.stringify({ path }),
+      }).catch(() => {});
+    }).catch(() => {});
   },
   event: (eventName, data = {}, duration = null) => {
-    const body = { event: eventName, data };
-    if (typeof duration === 'number') body.duration = duration;
+    import('./utils/consent.js').then(({ shouldTrack }) => {
+      if (!shouldTrack()) return;
 
-    const token = getToken();
-    if (!token) {
-      // Non-auth user — use session ID and plain fetch
-      import('./utils/sessionId.js').then(({ getOrCreateSessionId }) => {
-        body.sessionId = getOrCreateSessionId();
-        fetch(`${API_URL}/track/event`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+      const body = { event: eventName, data };
+      if (typeof duration === 'number') body.duration = duration;
+
+      const token = getToken();
+      if (!token) {
+        // Non-auth user — use session ID and plain fetch
+        import('./utils/sessionId.js').then(({ getOrCreateSessionId }) => {
+          body.sessionId = getOrCreateSessionId();
+          fetch(`${API_URL}/track/event`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }).catch(() => {});
         }).catch(() => {});
-      }).catch(() => {});
-      return;
-    }
+        return;
+      }
 
-    authFetch('/track/event', {
-      method: 'POST',
-      body: JSON.stringify(body),
+      authFetch('/track/event', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }).catch(() => {});
     }).catch(() => {});
   },
 };

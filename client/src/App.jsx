@@ -35,6 +35,7 @@ import AdminAnalytics from './pages/admin/AdminAnalytics';
 import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
+import CookieConsentBanner from './components/CookieConsentBanner';
 
 // Protected route wrapper
 function ProtectedRoute({ children }) {
@@ -119,6 +120,7 @@ function AppRoutes() {
   return (
     <>
     <PageViewTracker />
+    <CookieConsentBanner />
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={

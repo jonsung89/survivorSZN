@@ -1,5 +1,6 @@
 import { getAnalytics, logEvent, setUserProperties, setUserId } from 'firebase/analytics';
 import { initializeApp, getApps } from 'firebase/app';
+import { shouldTrack } from './consent';
 
 let analytics = null;
 let isExcluded = false;
@@ -48,7 +49,7 @@ export function setAnalyticsUser(user) {
  * Track a page view.
  */
 export function trackPageView(pageName) {
-  if (!analytics || isExcluded) return;
+  if (!analytics || isExcluded || !shouldTrack()) return;
   logEvent(analytics, 'page_view', {
     page_title: pageName,
   });
@@ -58,7 +59,7 @@ export function trackPageView(pageName) {
  * Track a button click or CTA interaction.
  */
 export function trackClick(buttonId, metadata = {}) {
-  if (!analytics || isExcluded) return;
+  if (!analytics || isExcluded || !shouldTrack()) return;
   logEvent(analytics, 'button_click', {
     button_id: buttonId,
     ...metadata,
@@ -69,7 +70,7 @@ export function trackClick(buttonId, metadata = {}) {
  * Track a sport tab click in the schedule page.
  */
 export function trackSportTabClick(sportId) {
-  if (!analytics || isExcluded) return;
+  if (!analytics || isExcluded || !shouldTrack()) return;
   logEvent(analytics, 'sport_tab_click', {
     sport_id: sportId,
   });
@@ -79,7 +80,7 @@ export function trackSportTabClick(sportId) {
  * Track gamecast open event.
  */
 export function trackGamecastOpen(gameId, sportId) {
-  if (!analytics || isExcluded) return;
+  if (!analytics || isExcluded || !shouldTrack()) return;
   logEvent(analytics, 'gamecast_open', {
     game_id: gameId,
     sport_id: sportId,
@@ -90,7 +91,7 @@ export function trackGamecastOpen(gameId, sportId) {
  * Track gamecast close event with duration.
  */
 export function trackGamecastClose(gameId, sportId, durationSeconds) {
-  if (!analytics || isExcluded) return;
+  if (!analytics || isExcluded || !shouldTrack()) return;
   logEvent(analytics, 'gamecast_close', {
     game_id: gameId,
     sport_id: sportId,
@@ -102,7 +103,7 @@ export function trackGamecastClose(gameId, sportId, durationSeconds) {
  * Track gamecast expand click.
  */
 export function trackGamecastExpand(gameId, section) {
-  if (!analytics || isExcluded) return;
+  if (!analytics || isExcluded || !shouldTrack()) return;
   logEvent(analytics, 'gamecast_expand_click', {
     game_id: gameId,
     section: section,
@@ -113,7 +114,7 @@ export function trackGamecastExpand(gameId, section) {
  * Track theme toggle.
  */
 export function trackThemeToggle(newTheme) {
-  if (!analytics || isExcluded) return;
+  if (!analytics || isExcluded || !shouldTrack()) return;
   logEvent(analytics, 'theme_toggle', {
     new_theme: newTheme,
   });
@@ -126,6 +127,6 @@ export function trackThemeToggle(newTheme) {
  * Track a generic custom event.
  */
 export function trackEvent(eventName, params = {}) {
-  if (!analytics || isExcluded) return;
+  if (!analytics || isExcluded || !shouldTrack()) return;
   logEvent(analytics, eventName, params);
 }

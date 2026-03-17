@@ -13,7 +13,7 @@ export default function PrivacyPolicy() {
       </Link>
 
       <h1 className="text-3xl font-display font-bold text-fg mb-2">Privacy Policy</h1>
-      <p className="text-fg/60 text-sm mb-8">Last updated: March 16, 2026</p>
+      <p className="text-fg/60 text-sm mb-8">Last updated: March 17, 2026</p>
 
       <div className="space-y-8 text-fg/80 text-sm leading-relaxed">
         <section>
@@ -63,14 +63,27 @@ export default function PrivacyPolicy() {
             If you upload a profile picture, it is stored on Cloudflare R2 (cloud storage) and is publicly
             accessible via a unique URL tied to your account.
           </p>
+
+          <h3 className="font-semibold text-fg mt-4 mb-2">Usage Analytics</h3>
+          <p>To understand how our features are used and improve the Service, we collect:</p>
+          <ul className="list-disc pl-5 mt-2 space-y-1">
+            <li>Page views and navigation patterns</li>
+            <li>Feature interactions (which features you use and for how long)</li>
+            <li>Device type (mobile, desktop, or tablet) detected from your browser's user agent</li>
+            <li>Anonymous session identifiers stored in your browser's local storage (for non-authenticated visitors)</li>
+          </ul>
+          <p className="mt-2">
+            This data is used solely for internal analytics and is never shared with third parties for advertising or marketing purposes.
+            Admin users are excluded from analytics tracking.
+          </p>
         </section>
 
         <section>
           <h2 className="text-lg font-semibold text-fg mb-3">3. Information We Do NOT Collect</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li><strong>Payment information:</strong> SurvivorSZN does not process payments or store credit card, bank account, or financial information. Entry fees for leagues are tracked manually by league commissioners and settled outside the platform.</li>
-            <li><strong>Analytics or tracking:</strong> We do not use third-party analytics services (e.g., Google Analytics, Mixpanel) or advertising trackers.</li>
-            <li><strong>Cookies for tracking:</strong> We do not set tracking cookies. We use session storage for temporary UI state only (e.g., whether you've seen the splash screen).</li>
+            <li><strong>Advertising data:</strong> We do not use advertising trackers, retargeting pixels, or share your data with ad networks.</li>
+            <li><strong>Tracking cookies:</strong> We do not set tracking cookies. We use localStorage for preferences and anonymous session identifiers only.</li>
           </ul>
         </section>
 
@@ -91,7 +104,7 @@ export default function PrivacyPolicy() {
           <h2 className="text-lg font-semibold text-fg mb-3">5. Third-Party Services</h2>
           <p>We use the following third-party services:</p>
           <ul className="list-disc pl-5 mt-2 space-y-1">
-            <li><strong>Firebase (Google):</strong> Authentication and user identity management</li>
+            <li><strong>Firebase (Google):</strong> Authentication, user identity management, and usage analytics</li>
             <li><strong>Supabase (PostgreSQL):</strong> Database hosting for user and gameplay data</li>
             <li><strong>Cloudflare R2:</strong> Storage for profile images</li>
             <li><strong>ESPN:</strong> Public sports data (scores, schedules, team information) — no user data is sent to ESPN</li>
@@ -144,13 +157,42 @@ export default function PrivacyPolicy() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-fg mb-3">10. Your Rights</h2>
+          <h2 className="text-lg font-semibold text-fg mb-3">10. Analytics & Consent (GDPR)</h2>
+          <p>
+            We collect anonymous usage analytics to improve the Service, including page views, feature usage, and device type.
+            This data helps us understand which features are popular and where to invest our development effort.
+          </p>
+
+          <h3 className="font-semibold text-fg mt-4 mb-2">For EU/EEA Users</h3>
+          <p>
+            If you are located in the European Union or European Economic Area, we will ask for your explicit consent
+            before collecting analytics data, in compliance with the General Data Protection Regulation (GDPR).
+            You may accept or decline analytics tracking via the consent banner shown on your first visit.
+            If you decline, no analytics data will be collected from your activity.
+          </p>
+          <p className="mt-2">
+            You can change your preference at any time by clearing your browser's local storage for this site,
+            which will cause the consent banner to reappear on your next visit.
+          </p>
+
+          <h3 className="font-semibold text-fg mt-4 mb-2">For Non-EU Users</h3>
+          <p>
+            If you are located outside the EU/EEA, analytics are collected by default as described in this policy.
+            This data is used solely for internal product improvement and is never sold or shared with third parties
+            for advertising or marketing purposes.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-fg mb-3">11. Your Rights</h2>
           <p>Depending on your jurisdiction, you may have the right to:</p>
           <ul className="list-disc pl-5 mt-2 space-y-1">
             <li>Access the personal information we hold about you</li>
             <li>Request correction of inaccurate information</li>
             <li>Request deletion of your personal information</li>
             <li>Object to or restrict certain processing of your data</li>
+            <li>Withdraw consent for analytics tracking (EU/EEA residents, under GDPR)</li>
+            <li>Lodge a complaint with a supervisory authority (EU/EEA residents)</li>
           </ul>
           <p className="mt-2">
             To exercise any of these rights, contact us at{' '}
@@ -159,7 +201,7 @@ export default function PrivacyPolicy() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-fg mb-3">11. Changes to This Policy</h2>
+          <h2 className="text-lg font-semibold text-fg mb-3">12. Changes to This Policy</h2>
           <p>
             We may update this Privacy Policy from time to time. We will notify users of significant changes
             by posting the updated policy on this page with a revised "Last updated" date. Your continued use
@@ -168,7 +210,7 @@ export default function PrivacyPolicy() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-fg mb-3">12. Contact Us</h2>
+          <h2 className="text-lg font-semibold text-fg mb-3">13. Contact Us</h2>
           <p>
             If you have questions about this Privacy Policy, contact us at{' '}
             <a href="mailto:support@survivorszn.com" className="text-accent hover:underline">support@survivorszn.com</a>.

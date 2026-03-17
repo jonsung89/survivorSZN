@@ -42,6 +42,7 @@ export default function BracketChallenge() {
   const [togglingPayment, setTogglingPayment] = useState(null);
   const [chatCollapsed, setChatCollapsed] = useState(true);
   const [tournamentStartTime, setTournamentStartTime] = useState(null);
+  const [tournamentStarted, setTournamentStarted] = useState(false);
   const [lockCountdown, setLockCountdown] = useState(null);
 
   const isCommissioner = league?.commissionerId === user?.id || league?.commissioner_id === user?.id;
@@ -141,6 +142,7 @@ export default function BracketChallenge() {
         try {
           const lb = await bracketAPI.getLeaderboard(challengeData.challenge.id);
           setLeaderboard(lb.leaderboard || []);
+          setTournamentStarted(lb.tournamentStarted || false);
         } catch { /* leaderboard is optional */ }
       }
     } catch (err) {
@@ -577,6 +579,7 @@ export default function BracketChallenge() {
           leaderboard={leaderboard}
           currentUserId={user?.id}
           scoringSystem={scoringSystem}
+          tournamentStarted={tournamentStarted}
           onBracketClick={(bracketId) => navigate(`/league/${leagueId}/bracket/${bracketId}`)}
         />
       )}

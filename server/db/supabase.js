@@ -278,6 +278,35 @@ async function initDb() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_bracket_results_challenge ON bracket_results(challenge_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_scouting_reports_team_season ON scouting_reports(team_id, season)`);
 
+    // Page views tracking
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS page_views (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id),
+        page_path TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_page_views_created ON page_views(created_at)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_page_views_path_created ON page_views(page_path, created_at)`);
+
+    // Feature events tracking (universal event table)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS feature_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id),
+        session_id TEXT,
+        event_name TEXT NOT NULL,
+        event_data JSONB DEFAULT '{}',
+        duration_seconds INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_feature_events_name_created ON feature_events(event_name, created_at)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_feature_events_created ON feature_events(created_at)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_feature_events_user ON feature_events(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_feature_events_session ON feature_events(session_id)`);
+
     console.log('✅ Supabase database initialized successfully');
   } catch (error) {
     console.error('Database initialization error:', error);

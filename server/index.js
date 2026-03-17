@@ -17,6 +17,7 @@ const scheduleRoutes = require('./routes/schedule');
 const bracketRoutes = require('./routes/brackets');
 const adminRoutes = require('./routes/admin');
 const analyticsRoutes = require('./routes/analytics');
+const trackingRoutes = require('./routes/tracking');
 
 // Initialize database
 const { initDb } = require('./db/supabase');
@@ -64,6 +65,7 @@ app.use('/api/schedule', scheduleRoutes);
 app.use('/api/brackets', bracketRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/track', trackingRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

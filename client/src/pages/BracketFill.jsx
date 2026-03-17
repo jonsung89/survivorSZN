@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil, Save, RotateCcw } from 'lucide-react';
-import { bracketAPI } from '../api';
+import { bracketAPI, trackingAPI } from '../api';
 import { ROUND_BOUNDARIES } from '../utils/bracketSlots';
 import { useAuth } from '../context/AuthContext';
 
@@ -49,6 +49,7 @@ export default function BracketFill() {
   const [editName, setEditName] = useState('');
   const [chatCollapsed, setChatCollapsed] = useState(true);
   const [tournamentStarted, setTournamentStarted] = useState(false);
+  const matchupOpenedAtRef = useRef(null);
 
   const saveTimeoutRef = useRef(null);
   const lastSavedPicksRef = useRef('{}');
@@ -224,6 +225,13 @@ export default function BracketFill() {
     }
 
     setMatchupDialog({ slot, team1, team2, team1Possible, team2Possible });
+    matchupOpenedAtRef.current = Date.now();
+    trackingAPI.event('matchup_detail_open', {
+      slot,
+      team1Id: team1?.id || null,
+      team2Id: team2?.id || null,
+      round: getSlotRound(slot),
+    });
   }, [picks, tournamentData, getPossibleTeams]);
 
   const handleDialogPick = useCallback((teamId) => {
@@ -512,7 +520,20 @@ export default function BracketFill() {
           team2Possible={matchupDialog.team2Possible}
           season={challenge?.season}
           onPick={isReadOnly ? null : handleDialogPick}
-          onClose={() => setMatchupDialog(null)}
+          onTabSwitch={(tab) => {
+            trackingAPI.event('matchup_tab_switch', {
+              slot: matchupDialog.slot,
+              tab,
+              team1Id: matchupDialog.team1?.id || null,
+              team2Id: matchupDialog.team2?.id || null,
+            });
+          }}
+          onClose={() => {
+            const duration = matchupOpenedAtRef.current ? Math.round((Date.now() - matchupOpenedAtRef.current) / 1000) : 0;
+            trackingAPI.event('matchup_detail_close', { slot: matchupDialog.slot }, duration);
+            matchupOpenedAtRef.current = null;
+            setMatchupDialog(null);
+          }}
           isReadOnly={isReadOnly}
         />
       )}

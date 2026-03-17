@@ -475,13 +475,24 @@ router.get('/:bracketId', authMiddleware, async (req, res) => {
 
     const bracket = await db.getOne(`
       SELECT b.*, bc.scoring_system, bc.tournament_data, bc.tiebreaker_type, bc.status as challenge_status,
-             u.display_name as user_display_name
+             bc.season as challenge_season, u.display_name as user_display_name
       FROM brackets b
       JOIN bracket_challenges bc ON b.challenge_id = bc.id
       JOIN users u ON b.user_id = u.id
       WHERE b.id = $1
     `, [req.params.bracketId]);
     if (!bracket) return res.status(404).json({ error: 'Bracket not found' });
+
+    // Block viewing other users' brackets until tournament starts
+    if (bracket.user_id !== user.id) {
+      const season = bracket.challenge_season || bracket.tournament_data?.season;
+      if (season) {
+        const started = await checkTournamentStarted(season);
+        if (!started) {
+          return res.status(403).json({ error: 'Brackets are hidden until the tournament starts' });
+        }
+      }
+    }
 
     const results = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [bracket.challenge_id]);
     const resultsMap = {};
@@ -1100,9 +1111,21 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
       }
       return 0;
     });
-    leaderboard.forEach((entry, idx) => { entry.rank = idx + 1; });
+    // Competition ranking: tied scores get the same rank, next rank skips (1, 2, 2, 4)
+    leaderboard.forEach((entry, idx) => {
+      if (idx === 0) {
+        entry.rank = 1;
+      } else if (entry.totalScore === leaderboard[idx - 1].totalScore) {
+        entry.rank = leaderboard[idx - 1].rank; // Same rank for ties
+      } else {
+        entry.rank = idx + 1; // Skip ranks (competition ranking: 1, 2, 2, 4)
+      }
+    });
 
-    res.json({ leaderboard, results: resultsMap, scoringSystem, entryFee: parseFloat(challenge.entry_fee) || 0 });
+    // Check if tournament has started (to control bracket visibility)
+    const tournamentStarted = await checkTournamentStarted(challenge.season);
+
+    res.json({ leaderboard, results: resultsMap, scoringSystem, entryFee: parseFloat(challenge.entry_fee) || 0, tournamentStarted });
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });

@@ -13,6 +13,9 @@ const JWKS = createRemoteJWKSet(
 // Structure: { leagueId: Map<socketId, { userId, displayName }> }
 const onlineUsers = new Map();
 
+// Global connected users: userId → Set<socketId>
+const globalConnectedUsers = new Map();
+
 // Track which leagues each socket is in
 const socketLeagues = new Map();
 
@@ -58,6 +61,12 @@ function setupSocketHandlers(io) {
 
   io.on('connection', (socket) => {
     console.log(`User connected: ${socket.displayName} (${socket.userId})`);
+
+    // Track global connected user
+    if (!globalConnectedUsers.has(socket.userId)) {
+      globalConnectedUsers.set(socket.userId, new Set());
+    }
+    globalConnectedUsers.get(socket.userId).add(socket.id);
 
     // Join a league room
     socket.on('join-league', async (leagueId) => {
@@ -343,7 +352,15 @@ function setupSocketHandlers(io) {
     // Handle disconnect
     socket.on('disconnect', () => {
       console.log(`User disconnected: ${socket.displayName}`);
-      
+
+      // Remove from global connected users
+      if (globalConnectedUsers.has(socket.userId)) {
+        globalConnectedUsers.get(socket.userId).delete(socket.id);
+        if (globalConnectedUsers.get(socket.userId).size === 0) {
+          globalConnectedUsers.delete(socket.userId);
+        }
+      }
+
       // Remove from all leagues
       const leagues = socketLeagues.get(socket.id);
       if (leagues) {
@@ -536,4 +553,8 @@ function setupScoresNamespace(io) {
   return scoresNs;
 }
 
-module.exports = { setupSocketHandlers, setupScoresNamespace, broadcastGameUpdate, onlineUsers };
+function getOnlineUserCount() {
+  return globalConnectedUsers.size;
+}
+
+module.exports = { setupSocketHandlers, setupScoresNamespace, broadcastGameUpdate, onlineUsers, getOnlineUserCount };

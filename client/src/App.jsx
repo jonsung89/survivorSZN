@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { trackPageView } from './utils/analytics';
+import { trackingAPI } from './api';
 import { SocketProvider } from './context/SocketContext';
 import { ScoresSocketProvider } from './context/ScoresSocketContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -109,6 +110,7 @@ function PageViewTracker() {
   const location = useLocation();
   useEffect(() => {
     trackPageView(location.pathname);
+    trackingAPI.pageView(location.pathname);
   }, [location.pathname]);
   return null;
 }

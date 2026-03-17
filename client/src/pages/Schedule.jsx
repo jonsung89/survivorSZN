@@ -17,6 +17,7 @@ import useAnimatedScore from '../hooks/useAnimatedScore';
 import Gamecast from '../components/Gamecast';
 import ShotChart from '../components/ShotChart';
 import { trackSportTabClick, trackGamecastOpen, trackGamecastClose } from '../utils/analytics';
+import { trackingAPI } from '../api';
 
 /** Get today's date as YYYY-MM-DD in local timezone (not UTC) */
 function getLocalDateStr(d = new Date()) {
@@ -196,6 +197,7 @@ export default function Schedule() {
   const weekButtonRefs = useRef({});
   const seasonDropdownRef = useRef(null);
   const dailySeasonDropdownRef = useRef(null);
+  const expandedAtRef = useRef(null); // Timestamp when game card was expanded
 
   // Live score updates for daily sports (NBA, NCAAB, etc.)
   const selectedSportTab = SPORT_TABS.find(s => s.id === selectedSport);
@@ -1090,6 +1092,7 @@ export default function Schedule() {
   // Handle sport tab change
   const handleSportChange = (sportId) => {
     trackSportTabClick(sportId);
+    trackingAPI.event('sport_tab_switch', { sportId });
     setSelectedSport(sportId);
     setExpandedGame(null);
     setGameDetails({});
@@ -1157,12 +1160,22 @@ export default function Schedule() {
 
   const toggleGameExpand = async (gameId, game = null) => {
     if (expandedGame === gameId) {
-      trackGamecastClose(gameId, selectedSport, 0);
+      const duration = expandedAtRef.current ? Math.round((Date.now() - expandedAtRef.current) / 1000) : 0;
+      trackGamecastClose(gameId, selectedSport, duration);
+      trackingAPI.event('game_card_collapse', { gameId, sportId: selectedSport }, duration);
+      expandedAtRef.current = null;
       setExpandedGame(null);
       return;
     }
 
     trackGamecastOpen(gameId, selectedSport);
+    expandedAtRef.current = Date.now();
+    const liveGame2 = game || liveGames.find(g => g.id === gameId);
+    trackingAPI.event('game_card_expand', {
+      gameId,
+      sportId: selectedSport,
+      gameStatus: liveGame2?.status || 'unknown',
+    });
     setExpandedGame(gameId);
 
     // Fetch details if we don't have them, or refetch if game is live (details may be stale)
@@ -1935,7 +1948,11 @@ export default function Schedule() {
             {['summary', ...(hasPlayerStats ? ['boxscore'] : []), 'gamecast', 'shotchart'].map(tab => (
               <button
                 key={tab}
-                onClick={(e) => { e.stopPropagation(); setDetailTab(tab); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  trackingAPI.event('game_tab_switch', { gameId: game.id, sportId: selectedSport, tab, fromTab: detailTab });
+                  setDetailTab(tab);
+                }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                   detailTab === tab
                     ? 'bg-fg/15 text-fg/90'

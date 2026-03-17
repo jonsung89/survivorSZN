@@ -4,6 +4,7 @@ const { db } = require('../db/supabase');
 const { adminMiddleware } = require('../middleware/admin');
 const { generateAllReports, getStoredReport, getTournamentBracket } = require('../services/ncaab-tournament');
 const { getSlotRound, calculateBracketScore, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
+const { getOnlineUserCount } = require('../socket/handlers');
 
 // All routes require admin
 router.use(adminMiddleware);
@@ -58,6 +59,450 @@ router.get('/stats', async (req, res) => {
   } catch (error) {
     console.error('Admin stats error:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// ─── Online Users (lightweight, for polling) ────────────────────────────────
+
+router.get('/stats/online', (req, res) => {
+  res.json({ onlineUsers: getOnlineUserCount() });
+});
+
+// ─── Top Pages (flexible range) ──────────────────────────────────────────────
+
+router.get('/stats/top-pages', async (req, res) => {
+  try {
+    const range = req.query.range || '30d';
+    const now = new Date();
+    let startDate;
+
+    switch (range) {
+      case 'today':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case '7d':
+        startDate = new Date(now - 7 * 24 * 3600000);
+        break;
+      case '30d':
+        startDate = new Date(now - 30 * 24 * 3600000);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      default:
+        startDate = new Date(now - 30 * 24 * 3600000);
+    }
+
+    const topPages = await db.getAll(
+      `SELECT page_path, COUNT(*) as views, COUNT(DISTINCT user_id) as unique_visitors
+       FROM page_views WHERE created_at >= $1
+       GROUP BY page_path ORDER BY views DESC LIMIT 15`,
+      [startDate.toISOString()]
+    );
+
+    res.json({
+      topPages: topPages.map(r => ({
+        path: r.page_path,
+        views: parseInt(r.views),
+        uniqueVisitors: parseInt(r.unique_visitors),
+      })),
+    });
+  } catch (error) {
+    console.error('Top pages error:', error);
+    res.status(500).json({ error: 'Failed to fetch top pages' });
+  }
+});
+
+// ─── Dashboard Stats (Enhanced) ──────────────────────────────────────────────
+
+router.get('/stats/dashboard', async (req, res) => {
+  try {
+    const range = Math.min(parseInt(req.query.range) || 30, 90);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+    const day1Ago = new Date(now - 24 * 3600000).toISOString();
+    const day2Ago = new Date(now - 2 * 24 * 3600000).toISOString();
+    const day7Ago = new Date(now - 7 * 24 * 3600000).toISOString();
+    const day30Ago = new Date(now - 30 * 24 * 3600000).toISOString();
+    const rangeStart = new Date(now - range * 24 * 3600000).toISOString();
+    const month12Ago = new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString();
+
+    const [
+      // Today's snapshot
+      signupsToday, signupsYesterday,
+      loginsToday, loginsYesterday,
+      active24h, active24hPrior,
+      totalUsers, totalUsers7dAgo,
+      // Page views
+      pageViewsToday, pageViewsYesterday,
+      uniqueVisitorsToday, uniqueVisitorsYesterday,
+      // Time-series
+      dauTrend, signupTrend, chatTrend, leagueJoinTrend, newLeagueTrend, pageViewTrend,
+      // Monthly
+      mauMonthly, leaguesMonthly, pageViewsMonthly, gamecastMonthly,
+      // Engagement
+      bracketsSubmitted, gamecastSessions30d, picksMade30d, activeLeagues, totalLeagues,
+      // Top pages
+      topPages,
+      // Recent signups
+      recentSignups,
+      // New vs returning
+      newUsersToday, returningUsersToday,
+    ] = await Promise.all([
+      // Today vs yesterday
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at >= $1', [todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at >= $1 AND created_at < $2', [yesterdayStart, todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND last_login_at < $2', [yesterdayStart, todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day1Ago]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND last_login_at < $2', [day2Ago, day1Ago]),
+      db.getOne('SELECT COUNT(*) as count FROM users'),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at < $1', [day7Ago]),
+
+      // Page views today vs yesterday
+      db.getOne('SELECT COUNT(*) as count FROM page_views WHERE created_at >= $1', [todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM page_views WHERE created_at >= $1 AND created_at < $2', [yesterdayStart, todayStart]),
+      db.getOne('SELECT COUNT(DISTINCT user_id) as count FROM page_views WHERE created_at >= $1', [todayStart]),
+      db.getOne('SELECT COUNT(DISTINCT user_id) as count FROM page_views WHERE created_at >= $1 AND created_at < $2', [yesterdayStart, todayStart]),
+
+      // Time-series (range-based)
+      db.getAll(
+        `SELECT DATE(last_login_at) as date, COUNT(DISTINCT id) as count
+         FROM users WHERE last_login_at >= $1
+         GROUP BY DATE(last_login_at) ORDER BY date`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT DATE(created_at) as date, COUNT(*) as count
+         FROM users WHERE created_at >= $1
+         GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT DATE(created_at) as date, COUNT(*) as count
+         FROM chat_messages WHERE created_at >= $1
+         GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT DATE(joined_at) as date, COUNT(*) as count
+         FROM league_members WHERE joined_at >= $1
+         GROUP BY DATE(joined_at) ORDER BY date`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT DATE(created_at) as date, COUNT(*) as count
+         FROM leagues WHERE created_at >= $1
+         GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT DATE(created_at) as date, COUNT(*) as count
+         FROM page_views WHERE created_at >= $1
+         GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
+      ),
+
+      // Monthly aggregates (12 months)
+      db.getAll(
+        `SELECT TO_CHAR(last_login_at, 'YYYY-MM') as month, COUNT(DISTINCT id) as count
+         FROM users WHERE last_login_at >= $1
+         GROUP BY TO_CHAR(last_login_at, 'YYYY-MM') ORDER BY month`, [month12Ago]
+      ),
+      db.getAll(
+        `SELECT TO_CHAR(created_at, 'YYYY-MM') as month, COUNT(*) as count
+         FROM leagues WHERE created_at >= $1
+         GROUP BY TO_CHAR(created_at, 'YYYY-MM') ORDER BY month`, [month12Ago]
+      ),
+      db.getAll(
+        `SELECT TO_CHAR(created_at, 'YYYY-MM') as month, COUNT(*) as count
+         FROM page_views WHERE created_at >= $1
+         GROUP BY TO_CHAR(created_at, 'YYYY-MM') ORDER BY month`, [month12Ago]
+      ),
+      db.getAll(
+        `SELECT TO_CHAR(started_at, 'YYYY-MM') as month, COUNT(*) as count
+         FROM gamecast_sessions WHERE started_at >= $1
+         GROUP BY TO_CHAR(started_at, 'YYYY-MM') ORDER BY month`, [month12Ago]
+      ),
+
+      // Engagement
+      db.getOne('SELECT COUNT(*) as count FROM brackets WHERE is_submitted = true'),
+      db.getOne('SELECT COUNT(*) as count FROM gamecast_sessions WHERE started_at >= $1', [day30Ago]),
+      db.getOne('SELECT COUNT(*) as count FROM picks WHERE created_at >= $1', [day30Ago]),
+      db.getOne("SELECT COUNT(*) as count FROM leagues WHERE status = 'active'"),
+      db.getOne('SELECT COUNT(*) as count FROM leagues'),
+
+      // Top pages (for the selected range)
+      db.getAll(
+        `SELECT page_path, COUNT(*) as views, COUNT(DISTINCT user_id) as unique_visitors
+         FROM page_views WHERE created_at >= $1
+         GROUP BY page_path ORDER BY views DESC LIMIT 10`, [rangeStart]
+      ),
+
+      // Recent signups (last 8)
+      db.getAll(
+        `SELECT id, display_name, email, profile_image_url, created_at
+         FROM users ORDER BY created_at DESC LIMIT 8`
+      ),
+
+      // New vs returning users today
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at >= $1 AND last_login_at >= $1', [todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at < $1 AND last_login_at >= $1', [todayStart]),
+    ]);
+
+    const p = v => parseInt(v?.count || 0);
+    const trend = rows => rows.map(r => ({ date: r.date, count: parseInt(r.count) }));
+    const monthly = rows => rows.map(r => ({ month: r.month, count: parseInt(r.count) }));
+
+    res.json({
+      today: {
+        signups: p(signupsToday),
+        signupsDelta: p(signupsToday) - p(signupsYesterday),
+        logins: p(loginsToday),
+        loginsDelta: p(loginsToday) - p(loginsYesterday),
+        active24h: p(active24h),
+        active24hDelta: p(active24h) - p(active24hPrior),
+        totalUsers: p(totalUsers),
+        totalUsersDelta: p(totalUsers) - p(totalUsers7dAgo),
+        pageViews: p(pageViewsToday),
+        pageViewsDelta: p(pageViewsToday) - p(pageViewsYesterday),
+        uniqueVisitors: p(uniqueVisitorsToday),
+        uniqueVisitorsDelta: p(uniqueVisitorsToday) - p(uniqueVisitorsYesterday),
+        newUsers: p(newUsersToday),
+        returningUsers: p(returningUsersToday),
+      },
+      trends: {
+        dau: trend(dauTrend),
+        signups: trend(signupTrend),
+        chatMessages: trend(chatTrend),
+        leagueJoins: trend(leagueJoinTrend),
+        newLeagues: trend(newLeagueTrend),
+        pageViews: trend(pageViewTrend),
+      },
+      monthly: {
+        mau: monthly(mauMonthly),
+        newLeagues: monthly(leaguesMonthly),
+        pageViews: monthly(pageViewsMonthly),
+        gamecastSessions: monthly(gamecastMonthly),
+      },
+      engagement: {
+        bracketsSubmitted: p(bracketsSubmitted),
+        gamecastSessions30d: p(gamecastSessions30d),
+        picksMade30d: p(picksMade30d),
+        activeLeagues: p(activeLeagues),
+        totalLeagues: p(totalLeagues),
+      },
+      topPages: topPages.map(r => ({
+        path: r.page_path,
+        views: parseInt(r.views),
+        uniqueVisitors: parseInt(r.unique_visitors),
+      })),
+      recentSignups: recentSignups.map(u => ({
+        id: u.id,
+        displayName: u.display_name,
+        email: u.email,
+        profileImageUrl: u.profile_image_url,
+        createdAt: u.created_at,
+      })),
+      onlineUsers: getOnlineUserCount(),
+    });
+  } catch (error) {
+    console.error('Admin dashboard stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
+});
+
+// ─── Feature Engagement Analytics ────────────────────────────────────────────
+
+router.get('/stats/schedule-engagement', async (req, res) => {
+  try {
+    const range = Math.min(parseInt(req.query.range) || 30, 90);
+    const rangeStart = new Date(Date.now() - range * 24 * 3600000).toISOString();
+
+    const [
+      totalExpands, uniqueExpandUsers,
+      tabBreakdown, sportBreakdown,
+      topGames, avgDuration, dailyTrend,
+    ] = await Promise.all([
+      // Total game card expands
+      db.getOne(
+        `SELECT COUNT(*) as count FROM feature_events
+         WHERE event_name = 'game_card_expand' AND created_at >= $1`, [rangeStart]
+      ),
+      // Unique users who expanded
+      db.getOne(
+        `SELECT COUNT(DISTINCT COALESCE(user_id::text, session_id)) as count FROM feature_events
+         WHERE event_name = 'game_card_expand' AND created_at >= $1`, [rangeStart]
+      ),
+      // Tab breakdown
+      db.getAll(
+        `SELECT event_data->>'tab' as tab, COUNT(*) as count FROM feature_events
+         WHERE event_name = 'game_tab_switch' AND created_at >= $1
+         GROUP BY event_data->>'tab' ORDER BY count DESC`, [rangeStart]
+      ),
+      // Sport breakdown
+      db.getAll(
+        `SELECT event_data->>'sportId' as sport_id, COUNT(*) as expands FROM feature_events
+         WHERE event_name = 'game_card_expand' AND created_at >= $1
+         GROUP BY event_data->>'sportId' ORDER BY expands DESC`, [rangeStart]
+      ),
+      // Top games by views
+      db.getAll(
+        `SELECT event_data->>'gameId' as game_id, event_data->>'sportId' as sport_id,
+                COUNT(*) as expands,
+                ROUND(AVG(CASE WHEN duration_seconds > 0 THEN duration_seconds END))::int as avg_duration
+         FROM feature_events
+         WHERE event_name IN ('game_card_expand', 'game_card_collapse') AND created_at >= $1
+         GROUP BY event_data->>'gameId', event_data->>'sportId'
+         ORDER BY expands DESC LIMIT 10`, [rangeStart]
+      ),
+      // Average view duration (from collapse events which carry duration)
+      db.getOne(
+        `SELECT ROUND(AVG(duration_seconds))::int as avg
+         FROM feature_events
+         WHERE event_name = 'game_card_collapse' AND duration_seconds > 0 AND created_at >= $1`, [rangeStart]
+      ),
+      // Daily trend
+      db.getAll(
+        `SELECT DATE(created_at) as date, COUNT(*) as count FROM feature_events
+         WHERE event_name = 'game_card_expand' AND created_at >= $1
+         GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
+      ),
+    ]);
+
+    res.json({
+      gameCardExpands: {
+        total: parseInt(totalExpands?.count || 0),
+        uniqueUsers: parseInt(uniqueExpandUsers?.count || 0),
+      },
+      tabBreakdown: tabBreakdown.map(r => ({ tab: r.tab, count: parseInt(r.count) })),
+      sportBreakdown: sportBreakdown.map(r => ({ sportId: r.sport_id, expands: parseInt(r.expands) })),
+      topGames: topGames.map(r => ({
+        gameId: r.game_id,
+        sportId: r.sport_id,
+        expands: parseInt(r.expands),
+        avgDuration: parseInt(r.avg_duration) || 0,
+      })),
+      avgViewDuration: parseInt(avgDuration?.avg) || 0,
+      dailyTrend: dailyTrend.map(r => ({ date: r.date, count: parseInt(r.count) })),
+    });
+  } catch (error) {
+    console.error('Schedule engagement error:', error);
+    res.status(500).json({ error: 'Failed to fetch schedule engagement' });
+  }
+});
+
+router.get('/stats/bracket-engagement', async (req, res) => {
+  try {
+    const range = Math.min(parseInt(req.query.range) || 30, 90);
+    const rangeStart = new Date(Date.now() - range * 24 * 3600000).toISOString();
+
+    const [
+      totalOpens, uniqueOpenUsers,
+      tabBreakdown, topMatchups, avgDuration, dailyTrend,
+    ] = await Promise.all([
+      db.getOne(
+        `SELECT COUNT(*) as count FROM feature_events
+         WHERE event_name = 'matchup_detail_open' AND created_at >= $1`, [rangeStart]
+      ),
+      db.getOne(
+        `SELECT COUNT(DISTINCT COALESCE(user_id::text, session_id)) as count FROM feature_events
+         WHERE event_name = 'matchup_detail_open' AND created_at >= $1`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT event_data->>'tab' as tab, COUNT(*) as count FROM feature_events
+         WHERE event_name = 'matchup_tab_switch' AND created_at >= $1
+         GROUP BY event_data->>'tab' ORDER BY count DESC`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT event_data->>'team1Id' as team1_id, event_data->>'team2Id' as team2_id,
+                (event_data->>'slot')::int as slot, COUNT(*) as views
+         FROM feature_events
+         WHERE event_name = 'matchup_detail_open' AND created_at >= $1
+         GROUP BY event_data->>'team1Id', event_data->>'team2Id', event_data->>'slot'
+         ORDER BY views DESC LIMIT 10`, [rangeStart]
+      ),
+      db.getOne(
+        `SELECT ROUND(AVG(duration_seconds))::int as avg
+         FROM feature_events
+         WHERE event_name = 'matchup_detail_close' AND duration_seconds > 0 AND created_at >= $1`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT DATE(created_at) as date, COUNT(*) as count FROM feature_events
+         WHERE event_name = 'matchup_detail_open' AND created_at >= $1
+         GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
+      ),
+    ]);
+
+    res.json({
+      matchupDetailsOpened: {
+        total: parseInt(totalOpens?.count || 0),
+        uniqueUsers: parseInt(uniqueOpenUsers?.count || 0),
+      },
+      tabBreakdown: tabBreakdown.map(r => ({ tab: r.tab, count: parseInt(r.count) })),
+      topMatchups: topMatchups.map(r => ({
+        team1Id: r.team1_id,
+        team2Id: r.team2_id,
+        slot: r.slot,
+        views: parseInt(r.views),
+      })),
+      avgViewDuration: parseInt(avgDuration?.avg) || 0,
+      dailyTrend: dailyTrend.map(r => ({ date: r.date, count: parseInt(r.count) })),
+    });
+  } catch (error) {
+    console.error('Bracket engagement error:', error);
+    res.status(500).json({ error: 'Failed to fetch bracket engagement' });
+  }
+});
+
+router.get('/stats/anonymous-usage', async (req, res) => {
+  try {
+    const range = Math.min(parseInt(req.query.range) || 30, 90);
+    const rangeStart = new Date(Date.now() - range * 24 * 3600000).toISOString();
+
+    const [
+      uniqueSessions, totalEvents, topEvents, sportBreakdown, dailyTrend,
+    ] = await Promise.all([
+      db.getOne(
+        `SELECT COUNT(DISTINCT session_id) as count FROM feature_events
+         WHERE user_id IS NULL AND session_id IS NOT NULL AND created_at >= $1`, [rangeStart]
+      ),
+      db.getOne(
+        `SELECT COUNT(*) as count FROM feature_events
+         WHERE user_id IS NULL AND session_id IS NOT NULL AND created_at >= $1`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT event_name, COUNT(*) as count FROM feature_events
+         WHERE user_id IS NULL AND session_id IS NOT NULL AND created_at >= $1
+         GROUP BY event_name ORDER BY count DESC LIMIT 10`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT event_data->>'sportId' as sport_id, COUNT(*) as count FROM feature_events
+         WHERE user_id IS NULL AND session_id IS NOT NULL AND event_data->>'sportId' IS NOT NULL AND created_at >= $1
+         GROUP BY event_data->>'sportId' ORDER BY count DESC`, [rangeStart]
+      ),
+      db.getAll(
+        `SELECT DATE(created_at) as date,
+                COUNT(DISTINCT session_id) as sessions,
+                COUNT(*) as events
+         FROM feature_events
+         WHERE user_id IS NULL AND session_id IS NOT NULL AND created_at >= $1
+         GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
+      ),
+    ]);
+
+    res.json({
+      uniqueSessions: parseInt(uniqueSessions?.count || 0),
+      totalEvents: parseInt(totalEvents?.count || 0),
+      topEvents: topEvents.map(r => ({ event: r.event_name, count: parseInt(r.count) })),
+      sportBreakdown: sportBreakdown.map(r => ({ sportId: r.sport_id, count: parseInt(r.count) })),
+      dailyTrend: dailyTrend.map(r => ({
+        date: r.date,
+        sessions: parseInt(r.sessions),
+        events: parseInt(r.events),
+      })),
+    });
+  } catch (error) {
+    console.error('Anonymous usage error:', error);
+    res.status(500).json({ error: 'Failed to fetch anonymous usage' });
   }
 });
 

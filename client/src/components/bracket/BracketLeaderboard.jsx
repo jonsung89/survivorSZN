@@ -2,7 +2,7 @@ import { Trophy } from 'lucide-react';
 
 const ROUND_LABELS = ['R64', 'R32', 'S16', 'E8', 'F4', 'CHAMP'];
 
-export default function BracketLeaderboard({ leaderboard, currentUserId, scoringSystem, onBracketClick }) {
+export default function BracketLeaderboard({ leaderboard, currentUserId, scoringSystem, tournamentStarted, onBracketClick }) {
   if (!leaderboard || leaderboard.length === 0) {
     return (
       <div className="text-center py-12 text-fg/40">
@@ -10,6 +10,16 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, scoring
       </div>
     );
   }
+
+  // Hide rankings if every entry has 0 total points
+  const allZero = leaderboard.every(entry => entry.totalScore === 0);
+
+  const handleRowClick = (entry) => {
+    // Allow clicking own bracket always; others only after tournament starts
+    if (entry.userId === currentUserId || tournamentStarted) {
+      onBracketClick?.(entry.bracketId);
+    }
+  };
 
   return (
     <div className="overflow-x-auto">
@@ -31,15 +41,18 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, scoring
         <tbody>
           {leaderboard.map((entry) => {
             const isMe = entry.userId === currentUserId;
+            const clickable = isMe || tournamentStarted;
             return (
               <tr
                 key={entry.bracketId}
-                className={`border-b border-fg/5 transition-colors cursor-pointer hover:bg-fg/5 ${isMe ? 'bg-violet-500/8 border-l-2 border-l-violet-500' : ''}`}
-                onClick={() => onBracketClick?.(entry.bracketId)}
+                className={`border-b border-fg/5 transition-colors ${clickable ? 'cursor-pointer hover:bg-fg/5' : ''} ${isMe ? 'bg-violet-500/8 border-l-2 border-l-violet-500' : ''}`}
+                onClick={() => handleRowClick(entry)}
               >
                 {/* Rank */}
                 <td className="py-2.5 px-2">
-                  {entry.rank === 1 ? (
+                  {allZero ? (
+                    <span className="text-sm font-mono text-fg/20">—</span>
+                  ) : entry.rank === 1 ? (
                     <Trophy className="w-4 h-4 text-amber-400" />
                   ) : (
                     <span className={`text-sm font-mono font-bold ${

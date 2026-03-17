@@ -36,6 +36,7 @@ export default function MatchupDetailDialog({
   prediction,
   onPick,
   onClose,
+  onTabSwitch,
   isReadOnly,
 }) {
   const { isDark } = useTheme();
@@ -415,7 +416,7 @@ export default function MatchupDetailDialog({
         <div className="flex-shrink-0 flex border-b border-fg/10">
           {/* Team 1 tab */}
           <button
-            onClick={() => setActiveTab(0)}
+            onClick={() => { setActiveTab(0); onTabSwitch?.('team1'); }}
             className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all relative ${
               activeTab === 0 ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
             }`}
@@ -435,7 +436,7 @@ export default function MatchupDetailDialog({
           {/* Matchup tab — only when both teams known */}
           {bothTeamsKnown && (
             <button
-              onClick={() => setActiveTab(1)}
+              onClick={() => { setActiveTab(1); onTabSwitch?.('matchup'); }}
               className={`px-4 flex items-center justify-center gap-1.5 py-3 text-sm font-bold transition-all relative ${
                 activeTab === 1 ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
               }`}
@@ -452,7 +453,7 @@ export default function MatchupDetailDialog({
 
           {/* Team 2 tab */}
           <button
-            onClick={() => setActiveTab(bothTeamsKnown ? 2 : 1)}
+            onClick={() => { setActiveTab(bothTeamsKnown ? 2 : 1); onTabSwitch?.('team2'); }}
             className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all relative ${
               activeTab === (bothTeamsKnown ? 2 : 1) ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
             }`}

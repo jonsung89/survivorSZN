@@ -498,6 +498,18 @@ export const adminAPI = {
     const res = await authFetch('/admin/stats');
     return res.json();
   },
+  getDashboardStats: async (range = 30) => {
+    const res = await authFetch(`/admin/stats/dashboard?range=${range}`);
+    return res.json();
+  },
+  getOnlineUsers: async () => {
+    const res = await authFetch('/admin/stats/online');
+    return res.json();
+  },
+  getTopPages: async (range = '30d') => {
+    const res = await authFetch(`/admin/stats/top-pages?range=${range}`);
+    return res.json();
+  },
   getUsers: async (params = {}) => {
     const res = await authFetch(`/admin/users?${new URLSearchParams(params)}`);
     return res.json();
@@ -634,6 +646,19 @@ export const adminAPI = {
     const res = await authFetch(`/admin/announcements/${id}`, { method: 'DELETE' });
     return res.json();
   },
+  // Feature engagement analytics
+  getScheduleEngagement: async (range = 30) => {
+    const res = await authFetch(`/admin/stats/schedule-engagement?range=${range}`);
+    return res.json();
+  },
+  getBracketEngagement: async (range = 30) => {
+    const res = await authFetch(`/admin/stats/bracket-engagement?range=${range}`);
+    return res.json();
+  },
+  getAnonymousUsage: async (range = 30) => {
+    const res = await authFetch(`/admin/stats/anonymous-usage?range=${range}`);
+    return res.json();
+  },
 };
 
 // Analytics API (public-facing)
@@ -656,6 +681,39 @@ export const analyticsAPI = {
     if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(`${API_URL}/analytics/announcements/active`, { headers });
     return res.json();
+  },
+};
+
+// Tracking API (lightweight, fire-and-forget)
+export const trackingAPI = {
+  pageView: (path) => {
+    authFetch('/track/pageview', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    }).catch(() => {}); // Silently fail
+  },
+  event: (eventName, data = {}, duration = null) => {
+    const body = { event: eventName, data };
+    if (typeof duration === 'number') body.duration = duration;
+
+    const token = getToken();
+    if (!token) {
+      // Non-auth user — use session ID and plain fetch
+      import('./utils/sessionId.js').then(({ getOrCreateSessionId }) => {
+        body.sessionId = getOrCreateSessionId();
+        fetch(`${API_URL}/track/event`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }).catch(() => {});
+      }).catch(() => {});
+      return;
+    }
+
+    authFetch('/track/event', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }).catch(() => {});
   },
 };
 

@@ -23,6 +23,31 @@ const aiReportCache = new Map();
 const BREAKDOWN_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 const breakdownCache = new Map();
 
+/**
+ * Fetch full schedule for a team — merges regular season (seasontype=2) and postseason (seasontype=3).
+ * ESPN's default schedule endpoint only returns the current season type, which during
+ * March Madness means only tournament games. We need both to show "Last 10 Games" etc.
+ */
+async function fetchFullSchedule(teamId, season) {
+  const [regular, post] = await Promise.allSettled([
+    fetchWithCache(`${API_BASE}/teams/${teamId}/schedule?season=${season}&seasontype=2`, TEAM_CACHE_TTL),
+    fetchWithCache(`${API_BASE}/teams/${teamId}/schedule?season=${season}&seasontype=3`, TEAM_CACHE_TTL),
+  ]);
+  const regularEvents = regular.status === 'fulfilled' ? (regular.value?.events || []) : [];
+  const postEvents = post.status === 'fulfilled' ? (post.value?.events || []) : [];
+  // Deduplicate by event id
+  const seen = new Set();
+  const events = [];
+  for (const e of [...regularEvents, ...postEvents]) {
+    const id = e.id || e.uid;
+    if (!seen.has(id)) {
+      seen.add(id);
+      events.push(e);
+    }
+  }
+  return { events };
+}
+
 // Region name variants ESPN uses in notes
 const REGION_ALIASES = {
   'east': 'East', 'west': 'West', 'south': 'South', 'midwest': 'Midwest',
@@ -754,7 +779,7 @@ async function generateAllReports(season, { teamId: singleTeamId, force = false,
       const [teamInfo, stats, schedule, roster, news, bpiResult] = await Promise.allSettled([
         fetchWithCache(`${API_BASE}/teams/${tid}`, TEAM_CACHE_TTL),
         fetchWithCache(`${API_BASE}/teams/${tid}/statistics?season=${season}`, TEAM_CACHE_TTL),
-        fetchWithCache(`${API_BASE}/teams/${tid}/schedule?season=${season}`, TEAM_CACHE_TTL),
+        fetchFullSchedule(tid, season),
         fetchWithCache(`${API_BASE}/teams/${tid}/roster`, ROSTER_CACHE_TTL),
         fetchWithCache(`${API_BASE}/news?team=${tid}`, TEAM_CACHE_TTL),
         fetchBpiData(tid, season),
@@ -847,7 +872,7 @@ async function getTeamBreakdown(teamId, season) {
   const [teamInfo, stats, schedule, roster, news, bpiResult] = await Promise.allSettled([
     fetchWithCache(`${API_BASE}/teams/${teamId}`, TEAM_CACHE_TTL),
     fetchWithCache(`${API_BASE}/teams/${teamId}/statistics?season=${season}`, TEAM_CACHE_TTL),
-    fetchWithCache(`${API_BASE}/teams/${teamId}/schedule?season=${season}`, TEAM_CACHE_TTL),
+    fetchFullSchedule(teamId, season),
     fetchWithCache(`${API_BASE}/teams/${teamId}/roster`, ROSTER_CACHE_TTL),
     fetchWithCache(`${API_BASE}/news?team=${teamId}`, TEAM_CACHE_TTL),
     fetchBpiData(teamId, season),

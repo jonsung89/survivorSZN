@@ -9,6 +9,12 @@ function getThemeLogo(logoUrl, isDark) {
   return isDark ? logoUrl.replace('/500/', '/500-dark/') : logoUrl;
 }
 
+function shortDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 function ordinal(n) {
   const num = parseInt(n);
   if (isNaN(num)) return n;
@@ -417,6 +423,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                 <div className="px-3 py-1 space-y-0.5">
                   {last10.games.map((game, idx) => (
                     <div key={idx} className="flex items-center gap-1.5 text-sm py-1 border-b border-fg/5 last:border-0">
+                      <span className="text-fg/40 font-mono w-10 flex-shrink-0">{shortDate(game.date)}</span>
                       <span className="text-fg/70 w-5 text-center flex-shrink-0">{game.atVs === 'vs' ? 'vs' : '@'}</span>
                       {game.opponent?.logo && <img src={getThemeLogo(game.opponent.logo, isDark)} alt="" className="w-4 h-4 object-contain flex-shrink-0" />}
                       <span className="text-fg/80 truncate flex-1">
@@ -461,7 +468,8 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                 {expanded && (
                   <div className="px-3 pb-2 space-y-0.5">
                     {last10.games.map((game, idx) => (
-                      <div key={idx} className="flex items-center gap-1.5 text-sm py-1 border-t border-fg/5">
+                      <div key={idx} className="flex items-center gap-1 text-sm py-1 border-t border-fg/5">
+                        <span className="text-fg/40 font-mono w-10 flex-shrink-0">{shortDate(game.date)}</span>
                         <span className="text-fg/70 w-5 text-center flex-shrink-0">{game.atVs === 'vs' ? 'vs' : '@'}</span>
                         {game.opponent?.logo && <img src={getThemeLogo(game.opponent.logo, isDark)} alt="" className="w-4 h-4 object-contain flex-shrink-0" />}
                         <span className="text-fg/80 truncate flex-1">
@@ -471,7 +479,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                         <span className={`font-bold flex-shrink-0 ${game.result === 'W' ? 'text-emerald-500' : 'text-red-500'}`}>
                           {game.result}
                         </span>
-                        <span className="font-mono text-fg/70 flex-shrink-0 w-14 text-right">{game.score}</span>
+                        <span className="font-mono text-fg/70 flex-shrink-0 w-12 text-right">{game.score}</span>
                       </div>
                     ))}
                   </div>

@@ -1,8 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, ChevronLeft, ChevronRight, X, Trash2 } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, Trash2, Filter } from 'lucide-react';
 import { adminAPI } from '../../api';
 import { useToast } from '../../components/Toast';
 import Loading from '../../components/Loading';
+
+const SPORT_OPTIONS = [
+  { value: '', label: 'All Sports' },
+  { value: 'nfl', label: 'NFL' },
+  { value: 'ncaab', label: 'NCAAB' },
+  { value: 'nba', label: 'NBA' },
+  { value: 'mlb', label: 'MLB' },
+  { value: 'nhl', label: 'NHL' },
+];
+
+const STATUS_OPTIONS = [
+  { value: '', label: 'All Statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'archived', label: 'Archived' },
+];
 
 export default function AdminLeagues() {
   const { showToast } = useToast();
@@ -11,6 +27,8 @@ export default function AdminLeagues() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
+  const [sportFilter, setSportFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedLeague, setSelectedLeague] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -20,7 +38,10 @@ export default function AdminLeagues() {
   const fetchLeagues = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await adminAPI.getLeagues({ search, page, limit: 25 });
+      const params = { search, page, limit: 25 };
+      if (sportFilter) params.sportId = sportFilter;
+      if (statusFilter) params.status = statusFilter;
+      const data = await adminAPI.getLeagues(params);
       setLeagues(data.leagues);
       setTotal(data.total);
       setTotalPages(data.totalPages);
@@ -29,7 +50,7 @@ export default function AdminLeagues() {
     } finally {
       setLoading(false);
     }
-  }, [search, page]);
+  }, [search, page, sportFilter, statusFilter]);
 
   useEffect(() => { fetchLeagues(); }, [fetchLeagues]);
 
@@ -41,6 +62,19 @@ export default function AdminLeagues() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchInput]);
+
+  const handleFilterChange = (setter) => (e) => {
+    setter(e.target.value);
+    setPage(1);
+  };
+
+  const activeFilterCount = (sportFilter ? 1 : 0) + (statusFilter ? 1 : 0);
+
+  const clearFilters = () => {
+    setSportFilter('');
+    setStatusFilter('');
+    setPage(1);
+  };
 
   const handleLeagueClick = async (leagueId) => {
     setDetailLoading(true);
@@ -79,7 +113,7 @@ export default function AdminLeagues() {
         <span className="text-sm text-fg/40">{total} total</span>
       </div>
 
-      <div className="relative mb-4">
+      <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg/30" />
         <input
           type="text"
@@ -88,6 +122,38 @@ export default function AdminLeagues() {
           onChange={(e) => setSearchInput(e.target.value)}
           className="w-full pl-10 pr-4 py-2.5 bg-surface border border-fg/10 rounded-lg text-fg text-sm placeholder:text-fg/30 focus:outline-none focus:border-fg/20"
         />
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <Filter className="w-4 h-4 text-fg/30" />
+        <select
+          value={sportFilter}
+          onChange={handleFilterChange(setSportFilter)}
+          className="bg-surface border border-fg/10 rounded-lg px-3 py-1.5 text-sm text-fg focus:outline-none focus:border-fg/20"
+        >
+          {SPORT_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={handleFilterChange(setStatusFilter)}
+          className="bg-surface border border-fg/10 rounded-lg px-3 py-1.5 text-sm text-fg focus:outline-none focus:border-fg/20"
+        >
+          {STATUS_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        {activeFilterCount > 0 && (
+          <button
+            onClick={clearFilters}
+            className="text-sm text-fg/40 hover:text-fg flex items-center gap-1 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear ({activeFilterCount})
+          </button>
+        )}
       </div>
 
       {loading ? <Loading /> : (
@@ -117,7 +183,7 @@ export default function AdminLeagues() {
                       <td className="px-4 py-3 text-center text-fg/60">{league.memberCount}</td>
                       <td className="px-4 py-3 text-fg/60 hidden md:table-cell">{league.commissionerName || '—'}</td>
                       <td className="px-4 py-3 hidden lg:table-cell">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                        <span className={`text-sm font-medium px-2 py-0.5 rounded ${
                           league.status === 'active' ? 'text-emerald-400 bg-emerald-400/10' : 'text-fg/40 bg-fg/5'
                         }`}>
                           {league.status}
@@ -196,9 +262,9 @@ export default function AdminLeagues() {
                           <div key={m.id} className="bg-fg/5 rounded-lg px-3 py-2 flex items-center justify-between">
                             <div>
                               <span className="text-sm font-medium text-fg">{m.displayName || '—'}</span>
-                              {m.email && <span className="text-xs text-fg/40 ml-2">{m.email}</span>}
+                              {m.email && <span className="text-sm text-fg/40 ml-2">{m.email}</span>}
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-fg/40">
+                            <div className="flex items-center gap-2 text-sm text-fg/40">
                               <span>Strikes: {m.strikes}</span>
                               <span className={m.status === 'active' ? 'text-emerald-400' : 'text-red-400'}>
                                 {m.status}
@@ -257,7 +323,7 @@ export default function AdminLeagues() {
 function InfoRow({ label, value }) {
   return (
     <div>
-      <span className="text-xs text-fg/40 block">{label}</span>
+      <span className="text-sm text-fg/40 block">{label}</span>
       <span className="text-sm text-fg">{value ?? '—'}</span>
     </div>
   );

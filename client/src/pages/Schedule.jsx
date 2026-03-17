@@ -16,6 +16,7 @@ import { useScoresSocket } from '../context/ScoresSocketContext';
 import useAnimatedScore from '../hooks/useAnimatedScore';
 import Gamecast from '../components/Gamecast';
 import ShotChart from '../components/ShotChart';
+import { trackSportTabClick, trackGamecastOpen, trackGamecastClose } from '../utils/analytics';
 
 /** Get today's date as YYYY-MM-DD in local timezone (not UTC) */
 function getLocalDateStr(d = new Date()) {
@@ -1088,6 +1089,7 @@ export default function Schedule() {
 
   // Handle sport tab change
   const handleSportChange = (sportId) => {
+    trackSportTabClick(sportId);
     setSelectedSport(sportId);
     setExpandedGame(null);
     setGameDetails({});
@@ -1155,10 +1157,12 @@ export default function Schedule() {
 
   const toggleGameExpand = async (gameId, game = null) => {
     if (expandedGame === gameId) {
+      trackGamecastClose(gameId, selectedSport, 0);
       setExpandedGame(null);
       return;
     }
 
+    trackGamecastOpen(gameId, selectedSport);
     setExpandedGame(gameId);
 
     // Fetch details if we don't have them, or refetch if game is live (details may be stale)

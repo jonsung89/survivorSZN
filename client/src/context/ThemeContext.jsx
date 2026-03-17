@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { trackThemeToggle } from '../utils/analytics';
 
 const ThemeContext = createContext(null);
 
@@ -29,7 +30,11 @@ export function ThemeProvider({ children }) {
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      trackThemeToggle(next);
+      return next;
+    });
   }, []);
 
   const isDark = theme === 'dark';

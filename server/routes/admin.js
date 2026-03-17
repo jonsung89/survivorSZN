@@ -12,11 +12,33 @@ router.use(adminMiddleware);
 
 router.get('/stats', async (req, res) => {
   try {
-    const [users, leagues, reports, brackets] = await Promise.all([
+    const now = new Date();
+    const day1 = new Date(now - 24 * 3600000).toISOString();
+    const day7 = new Date(now - 7 * 24 * 3600000).toISOString();
+    const day30 = new Date(now - 30 * 24 * 3600000).toISOString();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+    const [users, leagues, reports, brackets, active24h, active7d, active30d, chatToday, signupTrend, leagueTrend] = await Promise.all([
       db.getOne('SELECT COUNT(*) as count FROM users'),
       db.getOne('SELECT COUNT(*) as count FROM leagues'),
       db.getOne('SELECT COUNT(*) as count FROM scouting_reports'),
       db.getOne('SELECT COUNT(*) as count FROM brackets'),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day1]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day7]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day30]),
+      db.getOne('SELECT COUNT(*) as count FROM chat_messages WHERE created_at >= $1', [todayStart]),
+      db.getAll(
+        `SELECT DATE(created_at) as date, COUNT(*) as count
+         FROM users WHERE created_at >= $1
+         GROUP BY DATE(created_at) ORDER BY date`,
+        [day30]
+      ),
+      db.getAll(
+        `SELECT DATE(created_at) as date, COUNT(*) as count
+         FROM leagues WHERE created_at >= $1
+         GROUP BY DATE(created_at) ORDER BY date`,
+        [day30]
+      ),
     ]);
 
     res.json({
@@ -24,6 +46,14 @@ router.get('/stats', async (req, res) => {
       leagueCount: parseInt(leagues.count),
       reportCount: parseInt(reports.count),
       bracketCount: parseInt(brackets.count),
+      activeUsers: {
+        day1: parseInt(active24h.count),
+        day7: parseInt(active7d.count),
+        day30: parseInt(active30d.count),
+      },
+      chatMessagesToday: parseInt(chatToday.count),
+      signupTrend: signupTrend.map(r => ({ date: r.date, count: parseInt(r.count) })),
+      leagueTrend: leagueTrend.map(r => ({ date: r.date, count: parseInt(r.count) })),
     });
   } catch (error) {
     console.error('Admin stats error:', error);
@@ -51,7 +81,7 @@ router.get('/users', async (req, res) => {
 
     const dataParams = [...params, parseInt(limit), offset];
     const users = await db.getAll(
-      `SELECT u.id, u.display_name, u.email, u.phone, u.is_admin, u.created_at, u.last_login_at,
+      `SELECT u.id, u.display_name, u.first_name, u.last_name, u.profile_image_url, u.email, u.phone, u.is_admin, u.created_at, u.last_login_at,
               (SELECT COUNT(*) FROM league_members lm WHERE lm.user_id = u.id) as league_count
        FROM users u
        ${whereClause}
@@ -64,6 +94,9 @@ router.get('/users', async (req, res) => {
       users: users.map(u => ({
         id: u.id,
         displayName: u.display_name,
+        firstName: u.first_name,
+        lastName: u.last_name,
+        profileImageUrl: u.profile_image_url,
         email: u.email,
         phone: u.phone,
         isAdmin: u.is_admin || false,
@@ -84,7 +117,7 @@ router.get('/users', async (req, res) => {
 router.get('/users/:id', async (req, res) => {
   try {
     const user = await db.getOne(
-      `SELECT id, display_name, email, phone, firebase_uid, is_admin, created_at, updated_at, last_login_at
+      `SELECT id, display_name, first_name, last_name, profile_image_url, email, phone, firebase_uid, is_admin, is_disabled, created_at, updated_at, last_login_at
        FROM users WHERE id = $1`,
       [req.params.id]
     );
@@ -104,10 +137,14 @@ router.get('/users/:id', async (req, res) => {
     res.json({
       id: user.id,
       displayName: user.display_name,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      profileImageUrl: user.profile_image_url,
       email: user.email,
       phone: user.phone,
       firebaseUid: user.firebase_uid,
       isAdmin: user.is_admin || false,
+      isDisabled: user.is_disabled || false,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
       lastLoginAt: user.last_login_at,
@@ -132,16 +169,28 @@ router.get('/users/:id', async (req, res) => {
 
 router.get('/leagues', async (req, res) => {
   try {
-    const { search = '', page = 1, limit = 25 } = req.query;
+    const { search = '', page = 1, limit = 25, sportId, status } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    let whereClause = '';
+    const conditions = [];
     const params = [];
 
     if (search) {
       params.push(`%${search}%`);
-      whereClause = `WHERE l.name ILIKE $1`;
+      conditions.push(`l.name ILIKE $${params.length}`);
     }
+
+    if (sportId) {
+      params.push(sportId);
+      conditions.push(`l.sport_id = $${params.length}`);
+    }
+
+    if (status) {
+      params.push(status);
+      conditions.push(`l.status = $${params.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countQuery = `SELECT COUNT(*) as count FROM leagues l ${whereClause}`;
     const total = await db.getOne(countQuery, params);
@@ -491,6 +540,366 @@ router.delete('/challenges/:id', async (req, res) => {
   } catch (error) {
     console.error('Admin delete challenge error:', error);
     res.status(500).json({ error: 'Failed to delete challenge' });
+  }
+});
+
+// ─── User Management Actions ──────────────────────────────────────────────
+
+router.put('/users/:id/toggle-admin', async (req, res) => {
+  try {
+    // Prevent self-demotion
+    if (req.params.id === req.adminUser.id) {
+      return res.status(400).json({ error: 'Cannot change your own admin status' });
+    }
+    const user = await db.getOne(
+      'UPDATE users SET is_admin = NOT is_admin, updated_at = NOW() WHERE id = $1 RETURNING id, is_admin',
+      [req.params.id]
+    );
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ id: user.id, isAdmin: user.is_admin });
+  } catch (error) {
+    console.error('Toggle admin error:', error);
+    res.status(500).json({ error: 'Failed to toggle admin status' });
+  }
+});
+
+router.put('/users/:id/toggle-disabled', async (req, res) => {
+  try {
+    if (req.params.id === req.adminUser.id) {
+      return res.status(400).json({ error: 'Cannot disable your own account' });
+    }
+    const user = await db.getOne(
+      'UPDATE users SET is_disabled = NOT is_disabled, updated_at = NOW() WHERE id = $1 RETURNING id, is_disabled',
+      [req.params.id]
+    );
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ id: user.id, isDisabled: user.is_disabled });
+  } catch (error) {
+    console.error('Toggle disabled error:', error);
+    res.status(500).json({ error: 'Failed to toggle disabled status' });
+  }
+});
+
+// ─── Chat Moderation ──────────────────────────────────────────────────────
+
+router.get('/chat/leagues', async (req, res) => {
+  try {
+    const leagues = await db.getAll(`
+      SELECT l.id, l.name, l.sport_id,
+             (SELECT COUNT(*) FROM chat_messages cm WHERE cm.league_id = l.id) as message_count,
+             (SELECT MAX(cm.created_at) FROM chat_messages cm WHERE cm.league_id = l.id) as last_message_at
+      FROM leagues l
+      ORDER BY last_message_at DESC NULLS LAST
+    `);
+    res.json({
+      leagues: leagues.map(l => ({
+        id: l.id,
+        name: l.name,
+        sportId: l.sport_id,
+        messageCount: parseInt(l.message_count),
+      })),
+    });
+  } catch (error) {
+    console.error('Chat leagues error:', error);
+    res.status(500).json({ error: 'Failed to fetch chat leagues' });
+  }
+});
+
+router.get('/chat/leagues/:id/messages', async (req, res) => {
+  try {
+    const { search = '', page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const conditions = ['cm.league_id = $1'];
+    const params = [req.params.id];
+
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`cm.message ILIKE $${params.length}`);
+    }
+
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+    const total = await db.getOne(
+      `SELECT COUNT(*) as count FROM chat_messages cm ${whereClause}`,
+      params
+    );
+
+    const dataParams = [...params, parseInt(limit), offset];
+    const messages = await db.getAll(
+      `SELECT cm.id, cm.user_id, cm.message, cm.gif, cm.deleted_at, cm.deleted_by, cm.created_at,
+              u.display_name, u.profile_image_url
+       FROM chat_messages cm
+       JOIN users u ON cm.user_id = u.id
+       ${whereClause}
+       ORDER BY cm.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      dataParams
+    );
+
+    res.json({
+      messages: messages.map(m => ({
+        id: m.id,
+        userId: m.user_id,
+        message: m.message,
+        gif: m.gif,
+        displayName: m.display_name,
+        profileImageUrl: m.profile_image_url,
+        deletedAt: m.deleted_at,
+        deletedBy: m.deleted_by,
+        createdAt: m.created_at,
+      })),
+      total: parseInt(total.count),
+      page: parseInt(page),
+      totalPages: Math.ceil(parseInt(total.count) / parseInt(limit)),
+    });
+  } catch (error) {
+    console.error('Chat messages error:', error);
+    res.status(500).json({ error: 'Failed to fetch chat messages' });
+  }
+});
+
+router.delete('/chat/messages/:id', async (req, res) => {
+  try {
+    await db.run(
+      `UPDATE chat_messages SET message = NULL, gif = NULL, deleted_at = NOW(), deleted_by = 'admin' WHERE id = $1`,
+      [req.params.id]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete chat message error:', error);
+    res.status(500).json({ error: 'Failed to delete message' });
+  }
+});
+
+router.get('/chat/reports', async (req, res) => {
+  try {
+    const reports = await db.getAll(`
+      SELECT cr.id, cr.message_id, cr.reason, cr.status, cr.created_at,
+             cm.message as message_content, cm.user_id as sender_id,
+             u_sender.display_name as sender_name,
+             u_reporter.display_name as reporter_name,
+             l.name as league_name
+      FROM chat_reports cr
+      JOIN chat_messages cm ON cm.id = cr.message_id
+      JOIN users u_sender ON u_sender.id = cm.user_id
+      JOIN users u_reporter ON u_reporter.id = cr.reported_by
+      JOIN leagues l ON l.id = cr.league_id
+      WHERE cr.status = 'pending'
+      ORDER BY cr.created_at DESC
+    `);
+    res.json({
+      reports: reports.map(r => ({
+        id: r.id,
+        messageId: r.message_id,
+        messageContent: r.message_content,
+        senderName: r.sender_name,
+        reporterName: r.reporter_name,
+        leagueName: r.league_name,
+        reason: r.reason,
+        status: r.status,
+        createdAt: r.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error('Chat reports error:', error);
+    res.status(500).json({ error: 'Failed to fetch reports' });
+  }
+});
+
+router.put('/chat/reports/:id/resolve', async (req, res) => {
+  try {
+    const { action } = req.body; // 'resolved' or 'dismissed'
+    await db.run(
+      `UPDATE chat_reports SET status = $1, resolved_by = $2, resolved_at = NOW() WHERE id = $3`,
+      [action, req.adminUser.id, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Resolve report error:', error);
+    res.status(500).json({ error: 'Failed to resolve report' });
+  }
+});
+
+router.post('/chat/bans', async (req, res) => {
+  try {
+    const { userId, leagueId, reason, expiresAt } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+    const ban = await db.getOne(
+      `INSERT INTO chat_bans (user_id, league_id, banned_by, reason, expires_at)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [userId, leagueId || null, req.adminUser.id, reason || null, expiresAt || null]
+    );
+    res.json({ id: ban.id, success: true });
+  } catch (error) {
+    console.error('Create ban error:', error);
+    res.status(500).json({ error: 'Failed to create ban' });
+  }
+});
+
+router.get('/chat/bans', async (req, res) => {
+  try {
+    const bans = await db.getAll(`
+      SELECT cb.id, cb.user_id, cb.league_id, cb.reason, cb.expires_at, cb.created_at,
+             u.display_name, l.name as league_name
+      FROM chat_bans cb
+      JOIN users u ON u.id = cb.user_id
+      LEFT JOIN leagues l ON l.id = cb.league_id
+      WHERE cb.expires_at IS NULL OR cb.expires_at > NOW()
+      ORDER BY cb.created_at DESC
+    `);
+    res.json({
+      bans: bans.map(b => ({
+        id: b.id,
+        userId: b.user_id,
+        leagueId: b.league_id,
+        displayName: b.display_name,
+        leagueName: b.league_name,
+        reason: b.reason,
+        expiresAt: b.expires_at,
+        createdAt: b.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error('Get bans error:', error);
+    res.status(500).json({ error: 'Failed to fetch bans' });
+  }
+});
+
+router.delete('/chat/bans/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM chat_bans WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Remove ban error:', error);
+    res.status(500).json({ error: 'Failed to remove ban' });
+  }
+});
+
+// ─── Gamecast Analytics ───────────────────────────────────────────────────
+
+router.get('/analytics/gamecast', async (req, res) => {
+  try {
+    const [summary, topGames] = await Promise.all([
+      db.getOne(`
+        SELECT COUNT(*) as total_sessions,
+               AVG(duration_seconds) as avg_duration,
+               AVG(expand_clicks) as avg_expand_clicks,
+               COUNT(DISTINCT user_id) as unique_users
+        FROM gamecast_sessions
+      `),
+      db.getAll(`
+        SELECT game_id, sport_id,
+               COUNT(*) as views,
+               AVG(duration_seconds) as avg_duration,
+               SUM(expand_clicks) as total_expand_clicks
+        FROM gamecast_sessions
+        GROUP BY game_id, sport_id
+        ORDER BY views DESC
+        LIMIT 20
+      `),
+    ]);
+
+    res.json({
+      totalSessions: parseInt(summary.total_sessions),
+      avgDuration: parseFloat(summary.avg_duration) || 0,
+      avgExpandClicks: parseFloat(summary.avg_expand_clicks) || 0,
+      uniqueUsers: parseInt(summary.unique_users),
+      topGames: topGames.map(g => ({
+        gameId: g.game_id,
+        sportId: g.sport_id,
+        views: parseInt(g.views),
+        avgDuration: parseFloat(g.avg_duration) || 0,
+        totalExpandClicks: parseInt(g.total_expand_clicks),
+      })),
+    });
+  } catch (error) {
+    console.error('Gamecast analytics error:', error);
+    res.status(500).json({ error: 'Failed to fetch gamecast analytics' });
+  }
+});
+
+// ─── Announcements ────────────────────────────────────────────────────────
+
+router.get('/announcements', async (req, res) => {
+  try {
+    const announcements = await db.getAll(`
+      SELECT * FROM announcements ORDER BY created_at DESC
+    `);
+    res.json({
+      announcements: announcements.map(a => ({
+        id: a.id,
+        title: a.title,
+        message: a.message,
+        targetType: a.target_type,
+        targetId: a.target_id,
+        isActive: a.is_active,
+        expiresAt: a.expires_at,
+        createdAt: a.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error('Get announcements error:', error);
+    res.status(500).json({ error: 'Failed to fetch announcements' });
+  }
+});
+
+router.post('/announcements', async (req, res) => {
+  try {
+    const { title, message, targetType, targetId, expiresAt } = req.body;
+    if (!title || !message) return res.status(400).json({ error: 'Title and message are required' });
+
+    const announcement = await db.getOne(
+      `INSERT INTO announcements (title, message, target_type, target_id, created_by, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [title, message, targetType || 'all', targetId || null, req.adminUser.id, expiresAt || null]
+    );
+    res.json({ id: announcement.id, success: true });
+  } catch (error) {
+    console.error('Create announcement error:', error);
+    res.status(500).json({ error: 'Failed to create announcement' });
+  }
+});
+
+router.put('/announcements/:id', async (req, res) => {
+  try {
+    const fields = [];
+    const params = [];
+    let paramIndex = 1;
+
+    for (const [key, value] of Object.entries(req.body)) {
+      const columnMap = {
+        title: 'title', message: 'message', targetType: 'target_type',
+        targetId: 'target_id', isActive: 'is_active', expiresAt: 'expires_at',
+      };
+      if (columnMap[key] !== undefined) {
+        fields.push(`${columnMap[key]} = $${paramIndex}`);
+        params.push(value);
+        paramIndex++;
+      }
+    }
+
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+    params.push(req.params.id);
+    await db.run(
+      `UPDATE announcements SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+      params
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update announcement error:', error);
+    res.status(500).json({ error: 'Failed to update announcement' });
+  }
+});
+
+router.delete('/announcements/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM announcements WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete announcement error:', error);
+    res.status(500).json({ error: 'Failed to delete announcement' });
   }
 });
 

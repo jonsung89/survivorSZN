@@ -11,7 +11,8 @@ import {
   ChevronDown,
   Edit3,
   Sun,
-  Moon
+  Moon,
+  Shield
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
@@ -157,6 +158,16 @@ export default function Navbar() {
                         <Edit3 className="w-4 h-4" />
                         Edit Profile
                       </button>
+                      {user?.isAdmin && (
+                        <Link
+                          to="/admin"
+                          onClick={() => setDropdownOpen(false)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-fg/80 hover:bg-fg/10 transition-colors"
+                        >
+                          <Shield className="w-4 h-4" />
+                          Admin Panel
+                        </Link>
+                      )}
                       <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-left"
@@ -258,6 +269,17 @@ export default function Navbar() {
                       <Edit3 className="w-5 h-5" />
                       Edit Profile
                     </button>
+
+                    {user?.isAdmin && (
+                      <Link
+                        to="/admin"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-fg/70 hover:bg-fg/5 transition-colors"
+                      >
+                        <Shield className="w-5 h-5" />
+                        Admin Panel
+                      </Link>
+                    )}
 
                     <button
                       onClick={handleLogout}

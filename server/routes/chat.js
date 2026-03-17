@@ -185,15 +185,16 @@ router.post('/leagues/:leagueId/messages/:messageId/report', async (req, res) =>
       return res.status(403).json({ error: 'Not a member of this league' });
     }
 
-    // Log the report (you can create a chat_reports table or just log for now)
+    const { reason } = req.body;
+
+    // Save report to database
+    await db.run(
+      `INSERT INTO chat_reports (message_id, reported_by, league_id, reason)
+       VALUES ($1, $2, $3, $4)`,
+      [messageId, user.id, leagueId, reason || null]
+    );
+
     console.log(`Message reported: ${messageId} by user ${user.id} in league ${leagueId}`);
-    
-    // Optionally insert into a reports table:
-    // await db.run(
-    //   `INSERT INTO chat_reports (message_id, reported_by, league_id, created_at)
-    //    VALUES ($1, $2, $3, NOW())`,
-    //   [messageId, user.id, leagueId]
-    // );
 
     res.json({ success: true });
   } catch (error) {

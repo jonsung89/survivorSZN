@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import { auth } from '../firebase';
 import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { userAPI } from '../api';
+import { initAnalytics, setAnalyticsUser } from '../utils/analytics';
 
 const AuthContext = createContext();
 
@@ -37,6 +38,9 @@ export function AuthProvider({ children }) {
           });
 
           setUser({ ...userData, firebaseUser });
+
+          // Initialize analytics with user context
+          initAnalytics(userData);
 
           // Show onboarding for users who haven't completed it
           if (!userData.onboardingComplete) {

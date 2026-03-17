@@ -206,8 +206,65 @@ async function initDb() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_url TEXT`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE`);
     // Auto-mark existing users with display_name as onboarding complete
     await client.query(`UPDATE users SET onboarding_complete = TRUE WHERE display_name IS NOT NULL AND onboarding_complete = FALSE`);
+
+    // Chat moderation tables
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chat_reports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        message_id UUID NOT NULL,
+        reported_by UUID NOT NULL REFERENCES users(id),
+        league_id UUID NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+        reason TEXT,
+        status TEXT DEFAULT 'pending',
+        resolved_by UUID REFERENCES users(id),
+        resolved_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chat_bans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id),
+        league_id UUID REFERENCES leagues(id) ON DELETE CASCADE,
+        banned_by UUID NOT NULL REFERENCES users(id),
+        reason TEXT,
+        expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Gamecast analytics
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gamecast_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id),
+        game_id TEXT NOT NULL,
+        sport_id TEXT NOT NULL,
+        duration_seconds INTEGER,
+        expand_clicks INTEGER DEFAULT 0,
+        started_at TIMESTAMPTZ DEFAULT NOW(),
+        ended_at TIMESTAMPTZ
+      )
+    `);
+
+    // Announcements
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        target_type TEXT DEFAULT 'all',
+        target_id TEXT,
+        created_by UUID REFERENCES users(id),
+        is_active BOOLEAN DEFAULT TRUE,
+        expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
 
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_league_members_user ON league_members(user_id)`);

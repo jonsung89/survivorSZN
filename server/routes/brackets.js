@@ -3,7 +3,7 @@ const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
 const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport } = require('../services/ncaab-tournament');
-const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, getChildSlots, countPicks } = require('../utils/bracket-slots');
+const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, getNextSlot, getRegionForSlot, getChildSlots, countPicks, DEFAULT_REGIONS } = require('../utils/bracket-slots');
 
 // Total games in the bracket (derived from round boundaries)
 const TOTAL_BRACKET_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
@@ -657,7 +657,7 @@ router.get('/admin/matchups/:season', async (req, res) => {
 
     const slots = challenge.tournament_data.slots;
     const matchups = [];
-    const roundNames = { 1: 'Round of 64', 2: 'Round of 32', 3: 'Sweet 16', 4: 'Elite 8', 5: 'Final Four', 6: 'Championship' };
+    const roundNames = { 0: 'Round of 64', 1: 'Round of 32', 2: 'Sweet 16', 3: 'Elite 8', 4: 'Final Four', 5: 'Championship' };
 
     for (const [slotNum, slotData] of Object.entries(slots)) {
       const slot = parseInt(slotNum);
@@ -666,10 +666,12 @@ router.get('/admin/matchups/:season', async (req, res) => {
 
       if (round && roundName !== round) continue;
 
-      const team1Id = slotData.homeTeamId || slotData.team1Id;
-      const team2Id = slotData.awayTeamId || slotData.team2Id;
+      // Support both flat (homeTeamId/team1Id) and nested (team1.id/team2.id) formats
+      const team1Id = slotData.homeTeamId || slotData.team1Id || slotData.team1?.id;
+      const team2Id = slotData.awayTeamId || slotData.team2Id || slotData.team2?.id;
 
-      if (!team1Id || !team2Id || team1Id === 'TBD' || team2Id === 'TBD') continue;
+      // Skip placeholder/TBD teams (string 'TBD' or negative IDs like -1, -2)
+      if (!team1Id || !team2Id || team1Id === 'TBD' || team2Id === 'TBD' || String(team1Id).startsWith('-') || String(team2Id).startsWith('-')) continue;
 
       // Check if we have a stored report
       const stored = await getStoredMatchupReport(team1Id, team2Id, season);
@@ -680,12 +682,12 @@ router.get('/admin/matchups/:season', async (req, res) => {
         roundNum: slotRound,
         team1Id,
         team2Id,
-        team1Name: slotData.homeTeamName || slotData.team1Name || team1Id,
-        team2Name: slotData.awayTeamName || slotData.team2Name || team2Id,
-        team1Logo: slotData.homeTeamLogo || slotData.team1Logo,
-        team2Logo: slotData.awayTeamLogo || slotData.team2Logo,
-        team1Seed: slotData.homeTeamSeed || slotData.team1Seed,
-        team2Seed: slotData.awayTeamSeed || slotData.team2Seed,
+        team1Name: slotData.homeTeamName || slotData.team1Name || slotData.team1?.name || team1Id,
+        team2Name: slotData.awayTeamName || slotData.team2Name || slotData.team2?.name || team2Id,
+        team1Logo: slotData.homeTeamLogo || slotData.team1Logo || slotData.team1?.logo,
+        team2Logo: slotData.awayTeamLogo || slotData.team2Logo || slotData.team2?.logo,
+        team1Seed: slotData.homeTeamSeed || slotData.team1Seed || slotData.team1?.seed,
+        team2Seed: slotData.awayTeamSeed || slotData.team2Seed || slotData.team2?.seed,
         hasReport: !!stored?.report,
         hasConcise: !!stored?.conciseReport,
         generatedAt: stored?.generatedAt || null,
@@ -695,7 +697,107 @@ router.get('/admin/matchups/:season', async (req, res) => {
     // Sort by round then slot
     matchups.sort((a, b) => a.roundNum - b.roundNum || a.slot - b.slot);
 
-    res.json({ matchups, rounds: [...new Set(matchups.map(m => m.round))] });
+    // Build available rounds from slot-based matchups
+    const slotRounds = [...new Set(matchups.map(m => m.round))];
+
+    // Check if there are cached reports beyond what's in the slot matchups
+    const cachedReports = await db.getAll(
+      `SELECT team1_id, team2_id, round, generated_at FROM matchup_reports WHERE season = $1 AND report IS NOT NULL`,
+      [season]
+    );
+
+    // Build a set of team pairs already shown from slots
+    const slotPairs = new Set(matchups.map(m => {
+      const [s1, s2] = [String(m.team1Id), String(m.team2Id)].sort();
+      return `${s1}-${s2}`;
+    }));
+
+    // Find cached reports not in slot matchups
+    const extraCached = cachedReports.filter(r => {
+      const [s1, s2] = [String(r.team1_id), String(r.team2_id)].sort();
+      return !slotPairs.has(`${s1}-${s2}`);
+    });
+
+    // If requesting "All Cached" or there are extra cached reports, include them
+    const availableRounds = [...slotRounds];
+    if (extraCached.length > 0 || cachedReports.length > slotPairs.size) {
+      availableRounds.push('All Cached');
+    }
+
+    if (round === 'All Cached') {
+      // Build team → R64 slot mapping from tournament data
+      const teams = challenge.tournament_data?.teams || {};
+      const teamToR64Slot = {};
+      for (const [slotNum, slotData] of Object.entries(slots)) {
+        const s = parseInt(slotNum);
+        if (s < 1 || s > 32) continue; // R64 slots only
+        const t1 = slotData.homeTeamId || slotData.team1Id || slotData.team1?.id;
+        const t2 = slotData.awayTeamId || slotData.team2Id || slotData.team2?.id;
+        if (t1 && !String(t1).startsWith('-')) teamToR64Slot[String(t1)] = s;
+        if (t2 && !String(t2).startsWith('-')) teamToR64Slot[String(t2)] = s;
+      }
+
+      // Get region names from tournament data or use defaults
+      const regionNames = challenge.tournament_data?.regions || DEFAULT_REGIONS;
+
+      // For two teams, find the round they'd meet by tracing bracket paths
+      function getMeetingRound(teamId1, teamId2) {
+        const s1 = teamToR64Slot[String(teamId1)];
+        const s2 = teamToR64Slot[String(teamId2)];
+        if (!s1 || !s2) return { roundNum: -1, roundName: 'Other', region: null };
+
+        // Build ancestor chains (slot at each round level)
+        const chain1 = [s1], chain2 = [s2];
+        let curr1 = s1, curr2 = s2;
+        for (let r = 0; r < 5; r++) {
+          curr1 = getNextSlot(curr1);
+          curr2 = getNextSlot(curr2);
+          if (curr1) chain1.push(curr1);
+          if (curr2) chain2.push(curr2);
+        }
+
+        // Find the first common slot — that's where they'd meet
+        for (let i = 0; i < chain1.length; i++) {
+          const idx2 = chain2.indexOf(chain1[i]);
+          if (idx2 !== -1) {
+            const meetSlot = chain1[i];
+            const meetRound = getSlotRound(meetSlot);
+            const roundName = roundNames[meetRound] || `Round ${meetRound}`;
+            const region = getRegionForSlot(meetSlot, regionNames);
+            return { roundNum: meetRound, roundName, region };
+          }
+        }
+        return { roundNum: -1, roundName: 'Other', region: null };
+      }
+
+      const cachedMatchups = cachedReports.map((r, idx) => {
+        const t1 = teams[r.team1_id] || {};
+        const t2 = teams[r.team2_id] || {};
+        const meeting = getMeetingRound(r.team1_id, r.team2_id);
+        return {
+          slot: -(idx + 1),
+          round: meeting.roundName,
+          roundNum: meeting.roundNum,
+          region: meeting.region,
+          team1Id: r.team1_id,
+          team2Id: r.team2_id,
+          team1Name: t1.name || t1.shortName || r.team1_id,
+          team2Name: t2.name || t2.shortName || r.team2_id,
+          team1Logo: t1.logo || null,
+          team2Logo: t2.logo || null,
+          team1Seed: t1.seed || null,
+          team2Seed: t2.seed || null,
+          hasReport: true,
+          hasConcise: true,
+          generatedAt: r.generated_at,
+        };
+      });
+      // Sort by round number, then region, then seed
+      cachedMatchups.sort((a, b) => a.roundNum - b.roundNum || (a.region || '').localeCompare(b.region || '') || (a.team1Seed || 99) - (b.team1Seed || 99));
+      return res.json({ matchups: cachedMatchups, rounds: availableRounds });
+    }
+
+    res.json({ matchups, rounds: availableRounds });
   } catch (error) {
     console.error('Error fetching matchups:', error);
     res.status(500).json({ error: 'Failed to fetch matchups' });
@@ -744,7 +846,7 @@ router.post('/admin/matchup-reports/generate-round', async (req, res) => {
     }
 
     const slots = challenge.tournament_data.slots;
-    const roundNames = { 1: 'Round of 64', 2: 'Round of 32', 3: 'Sweet 16', 4: 'Elite 8', 5: 'Final Four', 6: 'Championship' };
+    const roundNames = { 0: 'Round of 64', 1: 'Round of 32', 2: 'Sweet 16', 3: 'Elite 8', 4: 'Final Four', 5: 'Championship' };
     const matchupsToGenerate = [];
 
     for (const [slotNum, slotData] of Object.entries(slots)) {
@@ -754,10 +856,10 @@ router.post('/admin/matchup-reports/generate-round', async (req, res) => {
 
       if (roundName !== round) continue;
 
-      const team1Id = slotData.homeTeamId || slotData.team1Id;
-      const team2Id = slotData.awayTeamId || slotData.team2Id;
+      const team1Id = slotData.homeTeamId || slotData.team1Id || slotData.team1?.id;
+      const team2Id = slotData.awayTeamId || slotData.team2Id || slotData.team2?.id;
 
-      if (!team1Id || !team2Id || team1Id === 'TBD' || team2Id === 'TBD') continue;
+      if (!team1Id || !team2Id || team1Id === 'TBD' || team2Id === 'TBD' || String(team1Id).startsWith('-') || String(team2Id).startsWith('-')) continue;
 
       if (!force) {
         const stored = await getStoredMatchupReport(team1Id, team2Id, season);

@@ -1,7 +1,119 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Loader2, RefreshCw, Eye, Check, AlertCircle, ChevronDown } from 'lucide-react';
 import { bracketAPI } from '../../api';
 import ReactMarkdown from 'react-markdown';
+
+function MatchupCard({ m, generatingId, onView, onGenerate }) {
+  const key = `${m.team1Id}-${m.team2Id}`;
+  const isGenerating = generatingId === key;
+  const hasComplete = m.hasReport && m.hasConcise;
+
+  return (
+    <div
+      className={`bg-surface border rounded-xl p-4 transition-colors ${
+        hasComplete ? 'border-fg/10' : 'border-amber-500/30'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {m.team1Logo && <img src={m.team1Logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />}
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-fg truncate">
+                {m.team1Seed ? `#${m.team1Seed} ` : ''}{m.team1Name}
+              </div>
+            </div>
+          </div>
+          <span className="text-sm text-fg/30 font-bold flex-shrink-0">vs</span>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {m.team2Logo && <img src={m.team2Logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />}
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-fg truncate">
+                {m.team2Seed ? `#${m.team2Seed} ` : ''}{m.team2Name}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+          {hasComplete && (
+            <span className="text-emerald-400 mr-1">
+              <Check className="w-4 h-4" />
+            </span>
+          )}
+          {hasComplete && (
+            <button
+              onClick={() => onView(m.team1Id, m.team2Id, `${m.team1Seed ? '#' + m.team1Seed + ' ' : ''}${m.team1Name}`, `${m.team2Seed ? '#' + m.team2Seed + ' ' : ''}${m.team2Name}`)}
+              className="p-1.5 rounded-lg text-fg/40 hover:text-fg hover:bg-fg/10 transition-colors"
+              title="View report"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            onClick={() => onGenerate(m.team1Id, m.team2Id, true)}
+            disabled={isGenerating}
+            className="p-1.5 rounded-lg text-fg/40 hover:text-fg hover:bg-fg/10 transition-colors disabled:opacity-50"
+            title={hasComplete ? 'Regenerate' : 'Generate'}
+          >
+            {isGenerating ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+      </div>
+      {m.generatedAt && (
+        <div className="text-sm text-fg/50 mt-1">
+          {hasComplete ? '✓' : '⚠'} {new Date(m.generatedAt).toLocaleDateString()}, {new Date(m.generatedAt).toLocaleTimeString()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MatchupGrid({ matchups, grouped, generatingId, onView, onGenerate }) {
+  const sections = useMemo(() => {
+    if (!grouped) return null;
+    const groups = {};
+    matchups.forEach(m => {
+      const roundLabel = m.round || 'Other';
+      const regionLabel = m.region || (m.roundNum >= 4 ? '' : '');
+      const sectionKey = regionLabel ? `${roundLabel} — ${regionLabel}` : roundLabel;
+      if (!groups[sectionKey]) groups[sectionKey] = { roundNum: m.roundNum, items: [] };
+      groups[sectionKey].items.push(m);
+    });
+    return Object.entries(groups).sort((a, b) => a[1].roundNum - b[1].roundNum);
+  }, [matchups, grouped]);
+
+  if (grouped && sections) {
+    return (
+      <div className="space-y-6">
+        {sections.map(([label, { items }]) => (
+          <div key={label}>
+            <div className="flex items-center gap-3 mb-3">
+              <h3 className="text-sm font-semibold text-fg/70 uppercase tracking-wider">{label}</h3>
+              <span className="text-sm text-fg/30">{items.length} reports</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {items.map(m => (
+                <MatchupCard key={`${m.team1Id}-${m.team2Id}`} m={m} generatingId={generatingId} onView={onView} onGenerate={onGenerate} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {matchups.map(m => (
+        <MatchupCard key={`${m.team1Id}-${m.team2Id}`} m={m} generatingId={generatingId} onView={onView} onGenerate={onGenerate} />
+      ))}
+    </div>
+  );
+}
 
 export default function AdminMatchups() {
   const [season] = useState(new Date().getFullYear());
@@ -85,7 +197,9 @@ export default function AdminMatchups() {
     }
   };
 
-  const filteredMatchups = matchups.filter(m => !selectedRound || m.round === selectedRound);
+  const filteredMatchups = (!selectedRound || selectedRound === 'All Cached')
+    ? matchups
+    : matchups.filter(m => m.round === selectedRound);
   const generatedCount = filteredMatchups.filter(m => m.hasReport && m.hasConcise).length;
   const missingCount = filteredMatchups.length - generatedCount;
 
@@ -169,86 +283,13 @@ export default function AdminMatchups() {
           No matchups found for this round. Teams may be TBD.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {filteredMatchups.map((m) => {
-            const key = `${m.team1Id}-${m.team2Id}`;
-            const isGenerating = generatingId === key;
-            const hasComplete = m.hasReport && m.hasConcise;
-
-            return (
-              <div
-                key={key}
-                className={`bg-surface border rounded-xl p-4 transition-colors ${
-                  hasComplete ? 'border-fg/10' : 'border-amber-500/30'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  {/* Teams */}
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {m.team1Logo && <img src={m.team1Logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />}
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-fg truncate">
-                          #{m.team1Seed} {m.team1Name}
-                        </div>
-                      </div>
-                    </div>
-
-                    <span className="text-sm text-fg/30 font-bold flex-shrink-0">vs</span>
-
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {m.team2Logo && <img src={m.team2Logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />}
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-fg truncate">
-                          #{m.team2Seed} {m.team2Name}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-                    {hasComplete && (
-                      <span className="text-emerald-400 mr-1">
-                        <Check className="w-4 h-4" />
-                      </span>
-                    )}
-
-                    {hasComplete && (
-                      <button
-                        onClick={() => handleViewReport(m.team1Id, m.team2Id, `#${m.team1Seed} ${m.team1Name}`, `#${m.team2Seed} ${m.team2Name}`)}
-                        className="p-1.5 rounded-lg text-fg/40 hover:text-fg hover:bg-fg/10 transition-colors"
-                        title="View report"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => handleGenerateSingle(m.team1Id, m.team2Id, true)}
-                      disabled={isGenerating}
-                      className="p-1.5 rounded-lg text-fg/40 hover:text-fg hover:bg-fg/10 transition-colors disabled:opacity-50"
-                      title={hasComplete ? 'Regenerate' : 'Generate'}
-                    >
-                      {isGenerating ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Generated timestamp */}
-                {m.generatedAt && (
-                  <div className="text-sm text-fg/30 mt-1">
-                    {hasComplete ? '✓' : '⚠'} {new Date(m.generatedAt).toLocaleDateString()}, {new Date(m.generatedAt).toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <MatchupGrid
+          matchups={filteredMatchups}
+          grouped={selectedRound === 'All Cached'}
+          generatingId={generatingId}
+          onView={handleViewReport}
+          onGenerate={handleGenerateSingle}
+        />
       )}
 
       {/* Report View Modal */}

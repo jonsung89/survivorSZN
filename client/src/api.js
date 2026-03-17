@@ -552,6 +552,111 @@ export const adminAPI = {
     const res = await authFetch(`/admin/challenges/${id}`, { method: 'DELETE' });
     return res.json();
   },
+  // User management actions
+  toggleUserAdmin: async (id) => {
+    const res = await authFetch(`/admin/users/${id}/toggle-admin`, { method: 'PUT' });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    return res.json();
+  },
+  toggleUserDisabled: async (id) => {
+    const res = await authFetch(`/admin/users/${id}/toggle-disabled`, { method: 'PUT' });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    return res.json();
+  },
+  // Chat moderation
+  getChatLeagues: async () => {
+    const res = await authFetch('/admin/chat/leagues');
+    return res.json();
+  },
+  getChatMessages: async (leagueId, params = {}) => {
+    const res = await authFetch(`/admin/chat/leagues/${leagueId}/messages?${new URLSearchParams(params)}`);
+    return res.json();
+  },
+  deleteChatMessage: async (messageId) => {
+    const res = await authFetch(`/admin/chat/messages/${messageId}`, { method: 'DELETE' });
+    return res.json();
+  },
+  getChatReports: async () => {
+    const res = await authFetch('/admin/chat/reports');
+    return res.json();
+  },
+  resolveChatReport: async (reportId, action) => {
+    const res = await authFetch(`/admin/chat/reports/${reportId}/resolve`, {
+      method: 'PUT',
+      body: JSON.stringify({ action }),
+    });
+    return res.json();
+  },
+  createChatBan: async (data) => {
+    const res = await authFetch('/admin/chat/bans', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  getChatBans: async () => {
+    const res = await authFetch('/admin/chat/bans');
+    return res.json();
+  },
+  removeChatBan: async (banId) => {
+    const res = await authFetch(`/admin/chat/bans/${banId}`, { method: 'DELETE' });
+    return res.json();
+  },
+  // Analytics
+  getAnalytics: async () => {
+    const res = await authFetch('/admin/analytics');
+    return res.json();
+  },
+  getGamecastAnalytics: async () => {
+    const res = await authFetch('/admin/analytics/gamecast');
+    return res.json();
+  },
+  // Announcements
+  getAnnouncements: async () => {
+    const res = await authFetch('/admin/announcements');
+    return res.json();
+  },
+  createAnnouncement: async (data) => {
+    const res = await authFetch('/admin/announcements', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  updateAnnouncement: async (id, data) => {
+    const res = await authFetch(`/admin/announcements/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  deleteAnnouncement: async (id) => {
+    const res = await authFetch(`/admin/announcements/${id}`, { method: 'DELETE' });
+    return res.json();
+  },
+};
+
+// Analytics API (public-facing)
+export const analyticsAPI = {
+  trackGamecastSession: async (data) => {
+    try {
+      const res = await authFetch('/analytics/gamecast-session', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      return res.json();
+    } catch {
+      // Silently fail - analytics should not break the app
+      return { success: false };
+    }
+  },
+  getActiveAnnouncements: async () => {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${API_URL}/analytics/announcements/active`, { headers });
+    return res.json();
+  },
 };
 
 export default {
@@ -564,4 +669,5 @@ export default {
   sports: sportsAPI,
   bracket: bracketAPI,
   admin: adminAPI,
+  analytics: analyticsAPI,
 };

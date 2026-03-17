@@ -116,6 +116,20 @@ function setupSocketHandlers(io) {
           return;
         }
 
+        // Check for chat ban
+        const ban = await db.getOne(
+          `SELECT id FROM chat_bans
+           WHERE user_id = $1 AND (league_id = $2 OR league_id IS NULL)
+           AND (expires_at IS NULL OR expires_at > NOW())
+           LIMIT 1`,
+          [socket.userId, leagueId]
+        );
+
+        if (ban) {
+          socket.emit('error', { message: 'You are banned from chatting' });
+          return;
+        }
+
         // Verify membership
         const membership = await db.getOne(
           'SELECT id FROM league_members WHERE league_id = $1 AND user_id = $2',

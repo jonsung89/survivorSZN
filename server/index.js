@@ -16,6 +16,7 @@ const notificationRoutes = require('./routes/notifications-pg');
 const scheduleRoutes = require('./routes/schedule');
 const bracketRoutes = require('./routes/brackets');
 const adminRoutes = require('./routes/admin');
+const analyticsRoutes = require('./routes/analytics');
 
 // Initialize database
 const { initDb } = require('./db/supabase');
@@ -62,6 +63,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/brackets', bracketRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

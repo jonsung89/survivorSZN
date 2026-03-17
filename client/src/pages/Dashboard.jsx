@@ -19,6 +19,7 @@ import { getWeekLabel } from '../sports/nfl/weekUtils';
 import { getSportModule, getSportGradient, getSportBadgeClasses } from '../sports';
 import SportBadge from '../components/SportBadge';
 import LeagueMembersDialog from '../components/LeagueMembersDialog';
+import AnnouncementBanner from '../components/AnnouncementBanner';
 import { useThemedLogo } from '../utils/logo';
 
 // Network broadcast info lookup
@@ -285,6 +286,7 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
+      <AnnouncementBanner />
       {/* Welcome Header */}
       <div className="mb-6 sm:mb-8 animate-in">
         <h1 className="text-2xl sm:text-3xl font-display font-bold text-fg">

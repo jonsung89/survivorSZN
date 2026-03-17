@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { trackPageView } from './utils/analytics';
 import { SocketProvider } from './context/SocketContext';
 import { ScoresSocketProvider } from './context/ScoresSocketContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -28,6 +29,9 @@ import AdminLeagues from './pages/admin/AdminLeagues';
 import AdminReports from './pages/admin/AdminReports';
 import AdminMatchups from './pages/admin/AdminMatchups';
 import AdminBracketTest from './pages/admin/AdminBracketTest';
+import AdminChatModeration from './pages/admin/AdminChatModeration';
+import AdminAnalytics from './pages/admin/AdminAnalytics';
+import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 
@@ -101,8 +105,18 @@ function RootRedirect() {
   return <Navigate to={user ? "/dashboard" : "/schedule"} replace />;
 }
 
+function PageViewTracker() {
+  const location = useLocation();
+  useEffect(() => {
+    trackPageView(location.pathname);
+  }, [location.pathname]);
+  return null;
+}
+
 function AppRoutes() {
   return (
+    <>
+    <PageViewTracker />
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={
@@ -203,9 +217,18 @@ function AppRoutes() {
         <Route index element={<AdminDashboard />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="leagues" element={<AdminLeagues />} />
-        <Route path="reports" element={<AdminReports />} />
-        <Route path="matchups" element={<AdminMatchups />} />
-        <Route path="bracket-test" element={<AdminBracketTest />} />
+        {/* Sports & Challenges - NCAAB (March Madness) */}
+        <Route path="ncaab/reports" element={<AdminReports />} />
+        <Route path="ncaab/matchups" element={<AdminMatchups />} />
+        <Route path="ncaab/bracket-test" element={<AdminBracketTest />} />
+        {/* Legacy redirects */}
+        <Route path="reports" element={<Navigate to="/admin/ncaab/reports" replace />} />
+        <Route path="matchups" element={<Navigate to="/admin/ncaab/matchups" replace />} />
+        <Route path="bracket-test" element={<Navigate to="/admin/ncaab/bracket-test" replace />} />
+        {/* Tools */}
+        <Route path="chat" element={<AdminChatModeration />} />
+        <Route path="analytics" element={<AdminAnalytics />} />
+        <Route path="announcements" element={<AdminAnnouncements />} />
       </Route>
 
       {/* Redirect root to dashboard (logged in) or schedule (public) */}
@@ -222,6 +245,7 @@ function AppRoutes() {
         </div>
       } />
     </Routes>
+    </>
   );
 }
 

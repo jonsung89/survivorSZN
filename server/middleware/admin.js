@@ -9,11 +9,15 @@ const adminMiddleware = async (req, res, next) => {
 
     try {
       const user = await db.getOne(
-        'SELECT id, is_admin FROM users WHERE firebase_uid = $1',
+        'SELECT id, is_admin, is_disabled FROM users WHERE firebase_uid = $1',
         [req.firebaseUser.uid]
       );
 
-      if (!user || !user.is_admin) {
+      if (!user || user.is_disabled) {
+        return res.status(403).json({ error: 'Account disabled' });
+      }
+
+      if (!user.is_admin) {
         return res.status(403).json({ error: 'Admin access required' });
       }
 

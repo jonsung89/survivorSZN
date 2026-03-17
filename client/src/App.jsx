@@ -28,6 +28,8 @@ import AdminLeagues from './pages/admin/AdminLeagues';
 import AdminReports from './pages/admin/AdminReports';
 import AdminMatchups from './pages/admin/AdminMatchups';
 import AdminBracketTest from './pages/admin/AdminBracketTest';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 
 // Protected route wrapper
 function ProtectedRoute({ children }) {
@@ -71,17 +73,15 @@ function PublicRoute({ children }) {
 }
 
 // Main layout with navbar and footer
-// hideFooterMobile: hides footer on mobile/tablet for pages with bottom chat bar
-function AppLayout({ children, hideFooterMobile = false }) {
+// hideFooter: hides footer entirely (e.g. league pages)
+function AppLayout({ children, hideFooter = false }) {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
       <main className="pt-4 flex-1">
         {children}
       </main>
-      <div className={hideFooterMobile ? 'hidden lg:block' : ''}>
-        <Footer />
-      </div>
+      {!hideFooter && <Footer />}
     </div>
   );
 }
@@ -151,7 +151,7 @@ function AppRoutes() {
       {/* hideFooterMobile: chat bar replaces footer on mobile */}
       <Route path="/league/:leagueId" element={
         <ProtectedRoute>
-          <AppLayout hideFooterMobile>
+          <AppLayout hideFooter>
             <LeagueDetail />
           </AppLayout>
         </ProtectedRoute>
@@ -159,7 +159,7 @@ function AppRoutes() {
       
       <Route path="/league/:leagueId/pick" element={
         <ProtectedRoute>
-          <AppLayout>
+          <AppLayout hideFooter>
             <MakePick />
           </AppLayout>
         </ProtectedRoute>
@@ -167,7 +167,7 @@ function AppRoutes() {
 
       <Route path="/league/:leagueId/bracket" element={
         <ProtectedRoute>
-          <AppLayout>
+          <AppLayout hideFooter>
             <BracketChallenge />
           </AppLayout>
         </ProtectedRoute>
@@ -175,7 +175,7 @@ function AppRoutes() {
 
       <Route path="/league/:leagueId/bracket/:bracketId" element={
         <ProtectedRoute>
-          <AppLayout>
+          <AppLayout hideFooter>
             <BracketFill />
           </AppLayout>
         </ProtectedRoute>
@@ -184,6 +184,17 @@ function AppRoutes() {
       <Route path="/schedule" element={
         <AppLayout>
           <Schedule />
+        </AppLayout>
+      } />
+
+      <Route path="/privacy" element={
+        <AppLayout>
+          <PrivacyPolicy />
+        </AppLayout>
+      } />
+      <Route path="/terms" element={
+        <AppLayout>
+          <TermsOfService />
         </AppLayout>
       } />
       

@@ -199,9 +199,11 @@ router.get('/challenges/league/:leagueId', authMiddleware, async (req, res) => {
     const challenge = await db.getOne('SELECT * FROM bracket_challenges WHERE league_id = $1 ORDER BY season DESC LIMIT 1', [req.params.leagueId]);
     if (!challenge) return res.json({ challenge: null });
 
-    // Auto-refresh tournament data if stale (fewer than 64 teams means bracket wasn't released yet when challenge was created)
+    // Auto-refresh tournament data if stale (fewer than 64 teams or incomplete R64 slots)
     const storedTeams = Object.keys(challenge.tournament_data?.teams || {}).length;
-    if (storedTeams < 64) {
+    const storedSlots = challenge.tournament_data?.slots || {};
+    const filledR64 = Object.keys(storedSlots).filter(k => parseInt(k) <= 32 && storedSlots[k]?.team1 && storedSlots[k]?.team2).length;
+    if (storedTeams < 64 || filledR64 < 32) {
       try {
         const freshData = await getTournamentBracket(challenge.season);
         const freshTeams = Object.keys(freshData.teams || {}).length;
@@ -245,9 +247,11 @@ router.get('/challenges/:challengeId', authMiddleware, async (req, res) => {
     const challenge = await db.getOne('SELECT * FROM bracket_challenges WHERE id = $1', [req.params.challengeId]);
     if (!challenge) return res.status(404).json({ error: 'Challenge not found' });
 
-    // Auto-refresh tournament data if stale
+    // Auto-refresh tournament data if stale (fewer than 64 teams or incomplete R64 slots)
     const storedTeams = Object.keys(challenge.tournament_data?.teams || {}).length;
-    if (storedTeams < 64) {
+    const storedSlots2 = challenge.tournament_data?.slots || {};
+    const filledR64_2 = Object.keys(storedSlots2).filter(k => parseInt(k) <= 32 && storedSlots2[k]?.team1 && storedSlots2[k]?.team2).length;
+    if (storedTeams < 64 || filledR64_2 < 32) {
       try {
         const freshData = await getTournamentBracket(challenge.season);
         const freshTeams = Object.keys(freshData.teams || {}).length;

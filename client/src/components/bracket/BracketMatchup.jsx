@@ -113,7 +113,9 @@ export default function BracketMatchup({
     const teamLogo = isGrayedOut ? team.logo : getDarkBgLogo(team.logo);
 
     // Text color: white on team color, muted on gray
-    const textColorClass = isGrayedOut ? 'text-fg/40' : 'text-white';
+    // First Four placeholder teams have no real team color — use fg text in light mode
+    const isFirstFourPlaceholder = team.isFirstFour;
+    const textColorClass = isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg' : 'text-white';
 
     return (
       <div className={rowClasses} onClick={handleClick} style={rowStyle}>
@@ -149,7 +151,7 @@ export default function BracketMatchup({
             : (team.shortName || team.name || team.abbreviation)}
         </span>
         {team.record && (
-          <span className={`text-xs font-mono flex-shrink-0 relative z-[2] ${isGrayedOut ? 'text-fg/40' : 'text-white/80'}`}>
+          <span className={`text-xs font-mono flex-shrink-0 relative z-[2] ${isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg/60' : 'text-white/80'}`}>
             {team.record}
           </span>
         )}

@@ -30,6 +30,7 @@ const REGION_ALIASES = {
 };
 
 const ROUND_MAP = {
+  'first four': -1,
   '1st round': 0, 'first round': 0, 'round of 64': 0,
   '2nd round': 1, 'second round': 1, 'round of 32': 1,
   'sweet 16': 2, 'sweet sixteen': 2,
@@ -137,6 +138,7 @@ async function getTournamentBracket(season) {
   // Discover regions dynamically from ESPN data (data-driven, not hardcoded)
   const regionGames = {}; // { regionName: [gameInfo, ...] }
   const regionOrder = []; // preserve discovery order
+  const firstFourGames = {}; // { regionName: [gameInfo, ...] } — First Four play-in games
 
   for (const event of events) {
     const { region, round } = parseRegionAndRound(event);
@@ -182,6 +184,12 @@ async function getTournamentBracket(season) {
 
     eventMap[event.id] = gameInfo;
 
+    // Track First Four games by region
+    if (round === -1 && region) {
+      if (!firstFourGames[region]) firstFourGames[region] = [];
+      firstFourGames[region].push(gameInfo);
+    }
+
     // Track region for R64 games and discover region names
     if (round === 0 && region) {
       if (!regionGames[region]) {
@@ -201,10 +209,81 @@ async function getTournamentBracket(season) {
   for (let regionIdx = 0; regionIdx < discoveredRegions.length; regionIdx++) {
     const regionName = discoveredRegions[regionIdx];
     const games = regionGames[regionName] || [];
+    const ffGames = firstFourGames[regionName] || [];
     const slotBase = regionIdx * 8 + 1; // Region 0: 1-8, Region 1: 9-16, etc.
 
     for (const game of games) {
-      const seeds = [game.team1?.seed, game.team2?.seed].sort((a, b) => (a || 99) - (b || 99));
+      const seed1 = game.team1?.seed;
+      const seed2 = game.team2?.seed;
+
+      // Handle R64 games where one team is TBD (First Four dependent)
+      if ((seed1 && !seed2) || (!seed1 && seed2)) {
+        const knownSeed = seed1 || seed2;
+        const knownTeam = seed1 ? game.team1 : game.team2;
+
+        // Determine which SEED_MATCHUPS slot this belongs to by the known seed
+        // e.g., if knownSeed is 1, the matchup is 1v16, so the TBD opponent is seed 16
+        const matchupIdx = SEED_MATCHUPS.findIndex(([s1, s2]) =>
+          s1 === knownSeed || s2 === knownSeed
+        );
+
+        // Find the expected opponent seed from the matchup
+        const expectedOpponentSeed = matchupIdx >= 0
+          ? (SEED_MATCHUPS[matchupIdx][0] === knownSeed ? SEED_MATCHUPS[matchupIdx][1] : SEED_MATCHUPS[matchupIdx][0])
+          : null;
+
+        // Find matching First Four game — same region, both teams have the expected opponent seed
+        const ffGame = expectedOpponentSeed
+          ? ffGames.find(ff => ff.team1?.seed === expectedOpponentSeed && ff.team2?.seed === expectedOpponentSeed)
+          : null;
+
+        if (matchupIdx >= 0) {
+          const slotNum = slotBase + matchupIdx;
+          const [expectedHighSeed, expectedLowSeed] = SEED_MATCHUPS[matchupIdx];
+          const isKnownHighSeed = knownSeed === expectedHighSeed;
+
+          // Build the TBD team from the First Four game
+          let tbdTeam = null;
+          if (ffGame) {
+            // If First Four game is finished, use the winner
+            if (ffGame.status === 'STATUS_FINAL') {
+              tbdTeam = ffGame.team1?.winner ? ffGame.team1 : ffGame.team2;
+            } else {
+              // Show placeholder with both First Four team names
+              const ffSeed = ffGame.team1?.seed || ffGame.team2?.seed;
+              tbdTeam = {
+                id: `ff-${ffGame.espnEventId}`,
+                name: `${ffGame.team1?.shortName || ffGame.team1?.abbreviation}/${ffGame.team2?.shortName || ffGame.team2?.abbreviation}`,
+                abbreviation: `${ffGame.team1?.abbreviation}/${ffGame.team2?.abbreviation}`,
+                shortName: `${ffGame.team1?.abbreviation}/${ffGame.team2?.abbreviation}`,
+                logo: '',
+                color: '#666',
+                seed: ffSeed,
+                record: '',
+                score: null,
+                winner: false,
+                isFirstFour: true,
+                firstFourTeams: [ffGame.team1, ffGame.team2],
+                firstFourEventId: ffGame.espnEventId,
+                firstFourStatus: ffGame.status,
+              };
+            }
+          }
+
+          slots[slotNum] = {
+            team1: isKnownHighSeed ? knownTeam : tbdTeam,
+            team2: isKnownHighSeed ? tbdTeam : knownTeam,
+            espnEventId: game.espnEventId,
+            status: game.status,
+            startDate: game.startDate,
+            broadcast: game.broadcast,
+            venue: game.venue,
+          };
+        }
+        continue;
+      }
+
+      const seeds = [seed1, seed2].sort((a, b) => (a || 99) - (b || 99));
 
       // Find which seed matchup this game is
       const matchupIdx = SEED_MATCHUPS.findIndex(([s1, s2]) =>

@@ -695,7 +695,7 @@ Write the analysis now.`;
     }
     return null;
   } catch (err) {
-    console.warn(`[AI Matchup] Failed for ${team1Data.name} vs ${team2Data.name}:`, err.message);
+    console.warn(`[AI Matchup] Failed for ${team1Data.name} vs ${team2Data.name}:`, err.status, err.message, err.error || '');
     return null;
   }
 }

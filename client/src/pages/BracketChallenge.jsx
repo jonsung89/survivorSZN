@@ -75,11 +75,13 @@ export default function BracketChallenge() {
     return () => clearInterval(id);
   }, [fieldAnnounced, selectionDate]);
 
-  // Tournament lock countdown
-  useEffect(() => {
-    if (!tournamentStartTime || isTournamentLocked) return;
+  // Lock countdown — use entry_deadline if set, otherwise tournament start time
+  const lockTarget = challenge?.entry_deadline || tournamentStartTime;
 
-    const target = new Date(tournamentStartTime);
+  useEffect(() => {
+    if (!lockTarget || isTournamentLocked) return;
+
+    const target = new Date(lockTarget);
     if (isNaN(target.getTime())) return;
 
     const update = () => {
@@ -96,7 +98,7 @@ export default function BracketChallenge() {
     update();
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
-  }, [tournamentStartTime, isTournamentLocked]);
+  }, [lockTarget, isTournamentLocked]);
 
   const loadData = async () => {
     try {
@@ -338,28 +340,37 @@ export default function BracketChallenge() {
                 <div className="flex flex-col items-center gap-3">
                   <div className="flex items-center gap-2">
                     <Lock className="w-4 h-4 text-fg/60" />
-                    <p className="text-fg/70 text-sm font-medium">Brackets lock when the tournament starts</p>
+                    <p className="text-fg/70 text-sm font-medium">
+                      {challenge?.entry_deadline ? 'Brackets lock at the entry deadline' : 'Brackets lock when the tournament starts'}
+                    </p>
                   </div>
                   <div className="flex justify-center gap-2">
                     {lockCountdown.days > 0 && (
                       <div className={`text-center px-3 py-2 rounded-lg min-w-[3.5rem] ${isDark ? 'bg-fg/10' : 'bg-gray-100'}`}>
                         <p className="text-lg font-bold text-fg tabular-nums">{lockCountdown.days}</p>
-                        <p className="text-fg/40 text-sm">day{lockCountdown.days !== 1 ? 's' : ''}</p>
+                        <p className="text-fg/60 text-sm">day{lockCountdown.days !== 1 ? 's' : ''}</p>
                       </div>
                     )}
                     <div className={`text-center px-3 py-2 rounded-lg min-w-[3.5rem] ${isDark ? 'bg-fg/10' : 'bg-gray-100'}`}>
                       <p className="text-lg font-bold text-fg tabular-nums">{String(lockCountdown.hours).padStart(2, '0')}</p>
-                      <p className="text-fg/40 text-sm">hrs</p>
+                      <p className="text-fg/60 text-sm">hrs</p>
                     </div>
                     <div className={`text-center px-3 py-2 rounded-lg min-w-[3.5rem] ${isDark ? 'bg-fg/10' : 'bg-gray-100'}`}>
                       <p className="text-lg font-bold text-fg tabular-nums">{String(lockCountdown.minutes).padStart(2, '0')}</p>
-                      <p className="text-fg/40 text-sm">min</p>
+                      <p className="text-fg/60 text-sm">min</p>
                     </div>
                     <div className={`text-center px-3 py-2 rounded-lg min-w-[3.5rem] ${isDark ? 'bg-fg/10' : 'bg-gray-100'}`}>
                       <p className="text-lg font-bold text-fg tabular-nums">{String(lockCountdown.seconds).padStart(2, '0')}</p>
-                      <p className="text-fg/40 text-sm">sec</p>
+                      <p className="text-fg/60 text-sm">sec</p>
                     </div>
                   </div>
+                  {lockTarget && (
+                    <p className="text-fg/60 text-sm">
+                      {new Date(lockTarget).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {' at '}
+                      {new Date(lockTarget).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

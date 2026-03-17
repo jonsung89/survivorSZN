@@ -834,6 +834,25 @@ router.get('/tournament/:season/matchup/:eventId', async (req, res) => {
   }
 });
 
+// ─── Admin: clear entry deadline ─────────────────────────────────────────────
+router.post('/admin/clear-deadline/:challengeId', async (req, res) => {
+  try {
+    await db.run('UPDATE bracket_challenges SET entry_deadline = NULL WHERE id = $1', [req.params.challengeId]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/admin/challenges', async (req, res) => {
+  try {
+    const challenges = await db.getAll("SELECT id, league_id, status, entry_deadline, season FROM bracket_challenges ORDER BY created_at DESC");
+    res.json(challenges);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── Scoring & Leaderboard ───────────────────────────────────────────────────
 
 // Update results for all active bracket challenges

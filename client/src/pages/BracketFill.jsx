@@ -39,6 +39,8 @@ export default function BracketFill() {
   const [tiebreakerValue, setTiebreakerValue] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null); // 'saving' | 'saved' | 'error'
+  const saveStatusTimeoutRef = useRef(null);
   const [submitting, setSubmitting] = useState(false);
   const [matchupDialog, setMatchupDialog] = useState(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
@@ -116,13 +118,19 @@ export default function BracketFill() {
       if (picksStr === lastSavedPicksRef.current && newTiebreaker === undefined) return;
 
       setSaving(true);
+      setSaveStatus('saving');
+      if (saveStatusTimeoutRef.current) clearTimeout(saveStatusTimeoutRef.current);
       try {
         const body = { picks: newPicks };
         if (newTiebreaker !== undefined) body.tiebreakerValue = newTiebreaker;
         await bracketAPI.updateBracket(bracketId, body);
         lastSavedPicksRef.current = picksStr;
+        setSaveStatus('saved');
+        saveStatusTimeoutRef.current = setTimeout(() => setSaveStatus(null), 2500);
       } catch (err) {
+        setSaveStatus('error');
         showToast('Failed to save changes', 'error');
+        saveStatusTimeoutRef.current = setTimeout(() => setSaveStatus(null), 4000);
       }
       setSaving(false);
     }, 800);
@@ -391,8 +399,23 @@ export default function BracketFill() {
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
-              <div className="text-sm text-fg/40">
-                {progressPct}%
+              <div className="flex items-center gap-2 text-sm">
+                {saveStatus === 'saving' && (
+                  <span className="flex items-center gap-1 text-fg/40 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  </span>
+                )}
+                {saveStatus === 'saved' && (
+                  <span className="flex items-center gap-1 text-emerald-500 animate-in fade-in">
+                    <Check className="w-3 h-3" />
+                  </span>
+                )}
+                {saveStatus === 'error' && (
+                  <span className="flex items-center gap-1 text-red-400 text-xs">
+                    <AlertCircle className="w-3 h-3" /> Save failed
+                  </span>
+                )}
+                <span className="text-fg/40">{progressPct}%</span>
               </div>
             </div>
 
@@ -437,7 +460,7 @@ export default function BracketFill() {
                 {!isComplete && (
                   <p className="md:hidden text-center text-xs text-fg/40 mt-1 flex items-center justify-center gap-1">
                     <Save className="w-3 h-3" />
-                    Picks are saved automatically — come back anytime to finish
+                    {saveStatus === 'error' ? 'Failed to save — check your connection' : 'Picks are saved automatically — come back anytime to finish'}
                   </p>
                 )}
               </>

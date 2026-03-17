@@ -442,6 +442,30 @@ export const bracketAPI = {
     const res = await fetch(`${API_URL}/brackets/tournament/${season}/team/${teamId}/concise-report`);
     return res.json();
   },
+  getMatchupReport: async (season, team1Id, team2Id) => {
+    const res = await fetch(`${API_URL}/brackets/tournament/${season}/matchup-report/${team1Id}/${team2Id}`);
+    return res.json();
+  },
+  // Admin matchup report management
+  getAdminMatchups: async (season, round) => {
+    const params = round ? `?round=${encodeURIComponent(round)}` : '';
+    const res = await authFetch(`/brackets/admin/matchups/${season}${params}`);
+    return res.json();
+  },
+  generateMatchupReport: async (season, team1Id, team2Id, round, force = false) => {
+    const res = await authFetch('/brackets/admin/matchup-reports/generate', {
+      method: 'POST',
+      body: JSON.stringify({ season, team1Id, team2Id, round, force }),
+    });
+    return res.json();
+  },
+  generateRoundMatchupReports: async (season, round, force = false) => {
+    const res = await authFetch('/brackets/admin/matchup-reports/generate-round', {
+      method: 'POST',
+      body: JSON.stringify({ season, round, force }),
+    });
+    return res.json();
+  },
   getMatchupPrediction: async (season, eventId) => {
     const res = await fetch(`${API_URL}/brackets/tournament/${season}/matchup/${eventId}`);
     return res.json();

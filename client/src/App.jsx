@@ -26,6 +26,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminLeagues from './pages/admin/AdminLeagues';
 import AdminReports from './pages/admin/AdminReports';
+import AdminMatchups from './pages/admin/AdminMatchups';
 import AdminBracketTest from './pages/admin/AdminBracketTest';
 
 // Protected route wrapper
@@ -192,6 +193,7 @@ function AppRoutes() {
         <Route path="users" element={<AdminUsers />} />
         <Route path="leagues" element={<AdminLeagues />} />
         <Route path="reports" element={<AdminReports />} />
+        <Route path="matchups" element={<AdminMatchups />} />
         <Route path="bracket-test" element={<AdminBracketTest />} />
       </Route>
 

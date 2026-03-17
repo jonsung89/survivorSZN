@@ -471,6 +471,157 @@ async function getStoredReport(teamId, season) {
 }
 
 /**
+ * Sort two team IDs alphabetically for consistent cache/DB keys.
+ */
+function sortTeamIds(id1, id2) {
+  return String(id1) < String(id2) ? [String(id1), String(id2)] : [String(id2), String(id1)];
+}
+
+/**
+ * Get a stored matchup report from the database.
+ */
+async function getStoredMatchupReport(team1Id, team2Id, season) {
+  const [sortedId1, sortedId2] = sortTeamIds(team1Id, team2Id);
+  try {
+    const row = await db.getOne(
+      'SELECT report, concise_report, round, generated_at FROM matchup_reports WHERE team1_id = $1 AND team2_id = $2 AND season = $3',
+      [sortedId1, sortedId2, season]
+    );
+    if (!row) return null;
+    return { report: row.report, conciseReport: row.concise_report, round: row.round, generatedAt: row.generated_at };
+  } catch (err) {
+    console.warn(`[Matchup] DB lookup failed for ${sortedId1} vs ${sortedId2}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Generate an AI matchup analysis report for two teams.
+ * Neutral analysis covering style clash, key advantages, X-factor, prediction.
+ */
+/**
+ * Build team context string for AI prompts (shared between matchup and scouting).
+ */
+function buildMatchupTeamContext(td) {
+  const stats = td.seasonStats || {};
+  const getStat = (key, alt) => stats[key]?.value || (alt && stats[alt]?.value) || '?';
+  const getRank = (key, alt) => stats[key]?.rank || (alt && stats[alt]?.rank) || '';
+  const players = (td.keyPlayers || []).slice(0, 5);
+  const playerLines = players.map(p => {
+    const s = p.stats || {};
+    return `  ${p.name} (${p.position}, ${p.year}): ${s.ppg || '?'} PPG, ${s.rpg || '?'} RPG, ${s.apg || '?'} APG, ${s.spg || '?'} SPG, ${s.bpg || '?'} BPG, ${s.fgPct || '?'}% FG`;
+  }).join('\n');
+  const bpi = td.bpiData;
+  const vs25 = td.vsTop25 || {};
+  const last5 = (td.last5 || []).map(g => `${g.result}`).join(', ');
+
+  return `${td.name} (${td.conference}) — #${td.seed || '?'} seed, ${td.record}
+  Coach: ${td.coach || 'Unknown'}
+  PPG: ${getStat('avgPoints', 'points')}${getRank('avgPoints', 'points') ? ` (#${getRank('avgPoints', 'points')})` : ''} | Opp PPG: ${getStat('avgPointsAgainst', 'pointsAgainst')} | RPG: ${getStat('avgRebounds', 'rebounds')} | APG: ${getStat('avgAssists', 'assists')}
+  FG%: ${getStat('fieldGoalPct')} | 3PT%: ${getStat('threePointFieldGoalPct', 'threePointPct')} | FT%: ${getStat('freeThrowPct')}
+  SPG: ${getStat('avgSteals', 'steals')} | BPG: ${getStat('avgBlocks', 'blocks')} | TPG: ${getStat('avgTurnovers', 'turnovers')}
+  ${bpi ? `BPI: ${bpi.bpi?.value} (${bpi.bpi?.rank}) | Off: ${bpi.bpiOffense?.value} | Def: ${bpi.bpiDefense?.value} | SOS: ${bpi.sos?.rank}` : ''}
+  vs Ranked: ${vs25.wins || 0}-${vs25.losses || 0} | Last 5: ${last5 || 'N/A'}
+  Key Players:
+${playerLines || '  (No data)'}`;
+}
+
+async function generateMatchupReport(team1Data, team2Data, season, { force = false, round = null } = {}) {
+  const dotenvResult = require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+  const apiKey = dotenvResult.parsed?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const [sortedId1, sortedId2] = sortTeamIds(team1Data.id, team2Data.id);
+  const cacheKey = `ai-matchup-${sortedId1}-${sortedId2}`;
+
+  if (!force) {
+    const cached = aiReportCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < AI_REPORT_CACHE_TTL) {
+      return cached.data;
+    }
+
+    // Check DB
+    const stored = await getStoredMatchupReport(team1Data.id, team2Data.id, season);
+    if (stored?.report && stored?.conciseReport) {
+      const result = { report: stored.report, conciseReport: stored.conciseReport };
+      aiReportCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
+    }
+  }
+
+  try {
+    const client = new Anthropic({ apiKey });
+
+    const prompt = `You are an expert college basketball analyst providing a neutral, balanced matchup analysis for an NCAA tournament game. Analyze how these two teams match up against each other.
+
+You must respond in EXACTLY this format with both sections:
+
+===FULL REPORT===
+Write 2-3 short paragraphs covering:
+1. How their playing styles clash (tempo, offensive approach, defensive identity)
+2. Key advantages for each team
+3. The X-factor player or stat that could decide the game
+4. Your lean on who has the edge and why
+
+Be specific, analytical, and balanced — do NOT be overly biased toward either team. Use **bold** for key stats, player names, and important insights. No headers — just flowing paragraphs.
+
+===CONCISE REPORT===
+Write a 2-3 sentence TL;DR of the matchup. Mention the key matchup dynamic, who has the edge, and the biggest factor. Use **bold** for the most important insight. Must be a COMPLETE thought — never end mid-sentence.
+
+TEAM 1:
+${buildMatchupTeamContext(team1Data)}
+
+TEAM 2:
+${buildMatchupTeamContext(team2Data)}
+
+Write the analysis now.`;
+
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    if (message.stop_reason === 'max_tokens') {
+      console.warn(`[AI Matchup] Response truncated for ${team1Data.name} vs ${team2Data.name}, skipping`);
+      return null;
+    }
+
+    const text = message.content?.[0]?.text || '';
+    const fullMatch = text.match(/===FULL REPORT===\s*([\s\S]*?)(?=\s*===CONCISE REPORT===)/);
+    const conciseMatch = text.match(/===CONCISE REPORT===\s*([\s\S]*)/);
+
+    const report = fullMatch ? fullMatch[1].trim() : text.trim();
+    const conciseReport = conciseMatch ? conciseMatch[1].trim() : null;
+
+    if (report) {
+      const result = { report, conciseReport };
+      aiReportCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      // Store in DB
+      try {
+        await db.query(
+          `INSERT INTO matchup_reports (team1_id, team2_id, season, report, concise_report, round, generated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+           ON CONFLICT (team1_id, team2_id, season) DO UPDATE SET
+             report = EXCLUDED.report,
+             concise_report = EXCLUDED.concise_report,
+             round = COALESCE(EXCLUDED.round, matchup_reports.round),
+             generated_at = NOW()`,
+          [sortedId1, sortedId2, season, report, conciseReport, round]
+        );
+      } catch (dbErr) {
+        console.warn(`[AI Matchup] DB store failed:`, dbErr.message);
+      }
+      return result;
+    }
+    return null;
+  } catch (err) {
+    console.warn(`[AI Matchup] Failed for ${team1Data.name} vs ${team2Data.name}:`, err.message);
+    return null;
+  }
+}
+
+/**
  * Pre-generate AI scouting reports for all tournament teams and persist to DB.
  * Processes teams sequentially to avoid API rate limits.
  * Options:
@@ -556,13 +707,13 @@ async function generateAllReports(season, { teamId: singleTeamId, force = false,
         }
       }
 
-      const { last5, vsTop25 } = parseTeamSchedule(scheduleData, tid);
+      const { last5, last10, vsTop25 } = parseTeamSchedule(scheduleData, tid);
       const rawPlayers = parseKeyPlayers(rosterData, statsData);
       // Fetch stats for all roster players, then composite score picks the best 5
       const keyPlayers = await enrichPlayersWithStats(rawPlayers, rawPlayers.length);
 
       const templateSummary = generateTeamSummary(basic, seasonStats);
-      const fullTeamData = { ...basic, seasonStats, last5, vsTop25, keyPlayers, bpiData };
+      const fullTeamData = { ...basic, seasonStats, last5, last10, vsTop25, keyPlayers, bpiData };
 
       // Generate AI reports
       const report = await generateAiScoutingReport(fullTeamData, templateSummary);
@@ -656,7 +807,7 @@ async function getTeamBreakdown(teamId, season) {
   }
 
   // Parse schedule for last 5 and vs Top 25
-  const { last5, vsTop25, fullSchedule } = parseTeamSchedule(scheduleData, teamId);
+  const { last5, last10, vsTop25, fullSchedule } = parseTeamSchedule(scheduleData, teamId);
 
   // Parse key players from roster, then enrich with per-player stats
   const rawPlayers = parseKeyPlayers(rosterData, statsData);
@@ -678,6 +829,7 @@ async function getTeamBreakdown(teamId, season) {
     seasonStats,
     bpiData,
     last5,
+    last10,
     vsTop25,
     keyPlayers,
     headlines,
@@ -751,6 +903,7 @@ function parseTeamStatistics(statsData) {
 function parseTeamSchedule(scheduleData, teamId) {
   const events = scheduleData?.events || [];
   const last5 = [];
+  const last10 = [];
   const vsTop25 = [];
   const fullSchedule = [];
 
@@ -793,11 +946,28 @@ function parseTeamSchedule(scheduleData, teamId) {
     if (last5.length < 5) {
       last5.push(gameEntry);
     }
+    if (last10.length < 10) {
+      last10.push(gameEntry);
+    }
 
     if (gameEntry.opponent.rank && gameEntry.opponent.rank <= 25) {
       vsTop25.push(gameEntry);
     }
   }
+
+  // Compute last10 record summary
+  const last10Wins = last10.filter(g => g.result === 'W').length;
+  const last10Losses = last10.filter(g => g.result === 'L').length;
+  const last10Home = last10.filter(g => g.atVs === 'vs');
+  const last10Away = last10.filter(g => g.atVs === '@');
+  const last10Neutral = last10.filter(g => g.atVs !== 'vs' && g.atVs !== '@');
+  const last10Summary = {
+    record: `${last10Wins}-${last10Losses}`,
+    home: `${last10Home.filter(g => g.result === 'W').length}-${last10Home.filter(g => g.result === 'L').length}`,
+    away: `${last10Away.filter(g => g.result === 'W').length}-${last10Away.filter(g => g.result === 'L').length}`,
+    neutral: `${last10Neutral.filter(g => g.result === 'W').length}-${last10Neutral.filter(g => g.result === 'L').length}`,
+    games: last10,
+  };
 
   const vsTop25Record = {
     wins: vsTop25.filter(g => g.result === 'W').length,
@@ -805,7 +975,7 @@ function parseTeamSchedule(scheduleData, teamId) {
     games: vsTop25,
   };
 
-  return { last5, vsTop25: vsTop25Record, fullSchedule };
+  return { last5, last10: last10Summary, vsTop25: vsTop25Record, fullSchedule };
 }
 
 function parseKeyPlayers(rosterData, statsData) {
@@ -1106,6 +1276,8 @@ module.exports = {
   getSelectionSundayDate,
   getFirstGameTime,
   generateConciseReport,
+  generateMatchupReport,
   generateAllReports,
   getStoredReport,
+  getStoredMatchupReport,
 };

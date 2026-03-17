@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Trophy, FileText, ArrowLeft, Shield, Sun, Moon, FlaskConical } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, FileText, ArrowLeft, Shield, Sun, Moon, FlaskConical, Swords } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
 const NAV_ITEMS = [
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/leagues', icon: Trophy, label: 'Leagues' },
   { to: '/admin/reports', icon: FileText, label: 'Reports' },
+  { to: '/admin/matchups', icon: Swords, label: 'Matchups' },
   { to: '/admin/bracket-test', icon: FlaskConical, label: 'Bracket Test' },
 ];
 

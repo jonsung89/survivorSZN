@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateAllReports, getStoredReport } = require('../services/ncaab-tournament');
-const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, countPicks } = require('../utils/bracket-slots');
+const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport } = require('../services/ncaab-tournament');
+const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, getChildSlots, countPicks } = require('../utils/bracket-slots');
 
 // Total games in the bracket (derived from round boundaries)
 const TOTAL_BRACKET_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
@@ -18,6 +18,62 @@ const checkTournamentStarted = async (season) => {
   if (!firstGameTime) return false;
   return new Date() >= new Date(firstGameTime);
 };
+
+// Pre-generate matchup reports for a submitted bracket's hypothetical matchups
+// Extracts all unique team pairs from picks and queues background generation
+async function preGenerateMatchupReports(picks, season) {
+  if (!picks || Object.keys(picks).length === 0) return;
+
+  // Collect all unique matchup pairs from the bracket
+  // For each slot beyond R64, the two teams come from the child slots' winners
+  const matchupPairs = new Set();
+
+  for (let slot = ROUND_BOUNDARIES[1].start; slot <= ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end; slot++) {
+    const children = getChildSlots(slot);
+    if (!children) continue;
+    const team1Id = picks[String(children[0])];
+    const team2Id = picks[String(children[1])];
+    if (team1Id && team2Id && team1Id !== team2Id) {
+      // Sort IDs to match the caching key used in generateMatchupReport
+      const sorted = [team1Id, team2Id].sort();
+      matchupPairs.add(`${sorted[0]}|${sorted[1]}`);
+    }
+  }
+
+  if (matchupPairs.size === 0) return;
+
+  console.log(`🔄 Pre-generating ${matchupPairs.size} matchup reports for submitted bracket...`);
+
+  let generated = 0;
+  let skipped = 0;
+
+  for (const pair of matchupPairs) {
+    const [team1Id, team2Id] = pair.split('|');
+    try {
+      // Check if already cached
+      const stored = await getStoredMatchupReport(team1Id, team2Id, season);
+      if (stored?.report && stored?.conciseReport) {
+        skipped++;
+        continue;
+      }
+
+      // Fetch team data and generate
+      const [team1Data, team2Data] = await Promise.all([
+        getTeamBreakdown(team1Id, season),
+        getTeamBreakdown(team2Id, season),
+      ]);
+
+      if (team1Data && team2Data) {
+        await generateMatchupReport(team1Data, team2Data, season);
+        generated++;
+      }
+    } catch (err) {
+      console.error(`  ⚠️ Failed to pre-generate matchup ${team1Id} vs ${team2Id}:`, err.message);
+    }
+  }
+
+  console.log(`✅ Pre-generation complete: ${generated} generated, ${skipped} already cached`);
+}
 
 // ─── Challenge Management (Commissioner) ─────────────────────────────────────
 
@@ -368,6 +424,12 @@ router.post('/:bracketId/submit', authMiddleware, async (req, res) => {
     `, [bracket.id]);
 
     res.json({ success: true, bracket: updated });
+
+    // Background: pre-generate matchup reports for this bracket's hypothetical matchups
+    // (fire-and-forget — don't block the response)
+    preGenerateMatchupReports(bracket.picks, bracket.season).catch(err => {
+      console.error('Background matchup pre-generation error:', err.message);
+    });
   } catch (error) {
     console.error('Error submitting bracket:', error);
     res.status(500).json({ error: 'Failed to submit bracket' });
@@ -518,6 +580,226 @@ router.get('/tournament/:season/team/:teamId/concise-report', async (req, res) =
   } catch (error) {
     console.error('Error generating concise report:', error);
     res.status(500).json({ error: 'Failed to generate concise report' });
+  }
+});
+
+// Get AI matchup analysis report for two teams (on-demand, cached)
+router.get('/tournament/:season/matchup-report/:team1Id/:team2Id', async (req, res) => {
+  try {
+    const season = parseInt(req.params.season);
+    const { team1Id, team2Id } = req.params;
+
+    // Check stored report first
+    const stored = await getStoredMatchupReport(team1Id, team2Id, season);
+    if (stored?.report && stored?.conciseReport) {
+      return res.json({ matchupReport: stored.report, conciseReport: stored.conciseReport });
+    }
+
+    // Fetch both team breakdowns
+    const [team1Data, team2Data] = await Promise.all([
+      getTeamBreakdown(team1Id, season),
+      getTeamBreakdown(team2Id, season),
+    ]);
+
+    if (!team1Data || !team2Data) {
+      return res.status(404).json({ error: 'Team data not available for matchup analysis' });
+    }
+
+    const result = await generateMatchupReport(team1Data, team2Data, season);
+    if (!result) {
+      return res.status(500).json({ error: 'Failed to generate matchup report' });
+    }
+
+    res.json({ matchupReport: result.report, conciseReport: result.conciseReport });
+  } catch (error) {
+    console.error('Error generating matchup report:', error);
+    res.status(500).json({ error: 'Failed to generate matchup report' });
+  }
+});
+
+// ─── Admin: Matchup Reports Management ──────────────────────────────────────
+
+// List all matchup reports for a season
+router.get('/admin/matchup-reports/:season', async (req, res) => {
+  try {
+    const season = parseInt(req.params.season);
+    const reports = await db.getAll(
+      `SELECT team1_id, team2_id, round, report IS NOT NULL as has_report, concise_report IS NOT NULL as has_concise, generated_at
+       FROM matchup_reports WHERE season = $1 ORDER BY generated_at DESC`,
+      [season]
+    );
+    res.json({ reports });
+  } catch (error) {
+    console.error('Error listing matchup reports:', error);
+    res.status(500).json({ error: 'Failed to list matchup reports' });
+  }
+});
+
+// Get tournament matchups by round (from ESPN bracket data)
+router.get('/admin/matchups/:season', async (req, res) => {
+  try {
+    const season = parseInt(req.params.season);
+    const round = req.query.round || null;
+
+    // Get bracket data from an active challenge to find real matchups
+    const challenge = await db.getOne(
+      `SELECT tournament_data FROM bracket_challenges WHERE season = $1 ORDER BY created_at DESC LIMIT 1`,
+      [season]
+    );
+
+    if (!challenge?.tournament_data?.slots) {
+      return res.status(404).json({ error: 'No bracket data found' });
+    }
+
+    const slots = challenge.tournament_data.slots;
+    const matchups = [];
+    const roundNames = { 1: 'Round of 64', 2: 'Round of 32', 3: 'Sweet 16', 4: 'Elite 8', 5: 'Final Four', 6: 'Championship' };
+
+    for (const [slotNum, slotData] of Object.entries(slots)) {
+      const slot = parseInt(slotNum);
+      const slotRound = getSlotRound(slot);
+      const roundName = roundNames[slotRound] || `Round ${slotRound}`;
+
+      if (round && roundName !== round) continue;
+
+      const team1Id = slotData.homeTeamId || slotData.team1Id;
+      const team2Id = slotData.awayTeamId || slotData.team2Id;
+
+      if (!team1Id || !team2Id || team1Id === 'TBD' || team2Id === 'TBD') continue;
+
+      // Check if we have a stored report
+      const stored = await getStoredMatchupReport(team1Id, team2Id, season);
+
+      matchups.push({
+        slot,
+        round: roundName,
+        roundNum: slotRound,
+        team1Id,
+        team2Id,
+        team1Name: slotData.homeTeamName || slotData.team1Name || team1Id,
+        team2Name: slotData.awayTeamName || slotData.team2Name || team2Id,
+        team1Logo: slotData.homeTeamLogo || slotData.team1Logo,
+        team2Logo: slotData.awayTeamLogo || slotData.team2Logo,
+        team1Seed: slotData.homeTeamSeed || slotData.team1Seed,
+        team2Seed: slotData.awayTeamSeed || slotData.team2Seed,
+        hasReport: !!stored?.report,
+        hasConcise: !!stored?.conciseReport,
+        generatedAt: stored?.generatedAt || null,
+      });
+    }
+
+    // Sort by round then slot
+    matchups.sort((a, b) => a.roundNum - b.roundNum || a.slot - b.slot);
+
+    res.json({ matchups, rounds: [...new Set(matchups.map(m => m.round))] });
+  } catch (error) {
+    console.error('Error fetching matchups:', error);
+    res.status(500).json({ error: 'Failed to fetch matchups' });
+  }
+});
+
+// Generate/regenerate a single matchup report
+router.post('/admin/matchup-reports/generate', async (req, res) => {
+  try {
+    const { season = new Date().getFullYear(), team1Id, team2Id, round = null, force = false } = req.body;
+
+    const [team1Data, team2Data] = await Promise.all([
+      getTeamBreakdown(team1Id, season),
+      getTeamBreakdown(team2Id, season),
+    ]);
+
+    if (!team1Data || !team2Data) {
+      return res.status(404).json({ error: 'Team data not available' });
+    }
+
+    const result = await generateMatchupReport(team1Data, team2Data, season, { force, round });
+    if (!result) {
+      return res.status(500).json({ error: 'Failed to generate matchup report' });
+    }
+
+    res.json({ success: true, report: result.report, conciseReport: result.conciseReport });
+  } catch (error) {
+    console.error('Error generating matchup report:', error);
+    res.status(500).json({ error: 'Failed to generate matchup report' });
+  }
+});
+
+// Bulk generate matchup reports for a round
+router.post('/admin/matchup-reports/generate-round', async (req, res) => {
+  try {
+    const { season = new Date().getFullYear(), round, force = false } = req.body;
+
+    // Get matchups for the round
+    const challenge = await db.getOne(
+      `SELECT tournament_data FROM bracket_challenges WHERE season = $1 ORDER BY created_at DESC LIMIT 1`,
+      [season]
+    );
+
+    if (!challenge?.tournament_data?.slots) {
+      return res.status(404).json({ error: 'No bracket data found' });
+    }
+
+    const slots = challenge.tournament_data.slots;
+    const roundNames = { 1: 'Round of 64', 2: 'Round of 32', 3: 'Sweet 16', 4: 'Elite 8', 5: 'Final Four', 6: 'Championship' };
+    const matchupsToGenerate = [];
+
+    for (const [slotNum, slotData] of Object.entries(slots)) {
+      const slot = parseInt(slotNum);
+      const slotRound = getSlotRound(slot);
+      const roundName = roundNames[slotRound] || `Round ${slotRound}`;
+
+      if (roundName !== round) continue;
+
+      const team1Id = slotData.homeTeamId || slotData.team1Id;
+      const team2Id = slotData.awayTeamId || slotData.team2Id;
+
+      if (!team1Id || !team2Id || team1Id === 'TBD' || team2Id === 'TBD') continue;
+
+      if (!force) {
+        const stored = await getStoredMatchupReport(team1Id, team2Id, season);
+        if (stored?.report && stored?.conciseReport) continue;
+      }
+
+      matchupsToGenerate.push({ team1Id, team2Id });
+    }
+
+    let generated = 0;
+    let failed = 0;
+
+    for (const { team1Id, team2Id } of matchupsToGenerate) {
+      try {
+        const [team1Data, team2Data] = await Promise.all([
+          getTeamBreakdown(team1Id, season),
+          getTeamBreakdown(team2Id, season),
+        ]);
+
+        if (!team1Data || !team2Data) {
+          failed++;
+          continue;
+        }
+
+        const result = await generateMatchupReport(team1Data, team2Data, season, { force, round });
+        if (result) {
+          generated++;
+        } else {
+          failed++;
+        }
+      } catch (err) {
+        console.warn(`[Admin] Matchup report failed for ${team1Id} vs ${team2Id}:`, err.message);
+        failed++;
+      }
+    }
+
+    res.json({
+      success: true,
+      generated,
+      failed,
+      skipped: matchupsToGenerate.length === 0 ? 'All reports already exist' : undefined,
+      total: matchupsToGenerate.length
+    });
+  } catch (error) {
+    console.error('Error generating round matchup reports:', error);
+    res.status(500).json({ error: 'Failed to generate matchup reports' });
   }
 });
 

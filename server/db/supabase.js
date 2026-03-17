@@ -178,6 +178,24 @@ async function initDb() {
       )
     `);
 
+    // Matchup reports table for AI-generated head-to-head analysis
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS matchup_reports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        team1_id TEXT NOT NULL,
+        team2_id TEXT NOT NULL,
+        season INTEGER NOT NULL,
+        report TEXT NOT NULL,
+        concise_report TEXT,
+        round TEXT,
+        generated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(team1_id, team2_id, season)
+      )
+    `);
+    // Add columns to matchup_reports if they don't exist (migration)
+    await client.query(`ALTER TABLE matchup_reports ADD COLUMN IF NOT EXISTS concise_report TEXT`);
+    await client.query(`ALTER TABLE matchup_reports ADD COLUMN IF NOT EXISTS round TEXT`);
+
     // Create indexes for better performance
     // Add is_admin flag and last_login_at to users table
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE`);

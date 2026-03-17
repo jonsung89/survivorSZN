@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, Clock } from 'lucide-react';
 import { bracketAPI } from '../../api';
+import { useTheme } from '../../context/ThemeContext';
 import TeamAnalysisCard from './TeamAnalysisCard';
+import MatchupComparisonTab from './MatchupComparisonTab';
 
 function hexToRgba(hex, alpha) {
   if (!hex) return undefined;
@@ -19,6 +21,11 @@ function getDarkBgLogo(logoUrl) {
   return logoUrl.replace('/500/', '/500-dark/');
 }
 
+function getThemeLogo(logoUrl, isDark) {
+  if (!logoUrl) return logoUrl;
+  return isDark ? logoUrl.replace('/500/', '/500-dark/') : logoUrl;
+}
+
 export default function MatchupDetailDialog({
   slot,
   team1Info,
@@ -31,10 +38,14 @@ export default function MatchupDetailDialog({
   onClose,
   isReadOnly,
 }) {
+  const { isDark } = useTheme();
   const [team1Data, setTeam1Data] = useState(null);
   const [team2Data, setTeam2Data] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(!team1Info ? 1 : 0); // default to known team
+  // Tabs: 0 = team1, 1 = matchup (only when both teams known), 2 = team2
+  const bothTeamsKnown = !!(team1Info && team2Info);
+  // Default to matchup tab when both teams are known, otherwise show the known team
+  const [activeTab, setActiveTab] = useState(bothTeamsKnown ? 1 : (!team1Info ? 2 : 0));
   const [scrolled, setScrolled] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const scrollRef = useRef(null);
@@ -98,16 +109,21 @@ export default function MatchupDetailDialog({
     onClose();
   };
 
-  const activeTeamInfo = activeTab === 0 ? team1Info : team2Info;
-  const activeTeamData = activeTab === 0 ? team1Data : team2Data;
-  const activePossible = activeTab === 0 ? team1Possible : team2Possible;
-  const isActiveTBD = !activeTeamInfo;
-  const teamColor = activeTeamInfo?.color || '#6366f1';
-  const whiteLogo = getDarkBgLogo(activeTeamInfo?.logo);
+  const isMatchupTab = activeTab === 1 && bothTeamsKnown;
+  const activeTeamInfo = isMatchupTab ? null : (activeTab === 0 ? team1Info : team2Info);
+  const activeTeamData = isMatchupTab ? null : (activeTab === 0 ? team1Data : team2Data);
+  const activePossible = isMatchupTab ? null : (activeTab === 0 ? team1Possible : team2Possible);
+  const isActiveTBD = !isMatchupTab && !activeTeamInfo;
+  const teamColor = isMatchupTab ? '#333' : (activeTeamInfo?.color || '#6366f1');
+  const whiteLogo = isMatchupTab ? null : getDarkBgLogo(activeTeamInfo?.logo);
   const allPlayers = activeTeamData?.keyPlayers || [];
   const starPlayer = allPlayers[0];
   // On desktop, show up to 2 extra players as headshots (limit to avoid overlapping team name)
   const otherPlayers = allPlayers.slice(1, 3);
+
+  // Matchup hero data
+  const t1Players = team1Data?.keyPlayers || [];
+  const t2Players = team2Data?.keyPlayers || [];
 
   // On mobile: hero collapses to app bar on scroll. On desktop: always full.
   const mobileCollapsed = isMobile && scrolled;
@@ -125,19 +141,96 @@ export default function MatchupDetailDialog({
         <div
           className="relative flex-shrink-0 transition-all duration-300 overflow-hidden"
           style={{
-            background: isActiveTBD ? 'rgb(var(--color-fg), 0.15)' : teamColor,
+            background: isMatchupTab
+              ? `linear-gradient(to right, ${team1Info?.color || '#6366f1'} 35%, ${team2Info?.color || '#f59e0b'} 65%)`
+              : isActiveTBD ? 'rgb(var(--color-fg), 0.15)' : teamColor,
           }}
         >
           {/* Dark gradient overlay — bottom to top across entire hero */}
-          {!isActiveTBD && (
+          {!isActiveTBD && !isMatchupTab && (
             <div
               className="absolute inset-0 z-[1] pointer-events-none"
               style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 60%)' }}
             />
           )}
 
+          {/* Matchup hero — dark overlay + players from both teams */}
+          {isMatchupTab && (
+            <>
+              {/* Bottom gradient */}
+              <div
+                className="absolute inset-0 z-[1] pointer-events-none"
+                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.3) 30%, rgba(0,0,0,0.1) 60%, transparent 100%)' }}
+              />
+              {/* Center gradient blend — disabled to test without overlay
+              <div
+                className="absolute inset-0 z-[1] pointer-events-none"
+                style={{ background: 'linear-gradient(to right, transparent 20%, rgba(0,0,0,0.25) 38%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.25) 62%, transparent 80%)' }}
+              />
+              */}
+              {/* Team 1 star player — left side */}
+              {t1Players[0]?.headshot && (
+                <div
+                  className="absolute top-0 bottom-0 left-0 w-[30%] md:w-[25%] pointer-events-none select-none z-[2]"
+                >
+                  <img
+                    src={t1Players[0].headshot}
+                    alt=""
+                    className="absolute left-0 bottom-0 h-[85%] md:h-[95%] w-auto object-contain object-bottom transition-opacity duration-300"
+                    style={{ opacity: mobileCollapsed ? 0 : 1 }}
+                  />
+                  <div
+                    className="absolute bottom-2 left-2 flex items-end gap-1 transition-opacity duration-300 whitespace-nowrap"
+                    style={{
+                      opacity: mobileCollapsed ? 0 : 1,
+                      textShadow: '0 1px 4px rgba(0,0,0,0.7), 0 0 12px rgba(0,0,0,0.5)',
+                    }}
+                  >
+                    {t1Players[0].jersey && (
+                      <span className="text-sm md:text-lg font-mono font-black leading-none text-white">
+                        #{t1Players[0].jersey}
+                      </span>
+                    )}
+                    <span className="text-[10px] md:text-xs font-semibold uppercase tracking-wide text-white leading-tight">
+                      {t1Players[0].name}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {/* Team 2 star player — right side */}
+              {t2Players[0]?.headshot && (
+                <div
+                  className="absolute top-0 bottom-0 right-0 w-[30%] md:w-[25%] pointer-events-none select-none z-[2]"
+                >
+                  <img
+                    src={t2Players[0].headshot}
+                    alt=""
+                    className="absolute right-0 bottom-0 h-[85%] md:h-[95%] w-auto object-contain object-bottom transition-opacity duration-300"
+                    style={{ opacity: mobileCollapsed ? 0 : 1 }}
+                  />
+                  <div
+                    className="absolute bottom-2 right-2 flex items-end gap-1 transition-opacity duration-300 whitespace-nowrap"
+                    style={{
+                      opacity: mobileCollapsed ? 0 : 1,
+                      textShadow: '0 1px 4px rgba(0,0,0,0.7), 0 0 12px rgba(0,0,0,0.5)',
+                    }}
+                  >
+                    <span className="text-[10px] md:text-xs font-semibold uppercase tracking-wide text-white leading-tight">
+                      {t2Players[0].name}
+                    </span>
+                    {t2Players[0].jersey && (
+                      <span className="text-sm md:text-lg font-mono font-black leading-none text-white">
+                        #{t2Players[0].jersey}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
           {/* Player headshots on the right — star + key players side by side */}
-          {!isActiveTBD && starPlayer?.headshot ? (
+          {!isMatchupTab && !isActiveTBD && starPlayer?.headshot ? (
             <>
               {/* Mobile: only star player */}
               <div
@@ -197,7 +290,7 @@ export default function MatchupDetailDialog({
                 ))}
               </div>
             </>
-          ) : !isActiveTBD && whiteLogo ? (
+          ) : !isMatchupTab && !isActiveTBD && whiteLogo ? (
             <img
               src={whiteLogo}
               alt=""
@@ -221,11 +314,35 @@ export default function MatchupDetailDialog({
             style={{
               opacity: mobileCollapsed ? 0 : 1,
               pointerEvents: mobileCollapsed ? 'none' : 'auto',
-              height: mobileCollapsed ? '0px' : isActiveTBD ? '80px' : '120px',
+              height: mobileCollapsed ? '0px' : isMatchupTab ? '120px' : isActiveTBD ? '80px' : '120px',
               overflow: 'hidden',
             }}
           >
-            {isActiveTBD ? (
+            {isMatchupTab ? (
+              <div className="flex items-center justify-center gap-3 md:gap-5 w-full">
+                <div className="flex items-center gap-2 md:gap-3">
+                  {getDarkBgLogo(team1Info?.logo) && (
+                    <img src={getDarkBgLogo(team1Info.logo)} alt="" className="w-12 h-12 md:w-16 md:h-16 object-contain drop-shadow-lg" />
+                  )}
+                  <div className="text-white text-right">
+                    <span className="text-sm md:text-base font-mono font-bold bg-white/20 rounded px-1.5 py-0.5">#{team1Info?.seed}</span>
+                    <div className="text-base md:text-xl font-display font-bold mt-0.5">{team1Info?.abbreviation || team1Info?.name}</div>
+                  </div>
+                </div>
+                <div className="flex-shrink-0">
+                  <span className="text-2xl md:text-3xl font-display font-black text-white bg-black/30 rounded-lg px-3 py-1.5">VS</span>
+                </div>
+                <div className="flex items-center gap-2 md:gap-3">
+                  <div className="text-white">
+                    <span className="text-sm md:text-base font-mono font-bold bg-white/20 rounded px-1.5 py-0.5">#{team2Info?.seed}</span>
+                    <div className="text-base md:text-xl font-display font-bold mt-0.5">{team2Info?.abbreviation || team2Info?.name}</div>
+                  </div>
+                  {getDarkBgLogo(team2Info?.logo) && (
+                    <img src={getDarkBgLogo(team2Info.logo)} alt="" className="w-12 h-12 md:w-16 md:h-16 object-contain drop-shadow-lg" />
+                  )}
+                </div>
+              </div>
+            ) : isActiveTBD ? (
               <div className="text-fg/60 min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <Clock className="w-5 h-5 text-fg/30" />
@@ -271,7 +388,15 @@ export default function MatchupDetailDialog({
               overflow: 'hidden',
             }}
           >
-            {isActiveTBD ? (
+            {isMatchupTab ? (
+              <div className="flex items-center gap-2 w-full justify-center">
+                {team1Info?.logo && <img src={getDarkBgLogo(team1Info.logo)} alt="" className="w-5 h-5 object-contain" />}
+                <span className="text-white font-bold text-sm">{team1Info?.abbreviation}</span>
+                <span className="text-white/50 text-sm font-bold">vs</span>
+                <span className="text-white font-bold text-sm">{team2Info?.abbreviation}</span>
+                {team2Info?.logo && <img src={getDarkBgLogo(team2Info.logo)} alt="" className="w-5 h-5 object-contain" />}
+              </div>
+            ) : isActiveTBD ? (
               <span className="text-fg/60 font-bold text-sm">TBD</span>
             ) : (
               <>
@@ -286,28 +411,63 @@ export default function MatchupDetailDialog({
           </div>
         </div>
 
-        {/* Tab bar — team switcher */}
+        {/* Tab bar — team switcher + matchup tab */}
         <div className="flex-shrink-0 flex border-b border-fg/10">
-          {[team1Info, team2Info].map((team, idx) => (
+          {/* Team 1 tab */}
+          <button
+            onClick={() => setActiveTab(0)}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all relative ${
+              activeTab === 0 ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
+            }`}
+          >
+            {team1Info?.logo && <img src={getThemeLogo(team1Info.logo, isDark)} alt="" className="w-5 h-5 md:w-6 md:h-6 object-contain" />}
+            <span className="truncate md:text-base">
+              {team1Info?.seed && `#${team1Info.seed} `}{team1Info?.abbreviation || team1Info?.name || 'TBD'}
+            </span>
+            {activeTab === 0 && (
+              <div
+                className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full"
+                style={{ backgroundColor: team1Info?.color || '#6366f1' }}
+              />
+            )}
+          </button>
+
+          {/* Matchup tab — only when both teams known */}
+          {bothTeamsKnown && (
             <button
-              key={idx}
-              onClick={() => setActiveTab(idx)}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all relative ${
-                activeTab === idx ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
+              onClick={() => setActiveTab(1)}
+              className={`px-4 flex items-center justify-center gap-1.5 py-3 text-sm font-bold transition-all relative ${
+                activeTab === 1 ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
               }`}
             >
-              {team?.logo && <img src={team.logo} alt="" className="w-5 h-5 md:w-6 md:h-6 object-contain" />}
-              <span className="truncate md:text-base">
-                {team?.seed && `#${team.seed} `}{team?.abbreviation || team?.name || 'TBD'}
-              </span>
-              {activeTab === idx && (
+              <span className="md:text-base">Matchup</span>
+              {activeTab === 1 && (
                 <div
                   className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full"
-                  style={{ backgroundColor: team?.color || '#6366f1' }}
+                  style={{ background: `linear-gradient(to right, ${team1Info?.color || '#6366f1'}, ${team2Info?.color || '#f59e0b'})` }}
                 />
               )}
             </button>
-          ))}
+          )}
+
+          {/* Team 2 tab */}
+          <button
+            onClick={() => setActiveTab(bothTeamsKnown ? 2 : 1)}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all relative ${
+              activeTab === (bothTeamsKnown ? 2 : 1) ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
+            }`}
+          >
+            {team2Info?.logo && <img src={getThemeLogo(team2Info.logo, isDark)} alt="" className="w-5 h-5 md:w-6 md:h-6 object-contain" />}
+            <span className="truncate md:text-base">
+              {team2Info?.seed && `#${team2Info.seed} `}{team2Info?.abbreviation || team2Info?.name || 'TBD'}
+            </span>
+            {activeTab === (bothTeamsKnown ? 2 : 1) && (
+              <div
+                className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full"
+                style={{ backgroundColor: team2Info?.color || '#f59e0b' }}
+              />
+            )}
+          </button>
         </div>
 
         {/* Scrollable content */}
@@ -317,7 +477,24 @@ export default function MatchupDetailDialog({
           className="flex-1 overflow-y-auto"
           style={{ overscrollBehavior: 'contain' }}
         >
-          {isActiveTBD ? (
+          {isMatchupTab ? (
+            loading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-6 h-6 animate-spin text-fg/30" />
+              </div>
+            ) : (
+              <div className="p-4 md:p-6">
+                <MatchupComparisonTab
+                  team1Data={team1Data}
+                  team2Data={team2Data}
+                  team1Info={team1Info}
+                  team2Info={team2Info}
+                  prediction={prediction}
+                  season={season}
+                />
+              </div>
+            )
+          ) : isActiveTBD ? (
             <div className="p-4 md:p-6">
               <div className="text-center py-8">
                 <Clock className="w-10 h-10 text-fg/20 mx-auto mb-3" />
@@ -374,6 +551,7 @@ export default function MatchupDetailDialog({
                     <span className="text-sm md:text-base font-mono font-bold text-fg/70 w-12 text-right">
                       {Math.round(activeTab === 0 ? (prediction.homeWinPct || 50) : (100 - (prediction.homeWinPct || 50)))}%
                     </span>
+
                     <div className="flex-1 h-3 rounded-full overflow-hidden bg-fg/10 flex">
                       <div
                         className="h-full rounded-l-full transition-all duration-500"
@@ -391,7 +569,7 @@ export default function MatchupDetailDialog({
                       />
                     </div>
                     <span className="text-sm md:text-base font-mono font-bold text-fg/70 w-12">
-                      {Math.round(activeTab === 1 ? (100 - (prediction.homeWinPct || 50)) : (prediction.homeWinPct || 50))}%
+                      {Math.round(activeTab !== 0 ? (100 - (prediction.homeWinPct || 50)) : (prediction.homeWinPct || 50))}%
                     </span>
                   </div>
                 </div>

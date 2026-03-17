@@ -80,7 +80,7 @@ export default function BracketRegion({
   const renderRound = (roundData, roundIdx) => {
     const { slots } = roundData;
     const gapClasses = [
-      'gap-3',    // R64: slight spacing
+      'gap-5',    // R64: slight spacing
       'gap-6',    // R32: moderate
       'gap-14',   // S16: wide
       'gap-28',   // E8: widest

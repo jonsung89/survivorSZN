@@ -199,16 +199,16 @@ export default function BracketMatchup({
             const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
             const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
             return (
-              <div className={`flex items-center justify-between px-2 py-1 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
+              <div className={`flex items-center justify-between px-2.5 py-1.5 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
                 <span className="text-fg/80">{dateStr} · {timeStr}</span>
-                {s.broadcast && <span className="text-fg/50 truncate ml-1">{s.broadcast}</span>}
+                {s.broadcast && <span className="text-fg/60 truncate ml-1">{s.broadcast}</span>}
               </div>
             );
           }
 
           if (isGameLive) {
             return (
-              <div className={`flex items-center gap-1.5 px-2 py-1 text-xs ${isDark ? 'bg-red-500/10' : 'bg-red-50'}`}>
+              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm ${isDark ? 'bg-red-500/10' : 'bg-red-50'}`}>
                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
                 <span className="font-bold text-red-500">LIVE</span>
                 {s.statusDetail && <span className="text-fg/60">{s.statusDetail}</span>}
@@ -219,8 +219,8 @@ export default function BracketMatchup({
 
           if (isFinal) {
             return (
-              <div className={`px-2 py-1 text-xs ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
-                <span className="text-fg/40 font-medium">Final</span>
+              <div className={`px-2.5 py-1.5 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
+                <span className="text-fg/60 font-medium">Final</span>
               </div>
             );
           }
@@ -236,7 +236,7 @@ export default function BracketMatchup({
       {showInfoButton ? (
         <button
           onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
-          className="flex-shrink-0 p-1.5 rounded-full bg-fg/10 text-fg/40 active:bg-fg/20 md:hidden"
+          className={`flex-shrink-0 p-1.5 rounded-full bg-fg/10 text-fg/40 active:bg-fg/20 md:hidden self-center ${slotData ? 'mt-7' : ''}`}
         >
           <Info className="w-4 h-4" />
         </button>
@@ -244,12 +244,16 @@ export default function BracketMatchup({
         <div className="flex-shrink-0 w-7 md:hidden" />
       ) : null}
 
-      {/* Desktop: always-visible info button centered in the gap between columns */}
+      {/* Desktop: info button centered on team rows (offset down by header height when present) */}
       {showInfoButton && (
         <button
           onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
-          className="absolute top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full text-fg/50 hover:text-fg/80 hover:bg-fg/15 transition-colors hidden md:flex items-center justify-center"
-          style={side === 'right' ? { left: '-36px' } : { right: '-36px' }}
+          className="absolute z-10 p-2.5 rounded-full text-fg/50 hover:text-fg/80 hover:bg-fg/15 transition-colors hidden md:flex items-center justify-center"
+          style={{
+            top: slotData ? 'calc(50% + 14px)' : '50%',
+            transform: 'translateY(-50%)',
+            ...(side === 'right' ? { left: '-36px' } : { right: '-36px' }),
+          }}
         >
           <Info className="w-4 h-4" />
         </button>

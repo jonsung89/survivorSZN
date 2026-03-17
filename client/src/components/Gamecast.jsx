@@ -518,17 +518,35 @@ export default function Gamecast({ plays = [], game, courtType = 'nba', isPaused
       const secondHalf = isSecondHalf(play.period?.number, courtType);
       const isHome = play.team?.id === homeTeam?.id;
 
-      // First half: home=near(right), away=far(left)
-      // Second half: flip — away=near(right), home=far(left)
-      let useNear = isHome ? !secondHalf : secondHalf;
+      // NBA and NCAAB use opposite conventions for which side the home team starts on:
+      //   NCAAB — First half: home=near(right), away=far(left); Second half: flip
+      //   NBA   — First half: home=far(left),   away=near(right); Second half: flip
+      let useNear;
+      if (courtType === 'ncaab') {
+        useNear = isHome ? !secondHalf : secondHalf;
+      } else {
+        // NBA: home starts on the far (left) side in the first half
+        useNear = isHome ? secondHalf : !secondHalf;
+      }
 
       // Defensive plays happen at the team's own basket (opponent's scoring side) → flip
       // - Defensive rebounds: team recovers at their own basket
       // - Blocks: team blocks a shot at their own basket
+      // - Shooting/personal fouls: defending team fouled at their own basket
       // Offensive rebounds stay on the team's scoring side → no flip
-      // ESPN typeIds: 155 = defensive rebound, 156 = offensive rebound
+      // Offensive fouls happen at opponent's basket where attacker is scoring → no flip
+      // Technical fouls have no positional meaning → no flip
+      // Note: ESPN typeIds are NOT consistent across sports (e.g. typeId 44 = "Shooting Foul"
+      // in NBA but was assumed offensive foul). Use play.text for foul classification instead.
       const playText = play.text?.toLowerCase() || '';
-      const isDefensivePlay = tid === '155' ||
+      const playType = (typeof play.type === 'string' ? play.type : '').toLowerCase();
+      const isOffensiveFoul = playText.includes('offensive foul') || playType.includes('offensive foul');
+      const isDefensiveFoul = !isOffensiveFoul && (
+        playText.includes('shooting foul') || playType.includes('shooting foul') ||
+        playText.includes('personal foul') || playType.includes('personal foul')
+      );
+      const isDefensivePlay = tid === '155' ||  // defensive rebound
+        isDefensiveFoul ||
         (!play.shootingPlay && playText.includes('defensive') && playText.includes('rebound')) ||
         (!play.shootingPlay && playText.includes('block'));
       if (isDefensivePlay) {

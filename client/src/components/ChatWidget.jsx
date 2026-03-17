@@ -1596,10 +1596,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             <div className="absolute inset-0 bg-nfl-blue/20 animate-pulse rounded-t-2xl pointer-events-none" />
           )}
           
-          {/* Safe area background */}
-          <div className={`bg-elevated border-t shadow-[0_-2px_10px_rgba(0,0,0,0.06)] transition-colors duration-300 ${
+          {/* Safe area background + bottom extension to cover Chrome mobile bar gap */}
+          <div className={`relative bg-elevated border-t shadow-[0_-2px_10px_rgba(0,0,0,0.06)] transition-colors duration-300 ${
             hasNewMessage ? 'border-nfl-blue/50' : 'border-fg/15'
           }`}>
+            {/* Extends background below to cover gap when mobile Chrome hides its bottom bar */}
+            <div className="absolute left-0 right-0 top-full h-20 bg-elevated" />
             <button
               onClick={isOpen ? closeSheet : openSheet}
               className="w-full px-4 py-3 flex items-center gap-3 active:bg-fg/5 transition-colors"

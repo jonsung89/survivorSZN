@@ -24,6 +24,7 @@ export default function BracketMatchup({
   team2,
   pickedTeamId,
   result,
+  slotData,
   onPick,
   onDetailClick,
   isReadOnly,
@@ -39,8 +40,9 @@ export default function BracketMatchup({
 
   const renderTeamRow = (team, position) => {
     if (!team) {
+      const hasHeader = !!slotData;
       let tbdClasses = `flex items-center gap-2 px-2.5 py-2 relative ${compact ? 'min-w-[160px]' : ''} text-white/50 bg-fg/[0.12]`;
-      if (position === 'top') tbdClasses += ' rounded-t-lg';
+      if (position === 'top' && !hasHeader) tbdClasses += ' rounded-t-lg';
       else tbdClasses += ' rounded-b-lg';
       return (
         <div className={tbdClasses}>
@@ -77,9 +79,10 @@ export default function BracketMatchup({
       if (!isReadOnly) rowClasses += 'hover:brightness-125 ';
     }
 
-    if (position === 'top') {
+    const hasHeader = !!slotData;
+    if (position === 'top' && !hasHeader) {
       rowClasses += 'rounded-t-lg ';
-    } else {
+    } else if (position === 'bottom') {
       rowClasses += 'rounded-b-lg ';
     }
 
@@ -182,13 +185,48 @@ export default function BracketMatchup({
       <div className={`relative flex-1 md:flex-none md:w-full rounded-lg transition-all duration-150 shadow-md overflow-hidden ${
         isLive ? 'border border-red-500/40 shadow-[0_0_8px_rgba(239,68,68,0.15)]' : ''
       } bg-surface`}>
-        {/* Live indicator */}
-        {isLive && (
-          <div className="absolute -top-2 left-2 px-2 py-0.5 bg-red-500 rounded text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-1 z-10">
-            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-            LIVE
-          </div>
-        )}
+        {/* Game status header */}
+        {slotData && (() => {
+          const s = slotData;
+          const isScheduled = !s.status || s.status === 'STATUS_SCHEDULED' || s.status === 'scheduled';
+          const isGameLive = s.status === 'STATUS_IN_PROGRESS' || s.status === 'STATUS_HALFTIME' ||
+            s.status === 'STATUS_END_PERIOD' || s.status === 'STATUS_FIRST_HALF' || s.status === 'STATUS_SECOND_HALF' ||
+            s.status === 'in_progress';
+          const isFinal = s.status === 'STATUS_FINAL' || s.status === 'final';
+
+          if (isScheduled && s.startDate) {
+            const d = new Date(s.startDate);
+            const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+            const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            return (
+              <div className={`flex items-center justify-between px-2 py-1 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
+                <span className="text-fg/80">{dateStr} · {timeStr}</span>
+                {s.broadcast && <span className="text-fg/50 truncate ml-1">{s.broadcast}</span>}
+              </div>
+            );
+          }
+
+          if (isGameLive) {
+            return (
+              <div className={`flex items-center gap-1.5 px-2 py-1 text-xs ${isDark ? 'bg-red-500/10' : 'bg-red-50'}`}>
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
+                <span className="font-bold text-red-500">LIVE</span>
+                {s.statusDetail && <span className="text-fg/60">{s.statusDetail}</span>}
+                {s.clock && <span className="text-fg/50 font-mono">{s.clock}</span>}
+              </div>
+            );
+          }
+
+          if (isFinal) {
+            return (
+              <div className={`px-2 py-1 text-xs ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
+                <span className="text-fg/40 font-medium">Final</span>
+              </div>
+            );
+          }
+
+          return null;
+        })()}
 
         {renderTeamRow(team1, 'top')}
         {renderTeamRow(team2, 'bottom')}

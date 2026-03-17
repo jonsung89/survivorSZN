@@ -12,6 +12,7 @@ export default function MobileBracketRoundPage({
   picks,
   results,
   tournamentData,
+  liveSlotData = {},
   onPick,
   onMatchupClick,
   isReadOnly,
@@ -27,6 +28,19 @@ export default function MobileBracketRoundPage({
 
   const getPickedTeamForSlot = (slot) =>
     picks?.[slot] || picks?.[String(slot)] || null;
+
+  const slotDataFor = (slot) => {
+    const base = tournamentData?.slots?.[slot] || tournamentData?.slots?.[String(slot)] || {};
+    const live = liveSlotData?.[slot] || liveSlotData?.[String(slot)] || null;
+    return {
+      startDate: base.startDate,
+      status: live?.status || base.status,
+      statusDetail: live?.statusDetail || base.statusDetail,
+      clock: live?.clock,
+      period: live?.period,
+      broadcast: live?.broadcast || base.broadcast,
+    };
+  };
 
   // Enrich team with live score data from results
   const enrichTeam = (team, result) => {
@@ -62,6 +76,7 @@ export default function MobileBracketRoundPage({
             team2={enrichTeam(team2, result)}
             pickedTeamId={pickedTeam}
             result={result}
+            slotData={slotDataFor(slot)}
             onPick={(teamId) => onPick?.(slot, teamId)}
             onDetailClick={() => onMatchupClick?.(slot)}
             isReadOnly={isReadOnly}

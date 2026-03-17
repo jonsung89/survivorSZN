@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil, Save, RotateCcw } from 'lucide-react';
 import { bracketAPI } from '../api';
@@ -12,6 +12,7 @@ import BracketView from '../components/bracket/BracketView';
 import BracketScoreHeader from '../components/bracket/BracketScoreHeader';
 import MatchupDetailDialog from '../components/bracket/MatchupDetailDialog';
 import ChatWidget from '../components/ChatWidget';
+import useBracketLiveScores from '../hooks/useBracketLiveScores';
 import {
   countPicks,
   getNextSlot,
@@ -51,6 +52,37 @@ export default function BracketFill() {
 
   const saveTimeoutRef = useRef(null);
   const lastSavedPicksRef = useRef('{}');
+
+  // Live score updates via websocket
+  const { liveSlotData } = useBracketLiveScores(tournamentData);
+
+  // Merge live data into results for score display
+  const mergedResults = useMemo(() => {
+    if (!Object.keys(liveSlotData).length) return results;
+    const merged = { ...results };
+    for (const [slot, live] of Object.entries(liveSlotData)) {
+      const existing = merged[slot] || {};
+      // Map status from websocket format to our internal format
+      let status = existing.status;
+      if (live.status === 'STATUS_FINAL' || live.status === 'final') {
+        status = 'final';
+      } else if (
+        live.status === 'STATUS_IN_PROGRESS' ||
+        live.status === 'STATUS_HALFTIME' ||
+        live.status === 'STATUS_END_PERIOD' ||
+        live.status === 'STATUS_FIRST_HALF' ||
+        live.status === 'STATUS_SECOND_HALF'
+      ) {
+        status = 'in_progress';
+      }
+      merged[slot] = {
+        ...existing,
+        status,
+        competitors: live.competitors?.length ? live.competitors : existing.competitors,
+      };
+    }
+    return merged;
+  }, [results, liveSlotData]);
 
   const isOwner = bracket?.user_id === user?.id;
   const isReadOnly = (tournamentStarted || challenge?.status !== 'open') || !isOwner;
@@ -279,7 +311,7 @@ export default function BracketFill() {
 
   // Score calculations for submitted brackets
   const scoreData = bracket.is_submitted
-    ? calculateBracketScore(picks, results, scoringSystem)
+    ? calculateBracketScore(picks, mergedResults, scoringSystem)
     : null;
   const potential = bracket.is_submitted
     ? calculatePotentialPoints(picks, results, scoringSystem)
@@ -369,7 +401,8 @@ export default function BracketFill() {
         <BracketView
           tournamentData={tournamentData}
           picks={picks}
-          results={results}
+          results={mergedResults}
+          liveSlotData={liveSlotData}
           onPick={handlePick}
           onMatchupClick={handleMatchupClick}
           isReadOnly={isReadOnly}

@@ -7,6 +7,7 @@ export default function MobileBracketNav({
   picks,
   results,
   tournamentData,
+  liveSlotData = {},
   onPick,
   onMatchupClick,
   isReadOnly,
@@ -133,6 +134,7 @@ export default function MobileBracketNav({
               picks={picks}
               results={results}
               tournamentData={tournamentData}
+              liveSlotData={liveSlotData}
               onPick={onPick}
               onMatchupClick={onMatchupClick}
               isReadOnly={isReadOnly}
@@ -155,6 +157,7 @@ export default function MobileBracketNav({
             picks={picks}
             results={results}
             tournamentData={tournamentData}
+            liveSlotData={liveSlotData}
             onPick={onPick}
             onMatchupClick={onMatchupClick}
             isReadOnly={isReadOnly}

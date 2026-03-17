@@ -968,7 +968,7 @@ export default function LeagueDetail() {
                         key={member.id || member.userId}
                         className="inline-flex items-center gap-1.5 text-xs text-fg/80"
                       >
-                        <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
+                        <Avatar userId={member.userId} name={member.displayName} imageUrl={member.profileImageUrl} size="xs" />
                         <span className="truncate">{member.displayName}</span>
                         {member.strikes > 0 && (
                           <span className="text-red-500 flex-shrink-0 text-[10px]">
@@ -1027,7 +1027,7 @@ export default function LeagueDetail() {
                             key={member.id || member.userId}
                             className="inline-flex items-center gap-1.5 text-xs text-fg/80"
                           >
-                            <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
+                            <Avatar userId={member.userId} name={member.displayName} imageUrl={member.profileImageUrl} size="xs" />
                             <span className="truncate">{member.displayName}</span>
                             {member.strikes > 0 && (
                               <span className="text-red-500 flex-shrink-0 text-[10px]">
@@ -1072,7 +1072,7 @@ export default function LeagueDetail() {
                         key={member.id || member.userId}
                         className="inline-flex items-center gap-1.5 text-xs text-fg/80"
                       >
-                        <Avatar name={member.displayName} oddsDecimal={0} size="xs" />
+                        <Avatar userId={member.userId} name={member.displayName} imageUrl={member.profileImageUrl} size="xs" />
                         <span className="truncate">{member.displayName}</span>
                         {member.strikes > 0 && (
                           <span className="text-red-500 flex-shrink-0 text-[10px]">

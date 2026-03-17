@@ -581,7 +581,7 @@ router.get('/:leagueId/members-summary', authMiddleware, async (req, res) => {
     if (!membership) return res.status(403).json({ error: 'Not a member' });
 
     const members = await db.getAll(`
-      SELECT u.display_name, lm.status, lm.strikes, lm.user_id
+      SELECT u.display_name, u.profile_image_url, lm.status, lm.strikes, lm.user_id
       FROM league_members lm
       JOIN users u ON u.id = lm.user_id
       WHERE lm.league_id = $1
@@ -614,7 +614,7 @@ router.get('/:leagueId/members-summary', authMiddleware, async (req, res) => {
     const active = [];
 
     members.forEach(m => {
-      const entry = { displayName: m.display_name, isMe: m.user_id === user.id, isCommissioner: m.user_id === league?.commissioner_id };
+      const entry = { displayName: m.display_name, userId: m.user_id, profileImageUrl: m.profile_image_url || null, isMe: m.user_id === user.id, isCommissioner: m.user_id === league?.commissioner_id };
       if (winnerUserIds.has(m.user_id)) {
         winners.push(entry);
       } else if (m.status === 'eliminated') {

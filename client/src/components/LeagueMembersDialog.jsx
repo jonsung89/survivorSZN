@@ -3,6 +3,7 @@ import { X, Trophy, XCircle, Users } from 'lucide-react';
 import { leagueAPI } from '../api';
 import SportBadge from './SportBadge';
 import CommishBadge from './CommishBadge';
+import Avatar from './Avatar';
 
 const TABS = [
   { key: 'winners', label: 'Winners', icon: Trophy, color: 'text-amber-500' },
@@ -157,8 +158,13 @@ export default function LeagueMembersDialog({ leagueId, leagueName, defaultTab, 
                       key={i}
                       className="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-fg/[0.03]"
                     >
-                      {/* Rank/position */}
-                      <span className="text-base font-medium text-neutral-500 dark:text-neutral-400 w-6 text-right flex-shrink-0">{i + 1}</span>
+                      {/* Avatar */}
+                      <Avatar
+                        userId={m.userId}
+                        name={m.displayName || '?'}
+                        imageUrl={m.profileImageUrl}
+                        size="sm"
+                      />
 
                       {/* Status icon */}
                       {activeTab === 'winners' && <span className="text-base">🏆</span>}

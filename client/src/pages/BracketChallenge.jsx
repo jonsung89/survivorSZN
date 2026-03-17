@@ -13,6 +13,7 @@ import ChatWidget from '../components/ChatWidget';
 import { getSportBadgeClasses } from '../sports';
 import SportBadge from '../components/SportBadge';
 import CommishBadge from '../components/CommishBadge';
+import Avatar from '../components/Avatar';
 import { SCORING_PRESETS, ROUND_BOUNDARIES, countPicks } from '../utils/bracketSlots';
 
 const TOTAL_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
@@ -594,9 +595,12 @@ export default function BracketChallenge() {
                 className={`glass-card rounded-xl p-4 flex items-center justify-between ${isMe ? 'border border-violet-500/20' : ''}`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-fg/10 flex items-center justify-center flex-shrink-0 text-fg/40 font-bold text-sm">
-                    {(member.displayName || '?')[0].toUpperCase()}
-                  </div>
+                  <Avatar
+                    userId={member.userId}
+                    name={member.displayName || '?'}
+                    imageUrl={member.profileImageUrl}
+                    size="md"
+                  />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={`font-medium truncate ${isMe ? 'text-violet-400' : 'text-fg'}`}>

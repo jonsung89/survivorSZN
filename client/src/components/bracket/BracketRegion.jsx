@@ -28,6 +28,7 @@ export default function BracketRegion({
   picks,
   results,
   tournamentData,
+  liveSlotData = {},
   onPick,
   onMatchupClick,
   isReadOnly,
@@ -51,6 +52,20 @@ export default function BracketRegion({
     return picks?.[slot] || picks?.[String(slot)] || null;
   };
 
+  // Build slotData for a given slot — combines tournament info with live overlay
+  const slotDataFor = (slot) => {
+    const base = tournamentData?.slots?.[slot] || tournamentData?.slots?.[String(slot)] || {};
+    const live = liveSlotData?.[slot] || liveSlotData?.[String(slot)] || null;
+    return {
+      startDate: base.startDate,
+      status: live?.status || base.status,
+      statusDetail: live?.statusDetail || base.statusDetail,
+      clock: live?.clock,
+      period: live?.period,
+      broadcast: live?.broadcast || base.broadcast,
+    };
+  };
+
   // Enhance team objects with live scores from results
   const enrichTeam = (team, slot, result) => {
     if (!team || !result) return team;
@@ -65,7 +80,7 @@ export default function BracketRegion({
   const renderRound = (roundData, roundIdx) => {
     const { slots } = roundData;
     const gapClasses = [
-      'gap-1',    // R64: tight
+      'gap-3',    // R64: slight spacing
       'gap-6',    // R32: moderate
       'gap-14',   // S16: wide
       'gap-28',   // E8: widest
@@ -102,6 +117,7 @@ export default function BracketRegion({
                 team2={enrichTeam(team2, slot, result)}
                 pickedTeamId={pickedTeam}
                 result={result}
+                slotData={slotDataFor(slot)}
                 onPick={(teamId) => onPick?.(slot, teamId)}
                 onDetailClick={() => onMatchupClick?.(slot)}
                 isReadOnly={isReadOnly}

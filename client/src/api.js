@@ -1,9 +1,13 @@
 import { auth } from './firebase';
+import { signOut as firebaseSignOut } from 'firebase/auth';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Get token from localStorage
 const getToken = () => localStorage.getItem('token');
+
+// Track if we're already handling a 401 to prevent redirect loops
+let _handlingExpiry = false;
 
 // Make authenticated request with automatic token refresh on 401
 const authFetch = async (url, options = {}, _retried = false) => {
@@ -31,7 +35,11 @@ const authFetch = async (url, options = {}, _retried = false) => {
       }
     }
     localStorage.removeItem('token');
-    window.location.href = '/login';
+    // Sign out of Firebase to clear cached session and prevent redirect loops
+    if (!_handlingExpiry) {
+      _handlingExpiry = true;
+      firebaseSignOut(auth).catch(() => {}).finally(() => { _handlingExpiry = false; });
+    }
     throw new Error('Session expired');
   }
 
@@ -692,13 +700,17 @@ export const analyticsAPI = {
   },
 };
 
-// Tracking API (lightweight, fire-and-forget)
+// Tracking API (lightweight, fire-and-forget — uses plain fetch to avoid 401 redirect loops)
 export const trackingAPI = {
   pageView: (path) => {
     import('./utils/consent.js').then(({ shouldTrack }) => {
       if (!shouldTrack()) return;
-      authFetch('/track/pageview', {
+      const token = getToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      fetch(`${API_URL}/track/pageview`, {
         method: 'POST',
+        headers,
         body: JSON.stringify({ path }),
       }).catch(() => {});
     }).catch(() => {});

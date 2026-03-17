@@ -4,6 +4,10 @@ import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { userAPI } from '../api';
 import { initAnalytics, setAnalyticsUser } from '../utils/analytics';
 
+// Track failed syncs to prevent infinite retry loops
+let _syncFailCount = 0;
+const MAX_SYNC_FAILS = 2;
+
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
@@ -37,6 +41,7 @@ export function AuthProvider({ children }) {
             displayName: firebaseUser.displayName
           });
 
+          _syncFailCount = 0; // Reset on success
           setUser({ ...userData, firebaseUser });
 
           // Initialize analytics with user context
@@ -48,9 +53,19 @@ export function AuthProvider({ children }) {
           }
         } catch (err) {
           console.error('Failed to sync user:', err);
+          _syncFailCount++;
           setUser(null);
+          // If sync keeps failing, sign out of Firebase to break the loop.
+          // onAuthStateChanged will re-fire with null, cleanly ending loading.
+          if (_syncFailCount >= MAX_SYNC_FAILS) {
+            console.warn('Repeated sync failures — signing out to prevent loop');
+            localStorage.removeItem('token');
+            firebaseSignOut(auth).catch(() => {});
+            return; // Don't set loading=false; the signOut will re-trigger onAuthStateChanged with null
+          }
         }
       } else {
+        _syncFailCount = 0;
         localStorage.removeItem('token');
         setUser(null);
         setShowOnboarding(false);

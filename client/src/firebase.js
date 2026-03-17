@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -7,10 +7,11 @@ const firebaseConfig = {
   projectId: "survivorszn",
   storageBucket: "survivorszn.firebasestorage.app",
   messagingSenderId: "872512716798",
-  appId: "1:872512716798:web:491c590cae0ec0f6cc8aaf"
+  appId: "1:872512716798:web:491c590cae0ec0f6cc8aaf",
+  measurementId: "G-EJVR3BXGCF"
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 

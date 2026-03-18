@@ -45,6 +45,7 @@ export default function BracketChallenge() {
   const [tournamentStarted, setTournamentStarted] = useState(false);
   const [lockCountdown, setLockCountdown] = useState(null);
   const [editingPayment, setEditingPayment] = useState(false);
+  const [showPaymentStatus, setShowPaymentStatus] = useState(false);
   const [paymentDraft, setPaymentDraft] = useState([]);
   const [savingPayment, setSavingPayment] = useState(false);
   const [actionLog, setActionLog] = useState([]);
@@ -307,7 +308,7 @@ export default function BracketChallenge() {
   const isOpen = challenge.status === 'open';
   const scoringSystem = challenge.scoring_system || SCORING_PRESETS.standard.points;
   const paidCount = members.filter(m => m.hasPaid).length;
-  const currentUserPaid = members.find(m => m.id === user?.id)?.hasPaid;
+  const currentUserPaid = members.find(m => m.userId === user?.id || m.id === user?.id)?.hasPaid;
 
   // Count brackets submitted per user from leaderboard
   const submittedByUser = {};
@@ -486,14 +487,15 @@ export default function BracketChallenge() {
                       <p className="text-fg/60 text-sm">Per Bracket</p>
                       <p className="text-lg font-semibold text-fg">${entryFee}</p>
                     </div>
-                    {isCommissioner && (
-                      <div className="text-center">
-                        <p className="text-fg/60 text-sm">Paid</p>
-                        <p className="text-lg font-semibold text-green-500">
-                          {paidCount}/{members.length}
-                        </p>
-                      </div>
-                    )}
+                    <button
+                      onClick={() => setShowPaymentStatus(true)}
+                      className="text-center hover:bg-fg/5 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
+                    >
+                      <p className="text-fg/60 text-sm">Paid</p>
+                      <p className="text-lg font-semibold text-green-500">
+                        {paidCount}/{members.length}
+                      </p>
+                    </button>
                     <div className="text-center">
                       <p className="text-fg/60 text-sm">Entries</p>
                       <p className="text-lg font-semibold text-fg">{leaderboard.length}</p>
@@ -503,6 +505,14 @@ export default function BracketChallenge() {
                 <p className="text-fg/40 text-sm mt-3 pt-3 border-t border-fg/10">
                   💰 Pot splits evenly among winners. Each submitted bracket = one ${entryFee} entry.
                 </p>
+
+                {/* Unpaid reminder for current user */}
+                {!isCommissioner && !currentUserPaid && entryFee > 0 && (
+                  <div className="flex items-center gap-2 mt-3 py-2 px-3 rounded-lg bg-fg/[0.06] border border-amber-500/30">
+                    <DollarSign className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    <span className="text-sm font-medium text-fg/80">You haven't been marked as paid yet</span>
+                  </div>
+                )}
 
                 {/* Payment Methods */}
                 {editingPayment ? (
@@ -573,9 +583,9 @@ export default function BracketChallenge() {
                       )}
                     </div>
                     {currentUserPaid && !isCommissioner ? (
-                      <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-green-500/10">
+                      <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-fg/[0.06]">
                         <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        <span className="text-sm font-medium text-green-500">You're all paid up</span>
+                        <span className="text-sm font-medium text-fg/80">You're all paid up</span>
                       </div>
                     ) : (
                       <div className="space-y-2.5">
@@ -868,7 +878,7 @@ export default function BracketChallenge() {
                     disabled={togglingPayment === member.id}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 flex-shrink-0 ${
                       member.hasPaid
-                        ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
+                        ? 'bg-fg/10 text-green-500 hover:bg-fg/15'
                         : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
                     }`}
                   >
@@ -988,6 +998,55 @@ export default function BracketChallenge() {
       )}
 
       {/* Share Modal */}
+      {/* Payment Status Dialog */}
+      {showPaymentStatus && entryFee > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowPaymentStatus(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-surface rounded-2xl shadow-2xl w-full max-w-sm max-h-[70vh] overflow-hidden animate-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-fg/10">
+              <div>
+                <h3 className="text-lg font-bold text-fg">Payment Status</h3>
+                <p className="text-sm text-fg/50">{paidCount} of {members.length} paid</p>
+              </div>
+              <button onClick={() => setShowPaymentStatus(false)} className="p-1.5 rounded-lg hover:bg-fg/10 text-fg/50 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto max-h-[calc(70vh-64px)] p-2">
+              {/* Paid members first, then unpaid */}
+              {[...members].sort((a, b) => (b.hasPaid ? 1 : 0) - (a.hasPaid ? 1 : 0)).map(member => (
+                <div key={member.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${member.hasPaid ? 'bg-green-500' : 'bg-fg/20'}`} />
+                    <span className={`text-base truncate ${(member.userId === user?.id || member.id === user?.id) ? 'font-semibold text-violet-400' : 'text-fg'}`}>
+                      {member.displayName || member.display_name}
+                      {(member.userId === user?.id || member.id === user?.id) && <span className="text-sm text-violet-400/60 ml-1">(you)</span>}
+                    </span>
+                  </div>
+                  {isCommissioner ? (
+                    <button
+                      onClick={() => handleTogglePayment(member)}
+                      disabled={togglingPayment === member.id}
+                      className={`px-2.5 py-1 rounded-lg text-sm font-medium transition-all flex-shrink-0 ${
+                        member.hasPaid
+                          ? 'bg-fg/10 text-green-500'
+                          : 'bg-fg/5 text-fg/40 hover:bg-fg/10'
+                      }`}
+                    >
+                      {togglingPayment === member.id ? '...' : member.hasPaid ? 'Paid' : 'Unpaid'}
+                    </button>
+                  ) : (
+                    <span className={`text-sm font-medium flex-shrink-0 ${member.hasPaid ? 'text-green-500' : 'text-fg/30'}`}>
+                      {member.hasPaid ? 'Paid' : 'Unpaid'}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showShareModal && (
         <ShareLeagueModal
           league={{ ...league, entryFee: entryFee || league.entryFee }}

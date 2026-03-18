@@ -10,9 +10,12 @@ export default function BracketMiniMap({
   onToggle,
 }) {
   const [viewport, setViewport] = useState({ x: 0, y: 0, w: 0, h: 0 });
+  const [containerBounds, setContainerBounds] = useState(null);
+  const [debouncedSide, setDebouncedSide] = useState(true); // true = right side
+  const sideTimeoutRef = useRef(null);
   const miniMapRef = useRef(null);
 
-  // Track scroll position to update viewport indicator
+  // Track scroll position to update viewport indicator + container bounds
   const updateViewport = useCallback(() => {
     const container = scrollContainerRef?.current;
     if (!container) return;
@@ -24,6 +27,14 @@ export default function BracketMiniMap({
       w: scrollWidth > 0 ? clientWidth / scrollWidth : 1,
       h: scrollHeight > 0 ? clientHeight / scrollHeight : 1,
     });
+
+    const rect = container.getBoundingClientRect();
+    setContainerBounds({
+      top: rect.top,
+      bottom: rect.bottom,
+      left: rect.left,
+      visibleRight: rect.left + clientWidth,
+    });
   }, [scrollContainerRef]);
 
   useEffect(() => {
@@ -31,7 +42,6 @@ export default function BracketMiniMap({
     if (!container) return;
 
     container.addEventListener('scroll', updateViewport);
-    // Also observe resize
     const ro = new ResizeObserver(updateViewport);
     ro.observe(container);
     updateViewport();
@@ -60,25 +70,64 @@ export default function BracketMiniMap({
     });
   };
 
-  // Region positions on the mini-map (approximate bracket layout)
-  // Layout: [TL] [FF] [TR]
-  //         [BL]      [BR]
+  // Determine minimap side based on viewport scroll position (debounced)
+  const viewportCenterX = viewport.x + viewport.w / 2;
+  const targetSide = viewportCenterX < 0.5;
+  useEffect(() => {
+    if (targetSide === debouncedSide) return;
+    clearTimeout(sideTimeoutRef.current);
+    sideTimeoutRef.current = setTimeout(() => setDebouncedSide(targetSide), 500);
+    return () => clearTimeout(sideTimeoutRef.current);
+  }, [targetSide, debouncedSide]);
+  const showOnRight = debouncedSide;
+
+  // Region positions on the mini-map
   const regionPositions = [
-    { label: regions[0]?.name?.[0] || '1', x: 2, y: 2, w: 35, h: 44, idx: 0 },   // top-left
-    { label: regions[1]?.name?.[0] || '2', x: 2, y: 50, w: 35, h: 44, idx: 1 },   // bottom-left
-    { label: regions[2]?.name?.[0] || '3', x: 63, y: 2, w: 35, h: 44, idx: 2 },   // top-right
-    { label: regions[3]?.name?.[0] || '4', x: 63, y: 50, w: 35, h: 44, idx: 3 },  // bottom-right
-    { label: 'F4', x: 39, y: 20, w: 22, h: 56, idx: 4 },                           // Final Four center
+    { label: regions[0]?.name?.[0] || '1', x: 2, y: 2, w: 35, h: 44, idx: 0 },
+    { label: regions[1]?.name?.[0] || '2', x: 2, y: 50, w: 35, h: 44, idx: 1 },
+    { label: regions[2]?.name?.[0] || '3', x: 63, y: 2, w: 35, h: 44, idx: 2 },
+    { label: regions[3]?.name?.[0] || '4', x: 63, y: 50, w: 35, h: 44, idx: 3 },
+    { label: 'F4', x: 39, y: 20, w: 22, h: 56, idx: 4 },
   ];
 
+  const mapHeight = 100;
+  const mapWidth = 200;
+  const padding = 12;
+
+  // Always use `left` for smooth transitions
+  let leftPos = padding;
+  let topPos = undefined;
+  if (containerBounds) {
+    if (visible) {
+      topPos = containerBounds.bottom - mapHeight - padding;
+    } else {
+      // When hidden, position the button flush to the bottom corner
+      topPos = containerBounds.bottom - padding - 32;
+    }
+    if (showOnRight) {
+      leftPos = containerBounds.visibleRight - (visible ? mapWidth : 80) - padding;
+    } else {
+      leftPos = containerBounds.left + padding;
+    }
+  }
+
   return (
-    <div className="hidden md:block fixed bottom-6 right-6 z-30">
+    <div
+      className="hidden md:block fixed z-30"
+      style={{
+        left: leftPos,
+        top: topPos,
+        transition: 'left 0.4s ease',
+      }}
+    >
       {/* Toggle button */}
       <button
         onClick={onToggle}
-        className="absolute -top-8 right-0 text-xs text-fg/40 hover:text-fg/70 transition-colors flex items-center gap-1"
+        className={`text-sm font-medium text-fg/60 hover:text-fg/90 bg-surface/80 hover:bg-surface backdrop-blur-sm border border-fg/15 hover:border-fg/25 rounded-md px-2.5 py-1 transition-all flex items-center gap-1.5 shadow-sm ${
+          visible ? `absolute -top-8 ${showOnRight ? 'right-0' : 'left-0'}` : ''
+        }`}
       >
-        {visible ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+        {visible ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
         {visible ? 'Hide' : 'Map'}
       </button>
 

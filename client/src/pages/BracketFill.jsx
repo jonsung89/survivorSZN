@@ -332,13 +332,13 @@ export default function BracketFill() {
 
   return (
     <div
-      className={`max-w-[1400px] mx-auto px-3 sm:px-4 -mt-4 md:mt-0 pb-4 md:py-4 sm:py-6 transition-[padding] duration-300 lg:mx-0 lg:max-w-none lg:pl-6 ${
+      className={`max-w-[1400px] mx-auto px-3 sm:px-4 -mt-4 md:mt-0 pb-4 md:pt-1 md:pb-4 sm:py-6 transition-[padding] duration-300 lg:mx-0 lg:max-w-none lg:pl-6 ${
         chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
       }`}
       style={{ paddingBottom: 'calc(var(--chat-bar-height, 0px) + 24px)' }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between -mx-3 px-3 sm:-mx-4 sm:px-4 pt-4 pb-3 md:py-3 bg-surface md:rounded-xl md:border md:border-fg/10">
+      <div className="flex items-center justify-between -mx-3 px-3 sm:-mx-4 sm:px-4 pt-4 pb-3 md:pt-1 md:pb-2.5 bg-surface md:bg-transparent">
         <div>
           <Link
             to={`/league/${leagueId}/bracket`}
@@ -366,7 +366,7 @@ export default function BracketFill() {
               {isOwner && !isReadOnly && (
                 <button
                   onClick={() => { setEditName(bracket.name || `Bracket ${bracket.bracket_number}`); setIsEditingName(true); }}
-                  className="text-fg/30 hover:text-fg/60 transition-colors"
+                  className="text-fg/50 hover:text-fg/80 transition-colors"
                 >
                   <Pencil className="w-4 h-4" />
                 </button>
@@ -407,7 +407,7 @@ export default function BracketFill() {
       )}
 
       {/* Bracket */}
-      <div className="-mx-3 sm:-mx-4 px-3 sm:px-4 pt-0 pb-40 md:py-4 md:pb-4 bg-surface md:bg-fg/[0.03] md:rounded-xl">
+      <div className="-mx-3 sm:-mx-4 px-3 sm:px-4 pt-0 pb-40 md:pt-1 md:pb-0 bg-surface md:bg-fg/[0.03] md:rounded-xl">
         <BracketView
           tournamentData={tournamentData}
           picks={picks}
@@ -424,7 +424,7 @@ export default function BracketFill() {
 
       {/* Bottom bar (for filling) */}
       {!isReadOnly && isOwner && (
-        <div className="bracket-submit-bar fixed left-0 right-0 z-50 py-2 px-4 bg-canvas/95 backdrop-blur border-t border-fg/10 md:sticky md:!bottom-0 md:z-30 md:left-auto md:right-auto md:mt-4 md:-mx-4 md:py-3 md:pb-safe">
+        <div className="bracket-submit-bar fixed left-0 right-0 z-50 py-2 px-4 bg-canvas/95 backdrop-blur border-t border-fg/10 md:relative md:z-30 md:left-auto md:right-auto md:mt-0 md:-mx-4 md:py-3 md:pb-safe md:border-t-0">
           <div className="max-w-[1400px] mx-auto">
             {/* Progress */}
             <div className="flex items-center justify-between mb-3">

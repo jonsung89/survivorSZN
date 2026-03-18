@@ -157,7 +157,7 @@ export default function BracketRegion({
       )}
 
       {/* Region header */}
-      <div className="text-center mb-5">
+      <div className="text-center mt-3 mb-5">
         <h3 className={`${largeHeaders ? 'text-4xl' : 'text-2xl'} font-display font-bold text-fg/80 uppercase tracking-wider`}>
           {region.name}
         </h3>

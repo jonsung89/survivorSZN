@@ -208,15 +208,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     }
   }, [leagueId, connected, joinLeague, leaveLeague]);
 
-  // Track xl breakpoint — xl+: always expanded, lg-xl: collapsible (starts collapsed)
+  // Track xl breakpoint for sizing
   useEffect(() => {
     const handleResize = () => {
       const xl = window.innerWidth >= 1280;
       setIsXLScreen(xl);
-      if (xl) {
-        setIsDesktopCollapsed(false); // xl+: force expanded
-      }
-      // lg-to-xl: don't auto-change — user controls via toggle
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -226,7 +222,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   // Notify parent when collapsed state changes
   useEffect(() => {
     if (onCollapsedChange) {
-      onCollapsedChange(isXLScreen ? false : isDesktopCollapsed);
+      onCollapsedChange(isDesktopCollapsed);
     }
   }, [isDesktopCollapsed, isXLScreen, onCollapsedChange]);
 
@@ -1283,8 +1279,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     <>
       {/* Desktop: Sidebar — collapsible at lg-xl, always visible at xl+ */}
       <div className="hidden lg:block">
-        {/* Collapsed state - slim bar (only at lg-xl, never at xl+) */}
-        {!isXLScreen && (
+        {/* Collapsed state - slim bar */}
         <div
           className={`fixed top-16 right-0 bottom-0 w-14 bg-canvas border-l border-fg/10 flex flex-col items-center py-4 transition-all duration-300 z-40 ${
             isDesktopCollapsed ? 'translate-x-0' : 'translate-x-full'
@@ -1320,12 +1315,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
             </div>
           )}
         </div>
-        )}
 
         {/* Expanded state - full chat */}
         <div
           className={`fixed top-16 right-0 bottom-0 w-96 xl:w-[420px] bg-canvas border-l border-fg/10 flex flex-col transition-all duration-300 z-40 ${
-            isXLScreen ? 'translate-x-0' : (isDesktopCollapsed ? 'translate-x-full' : 'translate-x-0')
+            isDesktopCollapsed ? 'translate-x-full' : 'translate-x-0'
           }`}
         >
           {/* Profile Panel (overlay) */}
@@ -1359,15 +1353,13 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 </p>
               )}
             </div>
-            {!isXLScreen && (
-              <button
-                onClick={() => setIsDesktopCollapsed(true)}
-                className="p-2 hover:bg-fg/10 rounded-lg transition-colors"
-                title="Collapse Chat"
-              >
-                <PanelRightClose className="w-5 h-5 text-fg/60" />
-              </button>
-            )}
+            <button
+              onClick={() => setIsDesktopCollapsed(true)}
+              className="p-2 hover:bg-fg/10 rounded-lg transition-colors"
+              title="Collapse Chat"
+            >
+              <PanelRightClose className="w-5 h-5 text-fg/60" />
+            </button>
           </div>
 
           {/* Messages */}

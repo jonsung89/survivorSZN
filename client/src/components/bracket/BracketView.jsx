@@ -37,6 +37,7 @@ export default function BracketView({
   const zoomWrapperRef = useRef(null);
   const bracketGridRef = useRef(null);
   const regionTabsRef = useRef(null);
+  const roundHeadersRef = useRef(null);
   const mobileGridRef = useRef(null);
   const mobileWrapperRef = useRef(null);
   const pinchRef = useRef({ startDist: 0, startScale: 0.55 });
@@ -56,6 +57,34 @@ export default function BracketView({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Sync round headers horizontal scroll with bracket container
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const headers = roundHeadersRef.current;
+    if (!container || !headers) return;
+    const onScroll = () => {
+      headers.scrollLeft = container.scrollLeft;
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => container.removeEventListener('scroll', onScroll);
+  }, [focusMode]);
+
+  // Sync round headers wrapper height to match scaled content
+  const roundHeadersWrapperRef = useRef(null);
+  useEffect(() => {
+    const wrapper = roundHeadersWrapperRef.current;
+    if (!wrapper) return;
+    const grid = wrapper.firstElementChild;
+    if (!grid) return;
+    const syncHeight = () => {
+      wrapper.style.height = `${grid.scrollHeight * zoomLevel}px`;
+    };
+    syncHeight();
+    const ro = new ResizeObserver(syncHeight);
+    ro.observe(grid);
+    return () => ro.disconnect();
+  }, [zoomLevel, focusMode]);
 
   // Sync zoom wrapper height to match the scaled grid height
   useEffect(() => {
@@ -247,17 +276,83 @@ export default function BracketView({
   );
   const champDateRange = getRoundDateRange([champSlot], tournamentData);
 
-  const renderSemifinalCell = (semi, id, large = false) => {
+  // Render sticky round headers bar for full bracket view (outside overflow container)
+  const renderStickyRoundHeaders = () => {
+    if (focusMode) return null;
+    const leftRounds = topLeft.rounds;
+    const rightRounds = [...topRight.rounds].reverse();
+    return (
+      <div
+        ref={roundHeadersRef}
+        className="hidden md:block sticky top-[112px] z-10 bg-surface/95 backdrop-blur-sm overflow-hidden rounded-lg border border-fg/5"
+      >
+        <div ref={roundHeadersWrapperRef} style={{ width: `${2950 * zoomLevel}px` }}>
+          <div
+            style={{
+              width: '2950px',
+              transform: zoomLevel !== 1 ? `scale(${zoomLevel})` : undefined,
+              transformOrigin: 'top left',
+            }}
+            className="grid grid-cols-[1fr_310px_310px_310px_1fr] py-1"
+          >
+            {/* Left region round headers */}
+            <div className="flex flex-row gap-6">
+              {leftRounds.map((roundData) => {
+                const dateRange = getRoundDateRange(roundData.slots, tournamentData);
+                return (
+                  <div key={roundData.round} className="text-center flex-shrink-0" style={{ width: '260px', minWidth: '260px' }}>
+                    <div className="text-base font-bold text-fg/80">{roundData.name}</div>
+                    {dateRange && <div className="text-sm text-fg/60 mt-0.5">{dateRange}</div>}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Final Four left */}
+            <div className="text-center flex-shrink-0">
+              <div className="text-base font-bold text-fg/80">Final Four</div>
+              {f4DateRange && <div className="text-sm text-fg/60 mt-0.5">{f4DateRange}</div>}
+            </div>
+            {/* Championship */}
+            <div className="text-center flex-shrink-0">
+              <div className="text-base font-bold text-fg/80">Championship</div>
+              {champDateRange && <div className="text-sm text-fg/60 mt-0.5">{champDateRange}</div>}
+            </div>
+            {/* Final Four right */}
+            <div className="text-center flex-shrink-0">
+              <div className="text-base font-bold text-fg/80">Final Four</div>
+              {f4DateRange && <div className="text-sm text-fg/60 mt-0.5">{f4DateRange}</div>}
+            </div>
+            {/* Right region round headers (reversed) */}
+            <div className="flex flex-row-reverse gap-6">
+              {rightRounds.map((roundData) => {
+                const dateRange = getRoundDateRange(roundData.slots, tournamentData);
+                return (
+                  <div key={roundData.round} className="text-center flex-shrink-0" style={{ width: '260px', minWidth: '260px' }}>
+                    <div className="text-base font-bold text-fg/80">{roundData.name}</div>
+                    {dateRange && <div className="text-sm text-fg/60 mt-0.5">{dateRange}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSemifinalCell = (semi, id, large = false, hideHeader = false) => {
     const cellStyle = large ? { width: '380px', minWidth: '380px' } : colW;
     const matchWidth = large ? '340px' : '234px';
     return (
     <div id={id} className="row-span-2 flex flex-col flex-shrink-0" style={cellStyle}>
+      {!hideHeader && (
       <div className="text-center mb-4">
         <div className={`${large ? 'text-2xl' : 'text-base'} font-bold text-fg/80`}>Final Four</div>
         {f4DateRange && (
           <div className={`${large ? 'text-lg' : 'text-sm'} text-fg/60 mt-0.5`}>{f4DateRange}</div>
         )}
       </div>
+      )}
       <div className="flex-1 flex items-center justify-center px-3">
         <div style={{ width: matchWidth }}>
           <BracketMatchup
@@ -288,8 +383,22 @@ export default function BracketView({
   const scrollToRegion = useCallback((idx) => {
     const id = getRegionId(idx);
     const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    const container = scrollContainerRef.current;
+    if (el && container) {
+      const containerRect = container.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      const elTop = rect.top - containerRect.top + container.scrollTop;
+      const elLeft = rect.left - containerRect.left + container.scrollLeft;
+      const isFinalFour = idx >= structure.regions.length;
+      if (isFinalFour) {
+        // Center the bracket both horizontally and vertically
+        const centerX = container.scrollWidth / 2 - containerRect.width / 2;
+        const centerY = container.scrollHeight / 2 - containerRect.height / 2;
+        container.scrollTo({ top: Math.max(0, centerY), left: Math.max(0, centerX), behavior: 'smooth' });
+      } else {
+        const targetLeft = elLeft - (containerRect.width - rect.width) / 2;
+        container.scrollTo({ top: Math.max(0, elTop - 12), left: Math.max(0, targetLeft), behavior: 'smooth' });
+      }
     }
   }, [structure]);
 
@@ -423,7 +532,7 @@ export default function BracketView({
 
     // Full bracket view (scroll mode)
     return (
-      <div ref={scrollContainerRef} className="hidden md:block overflow-x-auto pb-4">
+      <div ref={scrollContainerRef} className="hidden md:block overflow-x-auto overflow-y-auto pb-4" style={{ height: 'calc(100vh - 390px)' }}>
         {/* Zoom wrapper — scales the grid visually while adjusting scrollable area */}
         <div ref={zoomWrapperRef} style={{ width: `${2950 * zoomLevel}px` }}>
           <div
@@ -449,21 +558,14 @@ export default function BracketView({
               onMatchupClick={onMatchupClick}
               isReadOnly={isReadOnly}
               side="left"
-              showRoundHeaders
             />
           </div>
 
           {/* Left semifinal (row-span-2, vertically centered) */}
-          {renderSemifinalCell(leftSemi, 'region-final-four')}
+          {renderSemifinalCell(leftSemi, 'region-final-four', false, true)}
 
           {/* Championship (row-span-2, dead center of the bracket) */}
           <div className="row-span-2 flex flex-col flex-shrink-0" style={colW}>
-            <div className="text-center mb-4">
-              <div className="text-base font-bold text-fg/80">Championship</div>
-              {champDateRange && (
-                <div className="text-sm text-fg/60 mt-0.5">{champDateRange}</div>
-              )}
-            </div>
             <div className="flex-1 flex items-center justify-center px-3">
               <div className="flex flex-col items-center gap-4" style={{ width: '234px' }}>
                 <div className="w-full">
@@ -498,7 +600,7 @@ export default function BracketView({
           </div>
 
           {/* Right semifinal (row-span-2, vertically centered) */}
-          {renderSemifinalCell(rightSemi)}
+          {renderSemifinalCell(rightSemi, undefined, false, true)}
 
           {/* Top-right region */}
           <div id={getRegionId(structure.regions.indexOf(topRight))}>
@@ -512,7 +614,6 @@ export default function BracketView({
               onMatchupClick={onMatchupClick}
               isReadOnly={isReadOnly}
               side="right"
-              showRoundHeaders
             />
           </div>
 
@@ -557,7 +658,7 @@ export default function BracketView({
 
   // Desktop nav bar with region tabs, progress, focus mode, zoom
   const renderDesktopNav = () => (
-    <div className="hidden md:flex items-center gap-2 sticky top-0 z-20 bg-surface/95 backdrop-blur-sm py-2 px-1 mb-4 rounded-lg border border-fg/5">
+    <div className="hidden md:flex items-center gap-2 sticky top-[64px] z-20 bg-surface/95 backdrop-blur-sm py-1.5 px-1 mb-0 rounded-lg border border-fg/5">
       {/* Region tabs with progress */}
       <div className="flex gap-1 flex-1">
         {regionTabs.map((tab, idx) => {
@@ -570,10 +671,10 @@ export default function BracketView({
             <button
               key={tab}
               onClick={() => handleDesktopTabClick(idx)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 ${
+              className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 border ${
                 isActive
-                  ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white shadow-sm'
-                  : 'text-fg/60 hover:text-fg hover:bg-fg/5'
+                  ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white shadow-sm border-transparent'
+                  : 'text-fg/90 hover:text-fg hover:bg-fg/10 hover:border-fg/25 hover:shadow-sm active:scale-[0.97] border-fg/15 bg-fg/[0.05]'
               }`}
             >
               <span className="text-xs text-fg/30 font-mono w-3">{idx + 1}</span>
@@ -584,7 +685,7 @@ export default function BracketView({
                   ? 'bg-emerald-500/20 text-emerald-400'
                   : isActive
                     ? 'bg-white/20 text-white/80'
-                    : 'bg-fg/5 text-fg/40'
+                    : 'bg-fg/8 text-fg/60'
               }`}>
                 {count}/{total}
               </span>
@@ -598,12 +699,12 @@ export default function BracketView({
         {/* Focus mode toggle */}
         <button
           onClick={toggleFocusMode}
-          className={`p-1.5 rounded-md transition-colors ${
-            focusMode ? 'bg-violet-500/20 text-violet-400' : 'text-fg/40 hover:text-fg/70 hover:bg-fg/5'
+          className={`p-2 rounded-md transition-colors ${
+            focusMode ? 'bg-violet-500/20 text-violet-400' : 'text-fg/60 hover:text-fg/90 hover:bg-fg/10 bg-fg/[0.04]'
           }`}
           title={focusMode ? 'Exit focus mode (Esc)' : 'Focus mode (Esc)'}
         >
-          <Focus className="w-4 h-4" />
+          <Focus className="w-[18px] h-[18px]" />
         </button>
 
         {/* Zoom controls */}
@@ -611,26 +712,26 @@ export default function BracketView({
           <>
             <button
               onClick={zoomOut}
-              className="p-1.5 rounded-md text-fg/40 hover:text-fg/70 hover:bg-fg/5 transition-colors"
+              className="p-2 rounded-md text-fg/60 hover:text-fg/90 hover:bg-fg/10 bg-fg/[0.04] transition-colors disabled:opacity-30"
               title="Zoom out (Cmd -)"
               disabled={zoomLevel <= ZOOM_LEVELS[0]}
             >
-              <ZoomOut className="w-4 h-4" />
+              <ZoomOut className="w-[18px] h-[18px]" />
             </button>
             <button
               onClick={zoomReset}
-              className="px-1.5 py-0.5 rounded-md text-xs font-mono text-fg/40 hover:text-fg/70 hover:bg-fg/5 transition-colors min-w-[36px] text-center"
+              className="px-2 py-1 rounded-md text-sm font-mono text-fg/60 hover:text-fg/90 hover:bg-fg/10 bg-fg/[0.04] transition-colors min-w-[42px] text-center"
               title="Reset zoom (Cmd 0)"
             >
               {Math.round(zoomLevel * 100)}%
             </button>
             <button
               onClick={zoomIn}
-              className="p-1.5 rounded-md text-fg/40 hover:text-fg/70 hover:bg-fg/5 transition-colors"
+              className="p-2 rounded-md text-fg/60 hover:text-fg/90 hover:bg-fg/10 bg-fg/[0.04] transition-colors disabled:opacity-30"
               title="Zoom in (Cmd +)"
               disabled={zoomLevel >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
             >
-              <ZoomIn className="w-4 h-4" />
+              <ZoomIn className="w-[18px] h-[18px]" />
             </button>
           </>
         )}
@@ -639,12 +740,12 @@ export default function BracketView({
         <div className="relative">
           <button
             onClick={() => setShowShortcuts(prev => !prev)}
-            className={`p-1.5 rounded-md transition-colors ${
-              showShortcuts ? 'bg-fg/10 text-fg/70' : 'text-fg/30 hover:text-fg/50 hover:bg-fg/5'
+            className={`p-2 rounded-md transition-colors ${
+              showShortcuts ? 'bg-fg/10 text-fg/70' : 'text-fg/50 hover:text-fg/80 hover:bg-fg/10 bg-fg/[0.04]'
             }`}
             title="Keyboard shortcuts"
           >
-            <Keyboard className="w-4 h-4" />
+            <Keyboard className="w-[18px] h-[18px]" />
           </button>
           {showShortcuts && (
             <div className="absolute top-full right-0 mt-2 w-56 bg-elevated border border-fg/10 rounded-lg shadow-xl p-3 text-xs z-50 animate-fade-in">
@@ -713,6 +814,7 @@ export default function BracketView({
   return (
     <div>
       {renderDesktopNav()}
+      {renderStickyRoundHeaders()}
       {renderDesktop()}
 
       {/* Mini-map (desktop only, scroll mode only) */}

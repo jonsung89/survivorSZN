@@ -41,7 +41,7 @@ export default function BracketMatchup({
   const renderTeamRow = (team, position) => {
     if (!team) {
       const hasHeader = !!slotData;
-      let tbdClasses = `flex items-center gap-2 px-2.5 py-2 relative ${compact ? 'min-w-[160px]' : ''} text-white/50 bg-fg/[0.12]`;
+      let tbdClasses = `flex items-center gap-2 px-2.5 py-2 relative ${compact ? 'min-w-[160px]' : ''} ${isDark ? 'text-white/40' : 'text-black/30'} bg-fg/[0.12]`;
       if (position === 'top' && !hasHeader) tbdClasses += ' rounded-t-lg';
       else tbdClasses += ' rounded-b-lg';
       return (

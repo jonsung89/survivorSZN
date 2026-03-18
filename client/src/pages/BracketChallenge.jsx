@@ -63,6 +63,18 @@ export default function BracketChallenge() {
     cashapp: { name: 'Cash App', placeholder: '$cashtag', color: '#00D632' },
   };
 
+  // Generate payment app deep link URL
+  const getPaymentLink = (platform, handle) => {
+    const clean = handle.replace(/^[@$]/, '').trim();
+    if (!clean) return null;
+    switch (platform) {
+      case 'venmo': return `https://venmo.com/${clean}`;
+      case 'paypal': return `https://paypal.me/${clean}`;
+      case 'cashapp': return `https://cash.app/$${clean}`;
+      default: return null;
+    }
+  };
+
   const handleEditPayment = () => {
     setPaymentDraft(paymentMethods.length > 0 ? [...paymentMethods] : [{ platform: 'venmo', handle: '' }]);
     setEditingPayment(true);
@@ -295,6 +307,7 @@ export default function BracketChallenge() {
   const isOpen = challenge.status === 'open';
   const scoringSystem = challenge.scoring_system || SCORING_PRESETS.standard.points;
   const paidCount = members.filter(m => m.hasPaid).length;
+  const currentUserPaid = members.find(m => m.id === user?.id)?.hasPaid;
 
   // Count brackets submitted per user from leaderboard
   const submittedByUser = {};
@@ -307,7 +320,7 @@ export default function BracketChallenge() {
       className={`max-w-4xl mx-auto px-4 py-6 transition-[padding] duration-300 lg:max-w-6xl lg:px-6 ${
         chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
       }`}
-      style={{ paddingBottom: 'calc(var(--chat-bar-height, 0px) + 24px)' }}
+      style={{ paddingBottom: 'calc(var(--chat-bar-height, 0px) + 64px)' }}
     >
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6">
@@ -559,19 +572,44 @@ export default function BracketChallenge() {
                         </button>
                       )}
                     </div>
-                    <div className="space-y-2">
-                      {paymentMethods.map((pm, idx) => (
-                        <div key={idx} className="flex items-center gap-2.5">
-                          <span
-                            className="text-sm font-semibold px-2 py-0.5 rounded text-white flex-shrink-0"
-                            style={{ backgroundColor: PAYMENT_PLATFORMS[pm.platform]?.color || '#666' }}
-                          >
-                            {PAYMENT_PLATFORMS[pm.platform]?.name || pm.platform}
-                          </span>
-                          <span className="text-base text-fg/80 truncate">{pm.handle}</span>
-                        </div>
-                      ))}
-                    </div>
+                    {currentUserPaid && !isCommissioner ? (
+                      <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-green-500/10">
+                        <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <span className="text-sm font-medium text-green-500">You're all paid up</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {paymentMethods.map((pm, idx) => {
+                          const link = getPaymentLink(pm.platform, pm.handle);
+                          const content = (
+                            <>
+                              <span
+                                className="text-sm font-semibold px-2 py-0.5 rounded text-white flex-shrink-0"
+                                style={{ backgroundColor: PAYMENT_PLATFORMS[pm.platform]?.color || '#666' }}
+                              >
+                                {PAYMENT_PLATFORMS[pm.platform]?.name || pm.platform}
+                              </span>
+                              <span className="text-base text-fg/80 truncate">{pm.handle}</span>
+                            </>
+                          );
+                          return link ? (
+                            <a
+                              key={idx}
+                              href={link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2.5 hover:opacity-80 transition-opacity active:opacity-60"
+                            >
+                              {content}
+                            </a>
+                          ) : (
+                            <div key={idx} className="flex items-center gap-2.5">
+                              {content}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ) : isCommissioner ? (
                   <div className="mt-3 pt-3 border-t border-fg/10">

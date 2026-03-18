@@ -818,11 +818,8 @@ export default function BracketChallenge() {
         <SettingsModal
           challenge={challenge}
           league={league}
-          members={members}
           onClose={() => setShowSettings(false)}
           onUpdate={loadData}
-          onTogglePayment={handleTogglePayment}
-          togglingPayment={togglingPayment}
         />
       )}
 
@@ -850,7 +847,7 @@ export default function BracketChallenge() {
   );
 }
 
-function SettingsModal({ challenge, league, members, onClose, onUpdate, onTogglePayment, togglingPayment }) {
+function SettingsModal({ challenge, league, onClose, onUpdate }) {
   const { showToast } = useToast();
   const entryFee = parseFloat(challenge.entry_fee) || 0;
   const [config, setConfig] = useState({
@@ -901,60 +898,6 @@ function SettingsModal({ challenge, league, members, onClose, onUpdate, onToggle
         ) : (
           <>
             <BracketSetup config={config} onChange={setConfig} />
-
-            {/* Payment Status in Settings */}
-            {(entryFee > 0 || parseFloat(config.entryFee) > 0) && members?.length > 0 && (
-              <div className="mt-5">
-                <label className="block text-fg/80 text-sm font-medium mb-2">
-                  Payment Status
-                </label>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {members.map(member => (
-                    <div
-                      key={member.id}
-                      className="flex items-center justify-between p-3 bg-fg/5 rounded-lg"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-fg/10 flex items-center justify-center text-fg/40 font-bold text-xs">
-                          {(member.displayName || '?')[0].toUpperCase()}
-                        </div>
-                        <div>
-                          <span className="text-fg text-sm">{member.displayName}</span>
-                          <p className="text-fg/40 text-xs">
-                            {member.firstName && member.lastName
-                              ? `${member.firstName} ${member.lastName}`
-                              : member.email}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => onTogglePayment(member)}
-                        disabled={togglingPayment === member.id}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
-                          member.hasPaid
-                            ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
-                            : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
-                        }`}
-                      >
-                        {togglingPayment === member.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : member.hasPaid ? (
-                          <>
-                            <Check className="w-4 h-4" />
-                            Paid
-                          </>
-                        ) : (
-                          <>
-                            <DollarSign className="w-4 h-4" />
-                            Mark Paid
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <button
               onClick={handleSave}

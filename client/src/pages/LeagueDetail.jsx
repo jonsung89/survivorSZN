@@ -1589,12 +1589,36 @@ export default function LeagueDetail() {
                   </div>
                   
                   {isCommissioner && (
-                    <button
-                      onClick={() => setStrikeDialog({ member, action: null, week: selectedWeek })}
-                      className="p-1.5 hover:bg-fg/10 rounded transition-colors"
-                    >
-                      <Edit3 className="w-4 h-4 text-fg/50" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {league.entryFee > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTogglePayment(member);
+                          }}
+                          disabled={togglingPayment === member.memberId}
+                          className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                            member.hasPaid
+                              ? 'bg-green-500/20 text-green-500'
+                              : 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
+                          }`}
+                        >
+                          {togglingPayment === member.memberId ? (
+                            <Loader2 className="w-3 h-3 animate-spin inline" />
+                          ) : member.hasPaid ? (
+                            '✓ Paid'
+                          ) : (
+                            'Unpaid'
+                          )}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setStrikeDialog({ member, action: null, week: selectedWeek })}
+                        className="p-1.5 hover:bg-fg/10 rounded transition-colors"
+                      >
+                        <Edit3 className="w-4 h-4 text-fg/50" />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2221,64 +2245,6 @@ export default function LeagueDetail() {
                   }
                 </p>
               </div>
-
-              {/* Payment Status - Members List */}
-              {(settings.entryFee > 0 || settings.prizePotOverride) && (
-                <div>
-                  <label className="block text-fg/80 text-sm font-medium mb-2">
-                    Payment Status
-                  </label>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {league.members?.map(member => (
-                      <div 
-                        key={member.id}
-                        className="flex items-center justify-between p-3 bg-fg/5 rounded-lg"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Avatar
-                            userId={member.userId}
-                            name={member.displayName}
-                            imageUrl={member.profileImageUrl}
-                            size="sm"
-                            isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
-                          />
-                          <div>
-                            <span className="text-fg text-sm">{member.displayName}</span>
-                            <p className="text-fg/40 text-xs">
-                              {member.firstName && member.lastName
-                                ? `${member.firstName} ${member.lastName}`
-                                : member.email}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleTogglePayment(member)}
-                          disabled={togglingPayment === member.id}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
-                            member.hasPaid
-                              ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
-                              : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
-                          }`}
-                        >
-                          {togglingPayment === member.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : member.hasPaid ? (
-                            <>
-                              <Check className="w-4 h-4" />
-                              Paid
-                            </>
-                          ) : (
-                            <>
-                              <DollarSign className="w-4 h-4" />
-                              Mark Paid
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <div className="flex gap-3">
                 <button

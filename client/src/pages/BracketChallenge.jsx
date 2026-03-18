@@ -44,11 +44,58 @@ export default function BracketChallenge() {
   const [tournamentStartTime, setTournamentStartTime] = useState(null);
   const [tournamentStarted, setTournamentStarted] = useState(false);
   const [lockCountdown, setLockCountdown] = useState(null);
+  const [editingPayment, setEditingPayment] = useState(false);
+  const [paymentDraft, setPaymentDraft] = useState([]);
+  const [savingPayment, setSavingPayment] = useState(false);
 
   const isCommissioner = league?.commissionerId === user?.id || league?.commissioner_id === user?.id;
   const isTournamentLocked = tournamentStartTime && new Date() >= new Date(tournamentStartTime);
   const entryFee = parseFloat(challenge?.entry_fee) || 0;
   const members = league?.members || [];
+  const paymentMethods = league?.paymentMethods || [];
+
+  const PAYMENT_PLATFORMS = {
+    venmo: { name: 'Venmo', placeholder: '@username', color: '#3D95CE' },
+    paypal: { name: 'PayPal', placeholder: 'email@example.com', color: '#003087' },
+    zelle: { name: 'Zelle', placeholder: 'email or phone', color: '#6C1CD3' },
+    cashapp: { name: 'Cash App', placeholder: '$cashtag', color: '#00D632' },
+  };
+
+  const handleEditPayment = () => {
+    setPaymentDraft(paymentMethods.length > 0 ? [...paymentMethods] : [{ platform: 'venmo', handle: '' }]);
+    setEditingPayment(true);
+  };
+
+  const handleSavePayment = async () => {
+    setSavingPayment(true);
+    try {
+      const cleaned = paymentDraft.filter(pm => pm.handle.trim());
+      await leagueAPI.updateSettings(leagueId, { paymentMethods: cleaned });
+      setLeague(prev => ({ ...prev, paymentMethods: cleaned }));
+      setEditingPayment(false);
+      showToast('Payment info saved', 'success');
+    } catch (err) {
+      showToast('Failed to save payment info', 'error');
+    } finally {
+      setSavingPayment(false);
+    }
+  };
+
+  const addPaymentMethod = () => {
+    const used = paymentDraft.map(p => p.platform);
+    const next = Object.keys(PAYMENT_PLATFORMS).find(k => !used.includes(k));
+    if (next) setPaymentDraft([...paymentDraft, { platform: next, handle: '' }]);
+  };
+
+  const removePaymentMethod = (idx) => {
+    setPaymentDraft(paymentDraft.filter((_, i) => i !== idx));
+  };
+
+  const updatePaymentMethod = (idx, field, value) => {
+    const updated = [...paymentDraft];
+    updated[idx] = { ...updated[idx], [field]: value };
+    setPaymentDraft(updated);
+  };
 
   useEffect(() => {
     loadData();
@@ -337,7 +384,7 @@ export default function BracketChallenge() {
         if (!showCountdown && !showPrizePot) return null;
 
         return (
-          <div className={`grid gap-4 mb-5 ${showCountdown && showPrizePot ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
+          <div className="grid gap-4 mb-5 grid-cols-1">
             {showCountdown && (
               <div className="glass-card rounded-xl p-4 sm:p-5 animate-in" style={{ animationDelay: '25ms' }}>
                 <div className="flex flex-col items-center gap-3">
@@ -414,6 +461,99 @@ export default function BracketChallenge() {
                 <p className="text-fg/40 text-sm mt-3 pt-3 border-t border-fg/10">
                   💰 Pot splits evenly among winners. Each submitted bracket = one ${entryFee} entry.
                 </p>
+
+                {/* Payment Methods */}
+                {editingPayment ? (
+                  <div className="mt-3 pt-3 border-t border-fg/10">
+                    <p className="text-sm font-medium text-fg/70 mb-3">Payment Methods</p>
+                    <div className="space-y-2">
+                      {paymentDraft.map((pm, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <select
+                            value={pm.platform}
+                            onChange={(e) => updatePaymentMethod(idx, 'platform', e.target.value)}
+                            className="input-field !w-auto text-sm py-1.5 flex-shrink-0"
+                          >
+                            {Object.entries(PAYMENT_PLATFORMS).map(([key, cfg]) => (
+                              <option key={key} value={key}>{cfg.name}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            value={pm.handle}
+                            onChange={(e) => updatePaymentMethod(idx, 'handle', e.target.value)}
+                            placeholder={PAYMENT_PLATFORMS[pm.platform]?.placeholder}
+                            className="input-field text-sm py-1.5 flex-1"
+                          />
+                          <button
+                            onClick={() => removePaymentMethod(idx)}
+                            className="p-1.5 text-fg/40 hover:text-red-400 transition-colors flex-shrink-0"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between mt-3">
+                      {paymentDraft.length < Object.keys(PAYMENT_PLATFORMS).length ? (
+                        <button
+                          onClick={addPaymentMethod}
+                          className={`text-sm transition-colors ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-nfl-blue hover:text-nfl-blue/80'}`}
+                        >
+                          + Add method
+                        </button>
+                      ) : <span />}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setEditingPayment(false)}
+                          className="px-3 py-1.5 text-sm text-fg/60 hover:text-fg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSavePayment}
+                          disabled={savingPayment}
+                          className={`px-3 py-1.5 text-sm text-white rounded-lg transition-colors disabled:opacity-50 ${isDark ? 'bg-blue-600 hover:bg-blue-500' : 'bg-nfl-blue hover:bg-nfl-blue/90'}`}
+                        >
+                          {savingPayment ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : paymentMethods.length > 0 ? (
+                  <div className="mt-3 pt-3 border-t border-fg/10">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-base font-semibold text-fg/80">Payment</p>
+                      {isCommissioner && (
+                        <button onClick={handleEditPayment} className="p-1 text-fg/40 hover:text-fg/70 transition-colors">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {paymentMethods.map((pm, idx) => (
+                        <div key={idx} className="flex items-center gap-2.5">
+                          <span
+                            className="text-sm font-semibold px-2 py-0.5 rounded text-white flex-shrink-0"
+                            style={{ backgroundColor: PAYMENT_PLATFORMS[pm.platform]?.color || '#666' }}
+                          >
+                            {PAYMENT_PLATFORMS[pm.platform]?.name || pm.platform}
+                          </span>
+                          <span className="text-base text-fg/80 truncate">{pm.handle}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : isCommissioner ? (
+                  <div className="mt-3 pt-3 border-t border-fg/10">
+                    <button
+                      onClick={handleEditPayment}
+                      className="text-sm text-fg/40 hover:text-fg/60 transition-colors"
+                    >
+                      + Add payment info
+                    </button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

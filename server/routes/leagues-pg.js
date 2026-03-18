@@ -729,6 +729,7 @@ router.get('/:leagueId', authMiddleware, async (req, res) => {
         sportId: league.sport_id || 'nfl',
         entryFee: parseFloat(league.entry_fee) || 0,
         prizePotOverride: league.prize_pot_override ? parseFloat(league.prize_pot_override) : null,
+        paymentMethods: league.payment_methods || [],
         password: league.password_plain || null,
         myStrikes: membership.strikes,
         myStatus: membership.status,
@@ -761,7 +762,7 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const { leagueId } = req.params;
-    const { maxStrikes, startWeek, doublePickWeeks, entryFee, prizePotOverride, name } = req.body;
+    const { maxStrikes, startWeek, doublePickWeeks, entryFee, prizePotOverride, name, paymentMethods } = req.body;
 
     const league = await db.getOne('SELECT * FROM leagues WHERE id = $1', [leagueId]);
     
@@ -860,6 +861,21 @@ router.put('/:leagueId/settings', authMiddleware, async (req, res) => {
         } else {
           changes.push(`Prize pot: manually set to $${newOverride}`);
         }
+      }
+    }
+
+    // Handle payment methods
+    if (paymentMethods !== undefined) {
+      const validPlatforms = ['venmo', 'paypal', 'zelle', 'cashapp'];
+      const cleaned = Array.isArray(paymentMethods)
+        ? paymentMethods.filter(pm => validPlatforms.includes(pm.platform) && pm.handle && pm.handle.trim())
+            .map(pm => ({ platform: pm.platform, handle: pm.handle.trim() }))
+        : [];
+      const oldMethods = league.payment_methods || [];
+      if (JSON.stringify(cleaned) !== JSON.stringify(oldMethods)) {
+        updates.push(`payment_methods = $${paramIndex++}`);
+        params.push(JSON.stringify(cleaned));
+        changes.push('Payment methods updated');
       }
     }
 

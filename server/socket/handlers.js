@@ -557,4 +557,8 @@ function getOnlineUserCount() {
   return globalConnectedUsers.size;
 }
 
-module.exports = { setupSocketHandlers, setupScoresNamespace, broadcastGameUpdate, onlineUsers, getOnlineUserCount };
+function getOnlineUserIds() {
+  return Array.from(globalConnectedUsers.keys());
+}
+
+module.exports = { setupSocketHandlers, setupScoresNamespace, broadcastGameUpdate, onlineUsers, getOnlineUserCount, getOnlineUserIds };

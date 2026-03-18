@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, LogIn, Activity, UserPlus, Trophy, MessageSquare,
   Target, Monitor, ExternalLink, Eye, Globe, RefreshCw,
-  BarChart3, Calendar, UserX, Gamepad2,
+  BarChart3, Calendar, UserX, Gamepad2, X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { adminAPI } from '../../api';
 import Loading from '../../components/Loading';
+import Avatar from '../../components/Avatar';
 import StatCard from './components/StatCard';
 import TimeRangeSelector from './components/TimeRangeSelector';
 import DashboardAreaChart from './components/DashboardAreaChart';
@@ -64,6 +65,30 @@ const MAIN_CHART_SERIES = [
   { key: 'signups', label: 'Signups', color: '#10b981' },
 ];
 
+// Human-readable page names for the Top Pages chart
+const PAGE_NAME_MAP = {
+  '/dashboard': 'Dashboard',
+  '/league/:id': 'League Home',
+  '/league/:id/bracket': 'League Bracket',
+  '/league/:id/bracket/:id': 'Bracket View',
+  '/league/:id/pick': 'Survivor Pick',
+  '/leagues': 'My Leagues',
+  '/leagues/join': 'Join League',
+  '/leagues/create': 'Create League',
+  '/join/:id': 'Invite Link',
+  '/login': 'Login',
+  '/schedule': 'Schedule',
+  '/privacy': 'Privacy Policy',
+  '/terms': 'Terms of Service',
+  '/': 'Home',
+  '/admin': 'Admin Dashboard',
+};
+
+function formatPageName(path) {
+  if (!path) return path;
+  return PAGE_NAME_MAP[path] || path;
+}
+
 const TOP_PAGES_RANGES = [
   { label: 'Today', value: 'today' },
   { label: '7D', value: '7d' },
@@ -77,9 +102,9 @@ const TAB_LABELS = {
   boxscore: 'Box Score',
   gamecast: 'Gamecast',
   shotchart: 'Shot Chart',
-  team1: 'Team 1',
-  team2: 'Team 2',
-  matchup: 'Matchup',
+  team1: 'Team Scouting',
+  team2: 'Team Scouting',
+  matchup: 'Head-to-Head',
 };
 
 const SPORT_LABELS = {
@@ -105,6 +130,27 @@ export default function AdminDashboard() {
   const [bracketEngagement, setBracketEngagement] = useState(null);
   const [anonymousUsage, setAnonymousUsage] = useState(null);
   const [deviceBreakdown, setDeviceBreakdown] = useState(null);
+  const [onlineUsersDialogOpen, setOnlineUsersDialogOpen] = useState(false);
+  const [onlineUsersList, setOnlineUsersList] = useState([]);
+  const [onlineUsersLoading, setOnlineUsersLoading] = useState(false);
+  // Top Pages drill-down
+  const [topPagesDetailOpen, setTopPagesDetailOpen] = useState(false);
+  const [topPagesDetailData, setTopPagesDetailData] = useState(null);
+  const [topPagesDetailLoading, setTopPagesDetailLoading] = useState(false);
+  const [topPagesDetailLabel, setTopPagesDetailLabel] = useState('');
+  // Bracket Engagement drill-down
+  const [bracketDetailOpen, setBracketDetailOpen] = useState(false);
+  const [bracketDetailData, setBracketDetailData] = useState(null);
+  const [bracketDetailLoading, setBracketDetailLoading] = useState(false);
+  const [bracketDetailTitle, setBracketDetailTitle] = useState('');
+  // Schedule Engagement drill-down
+  const [schedDetailOpen, setSchedDetailOpen] = useState(false);
+  const [schedDetailData, setSchedDetailData] = useState(null);
+  const [schedDetailLoading, setSchedDetailLoading] = useState(false);
+  const [schedDetailTitle, setSchedDetailTitle] = useState('');
+  // Per-section stat view toggle (default to 'today')
+  const [schedStatView, setSchedStatView] = useState('today');
+  const [bracketStatView, setBracketStatView] = useState('today');
   const chartTheme = useChartTheme();
   const onlineIntervalRef = useRef(null);
 
@@ -185,6 +231,60 @@ export default function AdminDashboard() {
     fetchStats(range, true);
   };
 
+  const handleOnlineUsersClick = async () => {
+    setOnlineUsersDialogOpen(true);
+    setOnlineUsersLoading(true);
+    try {
+      const data = await adminAPI.getOnlineUsersDetail();
+      setOnlineUsersList(data.users || []);
+    } catch {
+      setOnlineUsersList([]);
+    }
+    setOnlineUsersLoading(false);
+  };
+
+  const handleTopPageBarClick = async (barData) => {
+    // barData has the row from the chart; we need the original path (not the label)
+    const item = topPages.find(p => formatPageName(p.path) === barData.label);
+    if (!item) return;
+    setTopPagesDetailLabel(barData.label);
+    setTopPagesDetailOpen(true);
+    setTopPagesDetailLoading(true);
+    try {
+      const data = await adminAPI.getTopPagesDetail(item.path, topPagesRange);
+      setTopPagesDetailData(data);
+    } catch {
+      setTopPagesDetailData(null);
+    }
+    setTopPagesDetailLoading(false);
+  };
+
+  const handleBracketStatClick = async (metric, title) => {
+    setBracketDetailTitle(title);
+    setBracketDetailOpen(true);
+    setBracketDetailLoading(true);
+    try {
+      const data = await adminAPI.getBracketEngagementDetail(metric, range);
+      setBracketDetailData(data);
+    } catch {
+      setBracketDetailData(null);
+    }
+    setBracketDetailLoading(false);
+  };
+
+  const handleSchedStatClick = async (metric, title) => {
+    setSchedDetailTitle(title);
+    setSchedDetailOpen(true);
+    setSchedDetailLoading(true);
+    try {
+      const data = await adminAPI.getScheduleEngagementDetail(metric, range);
+      setSchedDetailData(data);
+    } catch {
+      setSchedDetailData(null);
+    }
+    setSchedDetailLoading(false);
+  };
+
   if (loading) return <Loading />;
   if (error) return <div className="text-red-400 text-center py-8">{error}</div>;
 
@@ -220,11 +320,18 @@ export default function AdminDashboard() {
     count: r.expands,
   }));
 
-  // Bracket engagement chart data
-  const bracketTabData = (bracketEngagement?.tabBreakdown || []).map(r => ({
+  // Bracket engagement chart data — merge tabs with same label (e.g. team1+team2 → "Team Scouting")
+  const bracketTabDataRaw = (bracketEngagement?.tabBreakdown || []).map(r => ({
     name: TAB_LABELS[r.tab] || r.tab,
     count: r.count,
   }));
+  const bracketTabMerged = {};
+  for (const r of bracketTabDataRaw) {
+    bracketTabMerged[r.name] = (bracketTabMerged[r.name] || 0) + r.count;
+  }
+  const bracketTabData = Object.entries(bracketTabMerged)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
 
   // Anonymous usage chart data
   const anonEventData = (anonymousUsage?.topEvents || []).map(r => ({
@@ -284,6 +391,7 @@ export default function AdminDashboard() {
           iconColor="text-emerald-400"
           live
           description="Users currently connected to the app via WebSocket. Updates every 30 seconds."
+          onClick={handleOnlineUsersClick}
         />
         <StatCard
           label="Page Views Today"
@@ -413,11 +521,12 @@ export default function AdminDashboard() {
           </div>
           {topPages.length > 0 ? (
             <HorizontalBarChart
-              data={topPages}
+              data={topPages.map(p => ({ ...p, label: formatPageName(p.path) }))}
               dataKey="views"
-              labelKey="path"
+              labelKey="label"
               color={chartTheme.colors.quaternary}
               height={Math.max(200, topPages.length * 30)}
+              onBarClick={handleTopPageBarClick}
             />
           ) : (
             <div className="h-[200px] flex items-center justify-center text-fg/30 text-sm">
@@ -525,25 +634,86 @@ export default function AdminDashboard() {
 
       {/* Row 7: Schedule & Gamecast Engagement */}
       <div className="bg-surface rounded-xl p-5 border border-fg/5 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Gamepad2 className="w-4 h-4 text-blue-400" />
-          <h3 className="text-sm font-medium text-fg">Schedule & Gamecast Engagement</h3>
-          <span className="text-sm text-fg/30">({range}D)</span>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Gamepad2 className="w-4 h-4 text-blue-400" />
+            <h3 className="text-sm font-medium text-fg">Schedule & Gamecast Engagement</h3>
+          </div>
+          <div className="flex items-center bg-fg/5 rounded-lg p-0.5 gap-0.5">
+            {[{ label: 'Today', value: 'today' }, { label: `${range}D`, value: 'range' }].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setSchedStatView(opt.value)}
+                className={`px-2.5 py-1 text-sm rounded-md transition-colors ${
+                  schedStatView === opt.value
+                    ? 'bg-surface text-fg shadow-sm'
+                    : 'text-fg/40 hover:text-fg/60'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Summary stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-          <div className="p-3 rounded-lg bg-fg/5">
-            <p className="text-2xl font-bold text-fg">{scheduleEngagement?.gameCardExpands?.total?.toLocaleString() ?? 0}</p>
+          <div
+            className="p-3 rounded-lg bg-fg/5 cursor-pointer hover:bg-fg/10 transition-colors"
+            onClick={() => handleSchedStatClick('gameCardExpands', 'Game Cards Opened')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSchedStatClick('gameCardExpands', 'Game Cards Opened'); } }}
+          >
+            <p className="text-2xl font-bold text-fg">
+              {schedStatView === 'today'
+                ? (scheduleEngagement?.today?.gameCardExpands ?? 0).toLocaleString()
+                : (scheduleEngagement?.gameCardExpands?.total ?? 0).toLocaleString()
+              }
+            </p>
             <p className="text-sm text-fg/40">Game Cards Opened</p>
+            {schedStatView === 'today' && scheduleEngagement?.gameCardExpands?.total > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{scheduleEngagement.gameCardExpands.total.toLocaleString()} in {range}D</p>
+            )}
+            {schedStatView !== 'today' && scheduleEngagement?.today?.gameCardExpands > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{scheduleEngagement.today.gameCardExpands} today</p>
+            )}
           </div>
-          <div className="p-3 rounded-lg bg-fg/5">
-            <p className="text-2xl font-bold text-fg">{scheduleEngagement?.gameCardExpands?.uniqueUsers?.toLocaleString() ?? 0}</p>
+          <div
+            className="p-3 rounded-lg bg-fg/5 cursor-pointer hover:bg-fg/10 transition-colors"
+            onClick={() => handleSchedStatClick('uniqueUsers', 'Unique Users')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSchedStatClick('uniqueUsers', 'Unique Users'); } }}
+          >
+            <p className="text-2xl font-bold text-fg">
+              {schedStatView === 'today'
+                ? (scheduleEngagement?.today?.uniqueUsers ?? 0).toLocaleString()
+                : (scheduleEngagement?.gameCardExpands?.uniqueUsers ?? 0).toLocaleString()
+              }
+            </p>
             <p className="text-sm text-fg/40">Unique Users</p>
+            {schedStatView === 'today' && scheduleEngagement?.gameCardExpands?.uniqueUsers > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{scheduleEngagement.gameCardExpands.uniqueUsers.toLocaleString()} in {range}D</p>
+            )}
+            {schedStatView !== 'today' && scheduleEngagement?.today?.uniqueUsers > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{scheduleEngagement.today.uniqueUsers} today</p>
+            )}
           </div>
           <div className="p-3 rounded-lg bg-fg/5">
-            <p className="text-2xl font-bold text-fg">{formatDuration(scheduleEngagement?.avgViewDuration)}</p>
+            <p className="text-2xl font-bold text-fg">
+              {formatDuration(schedStatView === 'today'
+                ? scheduleEngagement?.today?.avgViewDuration
+                : scheduleEngagement?.avgViewDuration
+              )}
+            </p>
             <p className="text-sm text-fg/40">Avg View Time</p>
+            {schedStatView === 'today' && scheduleEngagement?.avgViewDuration > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{formatDuration(scheduleEngagement.avgViewDuration)} in {range}D</p>
+            )}
+            {schedStatView !== 'today' && scheduleEngagement?.today?.avgViewDuration > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{formatDuration(scheduleEngagement.today.avgViewDuration)} today</p>
+            )}
           </div>
           <div className="p-3 rounded-lg bg-fg/5">
             <p className="text-2xl font-bold text-fg">{schedTabData.reduce((sum, r) => sum + r.count, 0).toLocaleString()}</p>
@@ -591,7 +761,7 @@ export default function AdminDashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-fg/40 border-b border-fg/10">
-                    <th className="text-left py-2 font-medium">Game ID</th>
+                    <th className="text-left py-2 font-medium">Game</th>
                     <th className="text-left py-2 font-medium">Sport</th>
                     <th className="text-right py-2 font-medium">Opens</th>
                     <th className="text-right py-2 font-medium">Avg Duration</th>
@@ -600,7 +770,7 @@ export default function AdminDashboard() {
                 <tbody>
                   {scheduleEngagement.topGames.slice(0, 5).map((g, i) => (
                     <tr key={i} className="border-b border-fg/5">
-                      <td className="py-2 text-fg/70 font-mono">{g.gameId?.substring(0, 16)}</td>
+                      <td className="py-2 text-fg/70">{g.gameName || g.gameId?.substring(0, 12)}</td>
                       <td className="py-2 text-fg/60">{SPORT_LABELS[g.sportId] || g.sportId?.toUpperCase()}</td>
                       <td className="py-2 text-fg text-right font-medium">{g.expands}</td>
                       <td className="py-2 text-fg/60 text-right">{formatDuration(g.avgDuration)}</td>
@@ -627,25 +797,86 @@ export default function AdminDashboard() {
 
       {/* Row 8: March Madness Engagement */}
       <div className="bg-surface rounded-xl p-5 border border-fg/5 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Trophy className="w-4 h-4 text-amber-400" />
-          <h3 className="text-sm font-medium text-fg">March Madness Engagement</h3>
-          <span className="text-sm text-fg/30">({range}D)</span>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <h3 className="text-sm font-medium text-fg">March Madness Engagement</h3>
+          </div>
+          <div className="flex items-center bg-fg/5 rounded-lg p-0.5 gap-0.5">
+            {[{ label: 'Today', value: 'today' }, { label: `${range}D`, value: 'range' }].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setBracketStatView(opt.value)}
+                className={`px-2.5 py-1 text-sm rounded-md transition-colors ${
+                  bracketStatView === opt.value
+                    ? 'bg-surface text-fg shadow-sm'
+                    : 'text-fg/40 hover:text-fg/60'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Summary stats */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
-          <div className="p-3 rounded-lg bg-fg/5">
-            <p className="text-2xl font-bold text-fg">{bracketEngagement?.matchupDetailsOpened?.total?.toLocaleString() ?? 0}</p>
+          <div
+            className="p-3 rounded-lg bg-fg/5 cursor-pointer hover:bg-fg/10 transition-colors"
+            onClick={() => handleBracketStatClick('matchupDetails', 'Matchup Details Viewed')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBracketStatClick('matchupDetails', 'Matchup Details Viewed'); } }}
+          >
+            <p className="text-2xl font-bold text-fg">
+              {bracketStatView === 'today'
+                ? (bracketEngagement?.today?.matchupDetailsOpened ?? 0).toLocaleString()
+                : (bracketEngagement?.matchupDetailsOpened?.total ?? 0).toLocaleString()
+              }
+            </p>
             <p className="text-sm text-fg/40">Matchup Details Viewed</p>
+            {bracketStatView === 'today' && bracketEngagement?.matchupDetailsOpened?.total > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{bracketEngagement.matchupDetailsOpened.total.toLocaleString()} in {range}D</p>
+            )}
+            {bracketStatView !== 'today' && bracketEngagement?.today?.matchupDetailsOpened > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{bracketEngagement.today.matchupDetailsOpened} today</p>
+            )}
           </div>
-          <div className="p-3 rounded-lg bg-fg/5">
-            <p className="text-2xl font-bold text-fg">{bracketEngagement?.matchupDetailsOpened?.uniqueUsers?.toLocaleString() ?? 0}</p>
+          <div
+            className="p-3 rounded-lg bg-fg/5 cursor-pointer hover:bg-fg/10 transition-colors"
+            onClick={() => handleBracketStatClick('uniqueUsers', 'Unique Users')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBracketStatClick('uniqueUsers', 'Unique Users'); } }}
+          >
+            <p className="text-2xl font-bold text-fg">
+              {bracketStatView === 'today'
+                ? (bracketEngagement?.today?.uniqueUsers ?? 0).toLocaleString()
+                : (bracketEngagement?.matchupDetailsOpened?.uniqueUsers ?? 0).toLocaleString()
+              }
+            </p>
             <p className="text-sm text-fg/40">Unique Users</p>
+            {bracketStatView === 'today' && bracketEngagement?.matchupDetailsOpened?.uniqueUsers > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{bracketEngagement.matchupDetailsOpened.uniqueUsers.toLocaleString()} in {range}D</p>
+            )}
+            {bracketStatView !== 'today' && bracketEngagement?.today?.uniqueUsers > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{bracketEngagement.today.uniqueUsers} today</p>
+            )}
           </div>
           <div className="p-3 rounded-lg bg-fg/5">
-            <p className="text-2xl font-bold text-fg">{formatDuration(bracketEngagement?.avgViewDuration)}</p>
+            <p className="text-2xl font-bold text-fg">
+              {formatDuration(bracketStatView === 'today'
+                ? bracketEngagement?.today?.avgViewDuration
+                : bracketEngagement?.avgViewDuration
+              )}
+            </p>
             <p className="text-sm text-fg/40">Avg Time per Matchup</p>
+            {bracketStatView === 'today' && bracketEngagement?.avgViewDuration > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{formatDuration(bracketEngagement.avgViewDuration)} in {range}D</p>
+            )}
+            {bracketStatView !== 'today' && bracketEngagement?.today?.avgViewDuration > 0 && (
+              <p className="text-sm text-fg/30 mt-0.5">{formatDuration(bracketEngagement.today.avgViewDuration)} today</p>
+            )}
           </div>
         </div>
 
@@ -669,17 +900,21 @@ export default function AdminDashboard() {
             <p className="text-sm text-fg/40 mb-2">Most Viewed Matchups</p>
             {bracketEngagement?.topMatchups?.length > 0 ? (
               <div className="space-y-2">
-                {bracketEngagement.topMatchups.slice(0, 5).map((m, i) => (
-                  <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-fg/5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-fg/30">#{i + 1}</span>
-                      <span className="text-sm text-fg">
-                        {m.team1Id ? `Slot ${m.slot}` : `Slot ${m.slot}`}
-                      </span>
+                {bracketEngagement.topMatchups.slice(0, 5).map((m, i) => {
+                  const team1 = m.team1Name || (m.team1Id ? `Team ${m.team1Id}` : 'TBD');
+                  const team2 = m.team2Name || (m.team2Id ? `Team ${m.team2Id}` : 'TBD');
+                  return (
+                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-fg/5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-fg/30 flex-shrink-0">#{i + 1}</span>
+                        <span className="text-sm text-fg truncate">
+                          {team1} vs {team2}
+                        </span>
+                      </div>
+                      <span className="text-sm font-medium text-fg flex-shrink-0 ml-2">{m.views} views</span>
                     </div>
-                    <span className="text-sm font-medium text-fg">{m.views} views</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="h-[100px] flex items-center justify-center text-fg/30 text-sm">No data yet</div>
@@ -919,6 +1154,292 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Online Users Dialog */}
+      {onlineUsersDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setOnlineUsersDialogOpen(false)} />
+          <div className="relative bg-elevated rounded-xl shadow-2xl border border-fg/10 w-full max-w-md max-h-[70vh] flex flex-col animate-in">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-fg/10">
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                </div>
+                <h2 className="text-lg font-display font-bold text-fg">Online Now</h2>
+                <span className="text-sm text-fg/40">({onlineUsersList.length})</span>
+              </div>
+              <button
+                onClick={() => setOnlineUsersDialogOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-fg/10 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5 text-fg/50" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {onlineUsersLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-fg/20 border-t-fg/60 rounded-full animate-spin" />
+                </div>
+              ) : onlineUsersList.length === 0 ? (
+                <p className="text-sm text-fg/40 text-center py-8">No users online right now</p>
+              ) : (
+                <div className="space-y-2">
+                  {onlineUsersList.map(u => (
+                    <Link
+                      key={u.id}
+                      to={`/admin/users/${u.id}`}
+                      onClick={() => setOnlineUsersDialogOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-fg/5 transition-colors"
+                    >
+                      <Avatar
+                        userId={u.id}
+                        name={u.displayName || 'User'}
+                        imageUrl={u.profileImageUrl}
+                        size="sm"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-fg truncate">
+                          {u.displayName || 'Unnamed'}
+                        </p>
+                        <p className="text-sm text-fg/40 truncate">
+                          {u.email || u.phone || ''}
+                        </p>
+                      </div>
+                      <span className="relative flex h-2 w-2 flex-shrink-0">
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top Pages Detail Dialog */}
+      {topPagesDetailOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setTopPagesDetailOpen(false)} />
+          <div className="relative bg-elevated rounded-xl shadow-2xl border border-fg/10 w-full max-w-lg max-h-[70vh] flex flex-col animate-in">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-fg/10">
+              <div className="flex items-center gap-2.5">
+                <BarChart3 className="w-4 h-4 text-violet-400" />
+                <h2 className="text-lg font-display font-bold text-fg">{topPagesDetailLabel}</h2>
+                {topPagesDetailData && (
+                  <span className="text-sm text-fg/40">({topPagesDetailData.totalViews?.toLocaleString()} total views)</span>
+                )}
+              </div>
+              <button
+                onClick={() => setTopPagesDetailOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-fg/10 transition-colors"
+              >
+                <X className="w-5 h-5 text-fg/50" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {topPagesDetailLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-fg/20 border-t-fg/60 rounded-full animate-spin" />
+                </div>
+              ) : !topPagesDetailData?.breakdown?.length ? (
+                <p className="text-sm text-fg/40 text-center py-8">
+                  {topPagesDetailData?.totalViews
+                    ? `${topPagesDetailData.totalViews.toLocaleString()} total views — no per-league breakdown available for this page.`
+                    : 'No data available'}
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {topPagesDetailData.breakdown.map((item, i) => (
+                    <Link
+                      key={item.entityId}
+                      to={`/admin/leagues/${item.entityId}`}
+                      onClick={() => setTopPagesDetailOpen(false)}
+                      className="flex items-center justify-between p-3 rounded-lg hover:bg-fg/5 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="text-sm font-medium text-fg/30 flex-shrink-0 w-6 text-right">#{i + 1}</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-fg truncate">{item.entityName}</p>
+                          <p className="text-sm text-fg/30 font-mono truncate">{item.entityId.substring(0, 8)}...</p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-3">
+                        <p className="text-sm font-medium text-fg">{item.views.toLocaleString()} views</p>
+                        <p className="text-sm text-fg/30">{item.uniqueVisitors} unique</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bracket Engagement Detail Dialog */}
+      {bracketDetailOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setBracketDetailOpen(false)} />
+          <div className="relative bg-elevated rounded-xl shadow-2xl border border-fg/10 w-full max-w-lg max-h-[70vh] flex flex-col animate-in">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-fg/10">
+              <div className="flex items-center gap-2.5">
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <h2 className="text-lg font-display font-bold text-fg">{bracketDetailTitle}</h2>
+              </div>
+              <button
+                onClick={() => setBracketDetailOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-fg/10 transition-colors"
+              >
+                <X className="w-5 h-5 text-fg/50" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {bracketDetailLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-fg/20 border-t-fg/60 rounded-full animate-spin" />
+                </div>
+              ) : !bracketDetailData?.items?.length ? (
+                <p className="text-sm text-fg/40 text-center py-8">No data available</p>
+              ) : bracketDetailData.metric === 'matchupDetails' ? (
+                <div className="space-y-1">
+                  {bracketDetailData.items.map((m, i) => {
+                    const team1 = m.team1Name || (m.team1Id ? `Team ${m.team1Id}` : 'TBD');
+                    const team2 = m.team2Name || (m.team2Id ? `Team ${m.team2Id}` : 'TBD');
+                    return (
+                      <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-fg/5">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <span className="text-sm font-medium text-fg/30 flex-shrink-0 w-6 text-right">#{i + 1}</span>
+                          <span className="text-sm text-fg truncate">{team1} vs {team2}</span>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-3">
+                          <p className="text-sm font-medium text-fg">{m.views} views</p>
+                          <p className="text-sm text-fg/30">{m.uniqueUsers} unique</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : bracketDetailData.metric === 'uniqueUsers' ? (
+                <div className="space-y-1">
+                  {bracketDetailData.items.map((u, i) => (
+                    <Link
+                      key={u.userId}
+                      to={`/admin/users/${u.userId}`}
+                      onClick={() => setBracketDetailOpen(false)}
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-fg/5 transition-colors"
+                    >
+                      <span className="text-sm font-medium text-fg/30 flex-shrink-0 w-6 text-right">#{i + 1}</span>
+                      <Avatar
+                        userId={u.userId}
+                        name={u.displayName || 'User'}
+                        imageUrl={u.profileImageUrl}
+                        size="sm"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-fg truncate">{u.displayName || 'Unnamed'}</p>
+                        <p className="text-sm text-fg/40 truncate">{u.email || ''}</p>
+                      </div>
+                      <span className="text-sm font-medium text-fg flex-shrink-0">{u.views} views</span>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {bracketDetailData.items.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-fg/5">
+                      <span className="text-sm text-fg">{item.tabLabel || item.tab}</span>
+                      <div className="text-right flex-shrink-0 ml-3">
+                        <p className="text-sm font-medium text-fg">{item.count} switches</p>
+                        <p className="text-sm text-fg/30">{item.uniqueUsers} unique</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Engagement Detail Dialog */}
+      {schedDetailOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setSchedDetailOpen(false)} />
+          <div className="relative bg-elevated rounded-xl shadow-2xl border border-fg/10 w-full max-w-lg max-h-[70vh] flex flex-col animate-in">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-fg/10">
+              <div className="flex items-center gap-2.5">
+                <Gamepad2 className="w-4 h-4 text-blue-400" />
+                <h2 className="text-lg font-display font-bold text-fg">{schedDetailTitle}</h2>
+              </div>
+              <button
+                onClick={() => setSchedDetailOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-fg/10 transition-colors"
+              >
+                <X className="w-5 h-5 text-fg/50" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {schedDetailLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-fg/20 border-t-fg/60 rounded-full animate-spin" />
+                </div>
+              ) : !schedDetailData?.items?.length ? (
+                <p className="text-sm text-fg/40 text-center py-8">No data available</p>
+              ) : schedDetailData.metric === 'gameCardExpands' ? (
+                <div className="space-y-1">
+                  {schedDetailData.items.map((g, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-fg/5">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="text-sm font-medium text-fg/30 flex-shrink-0 w-6 text-right">#{i + 1}</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-fg truncate">{g.gameName || g.gameId}</p>
+                          <p className="text-sm text-fg/30">{g.sportLabel}</p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-3">
+                        <p className="text-sm font-medium text-fg">{g.views} opens</p>
+                        <p className="text-sm text-fg/30">{g.uniqueUsers} unique · {formatDuration(g.avgDuration)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : schedDetailData.metric === 'uniqueUsers' ? (
+                <div className="space-y-1">
+                  {schedDetailData.items.map((u, i) => (
+                    <Link
+                      key={u.userId}
+                      to={`/admin/users/${u.userId}`}
+                      onClick={() => setSchedDetailOpen(false)}
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-fg/5 transition-colors"
+                    >
+                      <span className="text-sm font-medium text-fg/30 flex-shrink-0 w-6 text-right">#{i + 1}</span>
+                      <Avatar
+                        userId={u.userId}
+                        name={u.displayName || 'User'}
+                        imageUrl={u.profileImageUrl}
+                        size="sm"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-fg truncate">{u.displayName || 'Unnamed'}</p>
+                        <p className="text-sm text-fg/40 truncate">{u.email || ''}</p>
+                      </div>
+                      <span className="text-sm font-medium text-fg flex-shrink-0">{u.views} opens</span>
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

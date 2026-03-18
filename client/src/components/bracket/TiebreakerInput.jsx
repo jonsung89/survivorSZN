@@ -91,6 +91,7 @@ export default function TiebreakerInput({ type, value, onChange, disabled, picks
                 onChange={e => handleScoreChange(1, e.target.value)}
                 placeholder="0"
                 disabled={disabled}
+                aria-label={`Predicted score for ${team1.shortName || team1.abbreviation || team1.name}`}
                 className="w-14 bg-surface border border-fg/10 rounded-md px-1 py-2 text-center text-xl font-mono font-bold text-fg placeholder:text-fg/15 focus:outline-none focus:border-amber-400/40 focus:ring-1 focus:ring-amber-400/20 disabled:opacity-40"
               />
             </div>
@@ -122,6 +123,7 @@ export default function TiebreakerInput({ type, value, onChange, disabled, picks
                 onChange={e => handleScoreChange(2, e.target.value)}
                 placeholder="0"
                 disabled={disabled}
+                aria-label={`Predicted score for ${team2.shortName || team2.abbreviation || team2.name}`}
                 className="w-14 bg-surface border border-fg/10 rounded-md px-1 py-2 text-center text-xl font-mono font-bold text-fg placeholder:text-fg/15 focus:outline-none focus:border-amber-400/40 focus:ring-1 focus:ring-amber-400/20 disabled:opacity-40"
               />
             </div>

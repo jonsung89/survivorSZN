@@ -89,6 +89,8 @@ export default function BracketRegion({
     return (
       <div
         key={roundData.round}
+        role="group"
+        aria-label={roundData.name}
         className={`flex flex-col justify-around ${gapClasses} flex-shrink-0`}
         style={{ width: `${cellWidth}px`, minWidth: `${cellWidth}px` }}
       >
@@ -132,7 +134,7 @@ export default function BracketRegion({
   };
 
   return (
-    <div>
+    <div role="region" aria-label={`${region.name} region`}>
       {/* Round column headers (shown on top regions only — above region name) */}
       {showRoundHeaders && (
         <div className={`flex ${side === 'right' ? 'flex-row-reverse' : 'flex-row'} gap-6 mb-4`}>

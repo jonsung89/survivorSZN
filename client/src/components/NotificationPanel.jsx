@@ -174,10 +174,13 @@ export default function NotificationPanel() {
       <button
         onClick={handleOpen}
         className="relative p-2 rounded-lg hover:bg-fg/10 transition-colors"
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+        aria-expanded={isOpen}
+        aria-haspopup="true"
       >
-        <Bell className="w-5 h-5 text-fg/70" />
+        <Bell className="w-5 h-5 text-fg/70" aria-hidden="true" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1" aria-hidden="true">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -185,7 +188,7 @@ export default function NotificationPanel() {
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute top-12 right-0 w-80 sm:w-96 max-h-[70vh] bg-elevated border border-fg/10 rounded-xl shadow-2xl overflow-hidden animate-in z-50">
+        <div className="absolute top-12 right-0 w-80 sm:w-96 max-h-[70vh] bg-elevated border border-fg/10 rounded-xl shadow-2xl overflow-hidden animate-in z-50" role="dialog" aria-label="Notifications">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-fg/10">
             <h3 className="font-semibold text-fg">Notifications</h3>
@@ -202,8 +205,9 @@ export default function NotificationPanel() {
               <button
                 onClick={() => setIsOpen(false)}
                 className="p-1 hover:bg-fg/10 rounded-lg"
+                aria-label="Close notifications"
               >
-                <X className="w-4 h-4 text-fg/50" />
+                <X className="w-4 h-4 text-fg/50" aria-hidden="true" />
               </button>
             </div>
           </div>

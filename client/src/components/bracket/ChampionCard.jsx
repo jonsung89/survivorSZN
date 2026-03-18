@@ -23,7 +23,7 @@ export default function ChampionCard({ team }) {
   const whiteLogo = getDarkBgLogo(team.logo);
 
   return (
-    <div className="relative overflow-hidden rounded-xl animate-in" style={{ animationDuration: '0.4s' }}>
+    <div className="relative overflow-hidden rounded-xl animate-in" style={{ animationDuration: '0.4s' }} role="status" aria-label={`Your champion pick: ${team.name || team.abbreviation || 'Champion'}`}>
       {/* Team-colored background with gradient overlay */}
       <div
         className="absolute inset-0"
@@ -58,11 +58,11 @@ export default function ChampionCard({ team }) {
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center gap-2.5 px-6 py-5">
         <div className="flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
+          <Trophy className="w-5 h-5 text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]" aria-hidden="true" />
           <span className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300/90">
             Champion
           </span>
-          <Trophy className="w-5 h-5 text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
+          <Trophy className="w-5 h-5 text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]" aria-hidden="true" />
         </div>
 
         {team.logo && (

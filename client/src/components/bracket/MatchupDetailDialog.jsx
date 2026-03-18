@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, Clock } from 'lucide-react';
 import { bracketAPI } from '../../api';
 import { useTheme } from '../../context/ThemeContext';
+import useFocusTrap from '../../hooks/useFocusTrap';
 import TeamAnalysisCard from './TeamAnalysisCard';
 import MatchupComparisonTab from './MatchupComparisonTab';
 
@@ -50,6 +51,8 @@ export default function MatchupDetailDialog({
   const [scrolled, setScrolled] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const scrollRef = useRef(null);
+  const dialogRef = useRef(null);
+  useFocusTrap(dialogRef, true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -131,9 +134,13 @@ export default function MatchupDetailDialog({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-8" onClick={onClose}>
-      <div className="fixed inset-0 bg-black/50" />
+      <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
 
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Matchup details: ${team1Info?.name || 'TBD'} vs ${team2Info?.name || 'TBD'}`}
         className="relative w-full max-w-lg md:max-w-4xl max-h-[80%] md:max-h-[90%] flex flex-col rounded-2xl animate-in shadow-2xl overflow-hidden"
         style={{ background: 'rgb(var(--color-elevated))' }}
         onClick={e => e.stopPropagation()}
@@ -302,11 +309,12 @@ export default function MatchupDetailDialog({
           {/* Close button */}
           <button
             onClick={onClose}
+            aria-label="Close matchup details"
             className={`absolute top-3 right-3 z-20 p-1.5 rounded-full transition-colors ${
               isActiveTBD ? 'bg-fg/10 hover:bg-fg/20' : 'bg-black/20 hover:bg-black/40'
             }`}
           >
-            <X className={`w-4 h-4 ${isActiveTBD ? 'text-fg/60' : 'text-white'}`} />
+            <X className={`w-4 h-4 ${isActiveTBD ? 'text-fg/60' : 'text-white'}`} aria-hidden="true" />
           </button>
 
           {/* Full hero content — left-aligned, hidden on mobile when scrolled */}
@@ -413,9 +421,12 @@ export default function MatchupDetailDialog({
         </div>
 
         {/* Tab bar — team switcher + matchup tab */}
-        <div className="flex-shrink-0 flex border-b border-fg/10">
+        <div className="flex-shrink-0 flex border-b border-fg/10" role="tablist" aria-label="Team and matchup details">
           {/* Team 1 tab */}
           <button
+            role="tab"
+            aria-selected={activeTab === 0}
+            aria-label={`${team1Info?.name || 'TBD'} details`}
             onClick={() => { setActiveTab(0); onTabSwitch?.('team1'); }}
             className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all relative ${
               activeTab === 0 ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
@@ -436,6 +447,9 @@ export default function MatchupDetailDialog({
           {/* Matchup tab — only when both teams known */}
           {bothTeamsKnown && (
             <button
+              role="tab"
+              aria-selected={activeTab === 1}
+              aria-label="Matchup comparison"
               onClick={() => { setActiveTab(1); onTabSwitch?.('matchup'); }}
               className={`px-4 flex items-center justify-center gap-1.5 py-3 text-sm font-bold transition-all relative ${
                 activeTab === 1 ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
@@ -453,6 +467,9 @@ export default function MatchupDetailDialog({
 
           {/* Team 2 tab */}
           <button
+            role="tab"
+            aria-selected={activeTab === (bothTeamsKnown ? 2 : 1)}
+            aria-label={`${team2Info?.name || 'TBD'} details`}
             onClick={() => { setActiveTab(bothTeamsKnown ? 2 : 1); onTabSwitch?.('team2'); }}
             className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all relative ${
               activeTab === (bothTeamsKnown ? 2 : 1) ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
@@ -480,8 +497,8 @@ export default function MatchupDetailDialog({
         >
           {isMatchupTab ? (
             loading ? (
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-6 h-6 animate-spin text-fg/30" />
+              <div className="flex items-center justify-center py-20" role="status" aria-label="Loading matchup data">
+                <Loader2 className="w-6 h-6 animate-spin text-fg/30" aria-hidden="true" />
               </div>
             ) : (
               <div className="p-4 md:p-6">
@@ -539,8 +556,8 @@ export default function MatchupDetailDialog({
               </div>
             </div>
           ) : loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-6 h-6 animate-spin text-fg/30" />
+            <div className="flex items-center justify-center py-20" role="status" aria-label="Loading team data">
+              <Loader2 className="w-6 h-6 animate-spin text-fg/30" aria-hidden="true" />
             </div>
           ) : (
             <div className="p-4 md:p-6">
@@ -586,6 +603,7 @@ export default function MatchupDetailDialog({
           <div className="flex-shrink-0 p-3 border-t border-fg/10 flex gap-3" style={{ background: 'rgb(var(--color-elevated))' }}>
             <button
               onClick={() => handlePick(team1Info.id)}
+              aria-label={`Pick #${team1Info.seed} ${team1Info.name} to advance`}
               className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 text-white"
               style={{ backgroundColor: team1Info.color || '#6366f1' }}
             >
@@ -594,6 +612,7 @@ export default function MatchupDetailDialog({
             </button>
             <button
               onClick={() => handlePick(team2Info.id)}
+              aria-label={`Pick #${team2Info.seed} ${team2Info.name} to advance`}
               className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 text-white"
               style={{ backgroundColor: team2Info.color || '#f59e0b' }}
             >

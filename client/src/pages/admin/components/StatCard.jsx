@@ -1,14 +1,20 @@
 import { useState } from 'react';
 import { TrendingUp, TrendingDown, Minus, Info } from 'lucide-react';
 
-export default function StatCard({ label, value, icon: Icon, iconColor, delta, deltaLabel, live, description, subtitle }) {
+export default function StatCard({ label, value, icon: Icon, iconColor, delta, deltaLabel, live, description, subtitle, onClick }) {
   const [showDesc, setShowDesc] = useState(false);
   const deltaNum = typeof delta === 'number' ? delta : null;
   const isPositive = deltaNum > 0;
   const isNegative = deltaNum < 0;
 
   return (
-    <div className="bg-surface rounded-xl p-5 border border-fg/5 relative">
+    <div
+      className={`bg-surface rounded-xl p-5 border border-fg/5 relative ${onClick ? 'cursor-pointer hover:border-fg/15 transition-colors' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className={`p-2 rounded-lg bg-fg/5 ${iconColor}`}>
           <Icon className="w-5 h-5" />

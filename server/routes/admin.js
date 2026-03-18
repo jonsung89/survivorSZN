@@ -4,10 +4,46 @@ const { db } = require('../db/supabase');
 const { adminMiddleware } = require('../middleware/admin');
 const { generateAllReports, getStoredReport, getTournamentBracket } = require('../services/ncaab-tournament');
 const { getSlotRound, calculateBracketScore, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
-const { getOnlineUserCount } = require('../socket/handlers');
+const { getOnlineUserCount, getOnlineUserIds } = require('../socket/handlers');
 
 // All routes require admin
 router.use(adminMiddleware);
+
+// ESPN sport slugs for API lookups
+const SPORT_SLUGS = {
+  nba: 'basketball/nba',
+  ncaab: 'basketball/mens-college-basketball',
+  nfl: 'football/nfl',
+  nhl: 'hockey/nhl',
+  mlb: 'baseball/mlb',
+};
+
+// Resolve ESPN game IDs to team names
+async function resolveGameNames(games) {
+  if (!games.length) return games;
+  try {
+    // Fetch summary for each unique game
+    const resolved = await Promise.all(games.map(async (g) => {
+      try {
+        const slug = SPORT_SLUGS[g.sportId];
+        if (!slug) return g;
+        const resp = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${slug}/summary?event=${g.gameId}`);
+        if (!resp.ok) return g;
+        const data = await resp.json();
+        const competitors = data?.header?.competitions?.[0]?.competitors;
+        if (competitors?.length === 2) {
+          const away = competitors.find(c => c.homeAway === 'away') || competitors[0];
+          const home = competitors.find(c => c.homeAway === 'home') || competitors[1];
+          g.gameName = `${away.team?.abbreviation || away.team?.name} @ ${home.team?.abbreviation || home.team?.name}`;
+        }
+      } catch { /* ignore per-game errors */ }
+      return g;
+    }));
+    return resolved;
+  } catch {
+    return games;
+  }
+}
 
 // ─── Dashboard Stats ─────────────────────────────────────────────────────────
 
@@ -27,7 +63,7 @@ router.get('/stats', async (req, res) => {
       db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day1]),
       db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day7]),
       db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day30]),
-      db.getOne('SELECT COUNT(*) as count FROM chat_messages WHERE created_at >= $1', [todayStart]),
+      db.getOne("SELECT COUNT(*) as count FROM chat_messages WHERE created_at >= $1 AND COALESCE(message_type, 'user') != 'system'", [todayStart]),
       db.getAll(
         `SELECT DATE(created_at) as date, COUNT(*) as count
          FROM users WHERE created_at >= $1
@@ -68,6 +104,37 @@ router.get('/stats/online', (req, res) => {
   res.json({ onlineUsers: getOnlineUserCount() });
 });
 
+// ─── Online Users Detail (returns actual user info) ─────────────────────────
+
+router.get('/stats/online/details', async (req, res) => {
+  try {
+    const userIds = getOnlineUserIds();
+    if (userIds.length === 0) {
+      return res.json({ users: [] });
+    }
+    const placeholders = userIds.map((_, i) => `$${i + 1}`).join(', ');
+    const users = await db.getAll(
+      `SELECT id, display_name, email, phone, profile_image_url, last_login_at
+       FROM users WHERE id IN (${placeholders})
+       ORDER BY display_name`,
+      userIds
+    );
+    res.json({
+      users: users.map(u => ({
+        id: u.id,
+        displayName: u.display_name,
+        email: u.email,
+        phone: u.phone,
+        profileImageUrl: u.profile_image_url,
+        lastLoginAt: u.last_login_at,
+      })),
+    });
+  } catch (error) {
+    console.error('Online users detail error:', error);
+    res.status(500).json({ error: 'Failed to fetch online users' });
+  }
+});
+
 // ─── Top Pages (flexible range) ──────────────────────────────────────────────
 
 router.get('/stats/top-pages', async (req, res) => {
@@ -96,16 +163,29 @@ router.get('/stats/top-pages', async (req, res) => {
         startDate = new Date(now - 30 * 24 * 3600000);
     }
 
+    // Normalize paths: replace UUIDs and numeric IDs with :id so routes aggregate properly
+    // e.g. /league/85d6b9c2-7d03-4d52-b1f7-33f117932610/bracket → /league/:id/bracket
     const topPages = await db.getAll(
-      `SELECT page_path, COUNT(*) as views, COUNT(DISTINCT user_id) as unique_visitors
-       FROM page_views WHERE created_at >= $1
-       GROUP BY page_path ORDER BY views DESC LIMIT 15`,
+      `SELECT normalized_path, SUM(views)::int as views, SUM(unique_visitors)::int as unique_visitors
+       FROM (
+         SELECT
+           REGEXP_REPLACE(
+             REGEXP_REPLACE(page_path, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', ':id', 'gi'),
+             '\/[A-F0-9]{6,}(\/|$)', '/:id\\1', 'g'
+           ) as normalized_path,
+           COUNT(*) as views,
+           COUNT(DISTINCT user_id) as unique_visitors
+         FROM page_views WHERE created_at >= $1
+         GROUP BY page_path
+       ) sub
+       GROUP BY normalized_path
+       ORDER BY views DESC LIMIT 15`,
       [startDate.toISOString()]
     );
 
     res.json({
       topPages: topPages.map(r => ({
-        path: r.page_path,
+        path: r.normalized_path,
         views: parseInt(r.views),
         uniqueVisitors: parseInt(r.unique_visitors),
       })),
@@ -113,6 +193,271 @@ router.get('/stats/top-pages', async (req, res) => {
   } catch (error) {
     console.error('Top pages error:', error);
     res.status(500).json({ error: 'Failed to fetch top pages' });
+  }
+});
+
+// ─── Top Pages Detail (drill-down by entity) ─────────────────────────────────
+
+router.get('/stats/top-pages/detail', async (req, res) => {
+  try {
+    const { pattern, range = '30d' } = req.query;
+    if (!pattern) return res.status(400).json({ error: 'pattern is required' });
+
+    const now = new Date();
+    let startDate;
+    switch (range) {
+      case 'today':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case '7d':
+        startDate = new Date(now - 7 * 24 * 3600000);
+        break;
+      case '30d':
+        startDate = new Date(now - 30 * 24 * 3600000);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      default:
+        startDate = new Date(now - 30 * 24 * 3600000);
+    }
+
+    // Convert normalized pattern like /league/:id/bracket to SQL LIKE: /league/%/bracket
+    const likePattern = pattern.replace(/:id/g, '%');
+
+    // Check if this is a league-related route (contains /league/:id)
+    const isLeagueRoute = pattern.includes('/league/:id');
+
+    if (isLeagueRoute) {
+      // Extract league ID from paths using regex — UUID is between /league/ and the next /
+      const rows = await db.getAll(
+        `SELECT
+           SUBSTRING(pv.page_path FROM '/league/([0-9a-f-]{36})') as entity_id,
+           COUNT(*) as views,
+           COUNT(DISTINCT pv.user_id) as unique_visitors
+         FROM page_views pv
+         WHERE pv.page_path LIKE $1 AND pv.created_at >= $2
+         GROUP BY entity_id
+         HAVING SUBSTRING(pv.page_path FROM '/league/([0-9a-f-]{36})') IS NOT NULL
+         ORDER BY views DESC
+         LIMIT 20`,
+        [likePattern, startDate.toISOString()]
+      );
+
+      // Look up league names
+      const leagueIds = rows.map(r => r.entity_id).filter(Boolean);
+      let leagueLookup = {};
+      if (leagueIds.length > 0) {
+        const placeholders = leagueIds.map((_, i) => `$${i + 1}`).join(', ');
+        const leagues = await db.getAll(
+          `SELECT id, name FROM leagues WHERE id IN (${placeholders})`,
+          leagueIds
+        );
+        for (const l of leagues) {
+          leagueLookup[l.id] = l.name;
+        }
+      }
+
+      const totalViews = rows.reduce((sum, r) => sum + parseInt(r.views), 0);
+
+      res.json({
+        pattern,
+        totalViews,
+        breakdown: rows.map(r => ({
+          entityId: r.entity_id,
+          entityName: leagueLookup[r.entity_id] || 'Unknown League',
+          views: parseInt(r.views),
+          uniqueVisitors: parseInt(r.unique_visitors),
+        })),
+      });
+    } else {
+      // Non-league route — just return the total views (no breakdown possible)
+      const result = await db.getOne(
+        `SELECT COUNT(*) as views, COUNT(DISTINCT user_id) as unique_visitors
+         FROM page_views WHERE page_path LIKE $1 AND created_at >= $2`,
+        [likePattern, startDate.toISOString()]
+      );
+      res.json({
+        pattern,
+        totalViews: parseInt(result?.views || 0),
+        breakdown: [],
+      });
+    }
+  } catch (error) {
+    console.error('Top pages detail error:', error);
+    res.status(500).json({ error: 'Failed to fetch page detail' });
+  }
+});
+
+// ─── Schedule Engagement Detail (drill-down) ────────────────────────────────
+
+router.get('/stats/schedule-engagement/detail', async (req, res) => {
+  try {
+    const { metric = 'gameCardExpands' } = req.query;
+    const range = Math.min(parseInt(req.query.range) || 30, 90);
+    const rangeStart = new Date(Date.now() - range * 24 * 3600000).toISOString();
+
+    if (metric === 'gameCardExpands') {
+      // Full list of games opened, grouped by sport + game
+      const rows = await db.getAll(
+        `SELECT event_data->>'gameId' as game_id, event_data->>'sportId' as sport_id,
+                COUNT(*) as views,
+                COUNT(DISTINCT COALESCE(user_id::text, session_id)) as unique_users,
+                ROUND(AVG(CASE WHEN duration_seconds > 0 THEN duration_seconds END))::int as avg_duration
+         FROM feature_events
+         WHERE event_name IN ('game_card_expand', 'game_card_collapse') AND created_at >= $1
+         GROUP BY event_data->>'gameId', event_data->>'sportId'
+         ORDER BY views DESC
+         LIMIT 30`,
+        [rangeStart]
+      );
+
+      const SPORT_LABELS = { nba: 'NBA', ncaab: 'NCAAB', nfl: 'NFL', nhl: 'NHL', mlb: 'MLB' };
+
+      const items = rows.map(r => ({
+        gameId: r.game_id,
+        sportId: r.sport_id,
+        sportLabel: SPORT_LABELS[r.sport_id] || r.sport_id?.toUpperCase(),
+        views: parseInt(r.views),
+        uniqueUsers: parseInt(r.unique_users),
+        avgDuration: parseInt(r.avg_duration) || 0,
+      }));
+
+      res.json({
+        metric,
+        items: await resolveGameNames(items),
+      });
+    } else if (metric === 'uniqueUsers') {
+      const rows = await db.getAll(
+        `SELECT u.id, u.display_name, u.email, u.profile_image_url, COUNT(*) as views
+         FROM feature_events fe
+         JOIN users u ON u.id = fe.user_id
+         WHERE fe.event_name = 'game_card_expand' AND fe.created_at >= $1
+         GROUP BY u.id, u.display_name, u.email, u.profile_image_url
+         ORDER BY views DESC
+         LIMIT 30`,
+        [rangeStart]
+      );
+
+      res.json({
+        metric,
+        items: rows.map(r => ({
+          userId: r.id,
+          displayName: r.display_name,
+          email: r.email,
+          profileImageUrl: r.profile_image_url,
+          views: parseInt(r.views),
+        })),
+      });
+    } else {
+      res.status(400).json({ error: 'Unknown metric' });
+    }
+  } catch (error) {
+    console.error('Schedule engagement detail error:', error);
+    res.status(500).json({ error: 'Failed to fetch schedule engagement detail' });
+  }
+});
+
+// ─── Bracket Engagement Detail (drill-down) ─────────────────────────────────
+
+router.get('/stats/bracket-engagement/detail', async (req, res) => {
+  try {
+    const { metric = 'matchupDetails' } = req.query;
+    const range = Math.min(parseInt(req.query.range) || 30, 90);
+    const rangeStart = new Date(Date.now() - range * 24 * 3600000).toISOString();
+
+    // Resolve team names
+    let teamLookup = {};
+    try {
+      const currentSeason = new Date().getFullYear();
+      const bracket = await getTournamentBracket(currentSeason);
+      teamLookup = bracket?.teams || {};
+    } catch { /* ignore */ }
+
+    const resolveTeamName = (id) => {
+      if (!id) return null;
+      if (id.startsWith('ff-')) return 'First Four';
+      const t = teamLookup[id];
+      return t ? (t.shortName || t.abbreviation || t.name) : null;
+    };
+
+    if (metric === 'matchupDetails') {
+      // Full list of matchups with view counts
+      const rows = await db.getAll(
+        `SELECT event_data->>'team1Id' as team1_id, event_data->>'team2Id' as team2_id,
+                (event_data->>'slot')::int as slot, COUNT(*) as views,
+                COUNT(DISTINCT COALESCE(user_id::text, session_id)) as unique_users
+         FROM feature_events
+         WHERE event_name = 'matchup_detail_open' AND created_at >= $1
+         GROUP BY event_data->>'team1Id', event_data->>'team2Id', event_data->>'slot'
+         ORDER BY views DESC`,
+        [rangeStart]
+      );
+
+      res.json({
+        metric,
+        items: rows.map(r => ({
+          team1Id: r.team1_id,
+          team2Id: r.team2_id,
+          team1Name: resolveTeamName(r.team1_id),
+          team2Name: resolveTeamName(r.team2_id),
+          slot: r.slot,
+          views: parseInt(r.views),
+          uniqueUsers: parseInt(r.unique_users),
+        })),
+      });
+    } else if (metric === 'uniqueUsers') {
+      // List of users who viewed matchup details
+      const rows = await db.getAll(
+        `SELECT u.id, u.display_name, u.email, u.profile_image_url, COUNT(*) as views
+         FROM feature_events fe
+         JOIN users u ON u.id = fe.user_id
+         WHERE fe.event_name = 'matchup_detail_open' AND fe.created_at >= $1
+         GROUP BY u.id, u.display_name, u.email, u.profile_image_url
+         ORDER BY views DESC
+         LIMIT 30`,
+        [rangeStart]
+      );
+
+      res.json({
+        metric,
+        items: rows.map(r => ({
+          userId: r.id,
+          displayName: r.display_name,
+          email: r.email,
+          profileImageUrl: r.profile_image_url,
+          views: parseInt(r.views),
+        })),
+      });
+    } else if (metric === 'tabBreakdown') {
+      // Detailed tab breakdown with user counts
+      const rows = await db.getAll(
+        `SELECT event_data->>'tab' as tab, COUNT(*) as count,
+                COUNT(DISTINCT COALESCE(user_id::text, session_id)) as unique_users
+         FROM feature_events
+         WHERE event_name = 'matchup_tab_switch' AND created_at >= $1
+         GROUP BY event_data->>'tab' ORDER BY count DESC`,
+        [rangeStart]
+      );
+
+      res.json({
+        metric,
+        items: rows.map(r => ({
+          tab: r.tab,
+          tabLabel: ({'summary':'Summary','boxscore':'Box Score','gamecast':'Gamecast','shotchart':'Shot Chart','team1':'Team Scouting','team2':'Team Scouting','matchup':'Head-to-Head'})[r.tab] || r.tab,
+          count: parseInt(r.count),
+          uniqueUsers: parseInt(r.unique_users),
+        })),
+      });
+    } else {
+      res.status(400).json({ error: 'Unknown metric' });
+    }
+  } catch (error) {
+    console.error('Bracket engagement detail error:', error);
+    res.status(500).json({ error: 'Failed to fetch bracket engagement detail' });
   }
 });
 
@@ -182,7 +527,7 @@ router.get('/stats/dashboard', async (req, res) => {
       ),
       db.getAll(
         `SELECT DATE(created_at) as date, COUNT(*) as count
-         FROM chat_messages WHERE created_at >= $1
+         FROM chat_messages WHERE created_at >= $1 AND COALESCE(message_type, 'user') != 'system'
          GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
       ),
       db.getAll(
@@ -230,11 +575,22 @@ router.get('/stats/dashboard', async (req, res) => {
       db.getOne("SELECT COUNT(*) as count FROM leagues WHERE status = 'active'"),
       db.getOne('SELECT COUNT(*) as count FROM leagues'),
 
-      // Top pages (for the selected range)
+      // Top pages (for the selected range) — normalize paths by stripping UUIDs/IDs
       db.getAll(
-        `SELECT page_path, COUNT(*) as views, COUNT(DISTINCT user_id) as unique_visitors
-         FROM page_views WHERE created_at >= $1
-         GROUP BY page_path ORDER BY views DESC LIMIT 10`, [rangeStart]
+        `SELECT normalized_path, SUM(views)::int as views, SUM(unique_visitors)::int as unique_visitors
+         FROM (
+           SELECT
+             REGEXP_REPLACE(
+               REGEXP_REPLACE(page_path, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', ':id', 'gi'),
+               '\/[A-Fa-f0-9]{6,}(\/|$)', '/:id\\1', 'g'
+             ) as normalized_path,
+             COUNT(*) as views,
+             COUNT(DISTINCT user_id) as unique_visitors
+           FROM page_views WHERE created_at >= $1
+           GROUP BY page_path
+         ) sub
+         GROUP BY normalized_path
+         ORDER BY views DESC LIMIT 10`, [rangeStart]
       ),
 
       // Recent signups (last 8)
@@ -291,7 +647,7 @@ router.get('/stats/dashboard', async (req, res) => {
         totalLeagues: p(totalLeagues),
       },
       topPages: topPages.map(r => ({
-        path: r.page_path,
+        path: r.normalized_path,
         views: parseInt(r.views),
         uniqueVisitors: parseInt(r.unique_visitors),
       })),
@@ -316,11 +672,13 @@ router.get('/stats/schedule-engagement', async (req, res) => {
   try {
     const range = Math.min(parseInt(req.query.range) || 30, 90);
     const rangeStart = new Date(Date.now() - range * 24 * 3600000).toISOString();
+    const todayStart = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).toISOString();
 
     const [
       totalExpands, uniqueExpandUsers,
       tabBreakdown, sportBreakdown,
       topGames, avgDuration, dailyTrend,
+      todayExpands, todayUniqueUsers, todayAvgDuration,
     ] = await Promise.all([
       // Total game card expands
       db.getOne(
@@ -366,6 +724,20 @@ router.get('/stats/schedule-engagement', async (req, res) => {
          WHERE event_name = 'game_card_expand' AND created_at >= $1
          GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
       ),
+      // Today stats
+      db.getOne(
+        `SELECT COUNT(*) as count FROM feature_events
+         WHERE event_name = 'game_card_expand' AND created_at >= $1`, [todayStart]
+      ),
+      db.getOne(
+        `SELECT COUNT(DISTINCT COALESCE(user_id::text, session_id)) as count FROM feature_events
+         WHERE event_name = 'game_card_expand' AND created_at >= $1`, [todayStart]
+      ),
+      db.getOne(
+        `SELECT ROUND(AVG(duration_seconds))::int as avg
+         FROM feature_events
+         WHERE event_name = 'game_card_collapse' AND duration_seconds > 0 AND created_at >= $1`, [todayStart]
+      ),
     ]);
 
     res.json({
@@ -373,14 +745,19 @@ router.get('/stats/schedule-engagement', async (req, res) => {
         total: parseInt(totalExpands?.count || 0),
         uniqueUsers: parseInt(uniqueExpandUsers?.count || 0),
       },
+      today: {
+        gameCardExpands: parseInt(todayExpands?.count || 0),
+        uniqueUsers: parseInt(todayUniqueUsers?.count || 0),
+        avgViewDuration: parseInt(todayAvgDuration?.avg) || 0,
+      },
       tabBreakdown: tabBreakdown.map(r => ({ tab: r.tab, count: parseInt(r.count) })),
       sportBreakdown: sportBreakdown.map(r => ({ sportId: r.sport_id, expands: parseInt(r.expands) })),
-      topGames: topGames.map(r => ({
+      topGames: await resolveGameNames(topGames.map(r => ({
         gameId: r.game_id,
         sportId: r.sport_id,
         expands: parseInt(r.expands),
         avgDuration: parseInt(r.avg_duration) || 0,
-      })),
+      }))),
       avgViewDuration: parseInt(avgDuration?.avg) || 0,
       dailyTrend: dailyTrend.map(r => ({ date: r.date, count: parseInt(r.count) })),
     });
@@ -394,10 +771,12 @@ router.get('/stats/bracket-engagement', async (req, res) => {
   try {
     const range = Math.min(parseInt(req.query.range) || 30, 90);
     const rangeStart = new Date(Date.now() - range * 24 * 3600000).toISOString();
+    const todayStart = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).toISOString();
 
     const [
       totalOpens, uniqueOpenUsers,
       tabBreakdown, topMatchups, avgDuration, dailyTrend,
+      todayOpens, todayUniqueUsers, todayAvgDuration,
     ] = await Promise.all([
       db.getOne(
         `SELECT COUNT(*) as count FROM feature_events
@@ -430,17 +809,54 @@ router.get('/stats/bracket-engagement', async (req, res) => {
          WHERE event_name = 'matchup_detail_open' AND created_at >= $1
          GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
       ),
+      // Today stats
+      db.getOne(
+        `SELECT COUNT(*) as count FROM feature_events
+         WHERE event_name = 'matchup_detail_open' AND created_at >= $1`, [todayStart]
+      ),
+      db.getOne(
+        `SELECT COUNT(DISTINCT COALESCE(user_id::text, session_id)) as count FROM feature_events
+         WHERE event_name = 'matchup_detail_open' AND created_at >= $1`, [todayStart]
+      ),
+      db.getOne(
+        `SELECT ROUND(AVG(duration_seconds))::int as avg
+         FROM feature_events
+         WHERE event_name = 'matchup_detail_close' AND duration_seconds > 0 AND created_at >= $1`, [todayStart]
+      ),
     ]);
+
+    // Resolve team IDs to names using tournament bracket data
+    let teamLookup = {};
+    try {
+      const currentSeason = new Date().getFullYear();
+      const bracket = await getTournamentBracket(currentSeason);
+      teamLookup = bracket?.teams || {};
+    } catch { /* ignore — team names will fall back to IDs */ }
+
+    const resolveTeamName = (id) => {
+      if (!id) return null;
+      // Skip First Four placeholders (ff-XXXXX)
+      if (id.startsWith('ff-')) return 'First Four';
+      const t = teamLookup[id];
+      return t ? (t.shortName || t.abbreviation || t.name) : null;
+    };
 
     res.json({
       matchupDetailsOpened: {
         total: parseInt(totalOpens?.count || 0),
         uniqueUsers: parseInt(uniqueOpenUsers?.count || 0),
       },
+      today: {
+        matchupDetailsOpened: parseInt(todayOpens?.count || 0),
+        uniqueUsers: parseInt(todayUniqueUsers?.count || 0),
+        avgViewDuration: parseInt(todayAvgDuration?.avg) || 0,
+      },
       tabBreakdown: tabBreakdown.map(r => ({ tab: r.tab, count: parseInt(r.count) })),
       topMatchups: topMatchups.map(r => ({
         team1Id: r.team1_id,
         team2Id: r.team2_id,
+        team1Name: resolveTeamName(r.team1_id),
+        team2Name: resolveTeamName(r.team2_id),
         slot: r.slot,
         views: parseInt(r.views),
       })),
@@ -562,12 +978,22 @@ router.get('/stats/device-breakdown', async (req, res) => {
       }
     }
 
-    // Top pages by device
+    // Top pages by device — normalize paths
     const topPagesByDevice = await db.getAll(`
-      SELECT page_path, COALESCE(device_type, 'unknown') as device_type, COUNT(*) as count
-      FROM page_views
-      WHERE created_at > NOW() - INTERVAL '${days} days'
-      GROUP BY page_path, COALESCE(device_type, 'unknown')
+      SELECT normalized_path, device_type, SUM(count)::int as count
+      FROM (
+        SELECT
+          REGEXP_REPLACE(
+            REGEXP_REPLACE(page_path, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', ':id', 'gi'),
+            '\/[A-Fa-f0-9]{6,}(\/|$)', '/:id\\1', 'g'
+          ) as normalized_path,
+          COALESCE(device_type, 'unknown') as device_type,
+          COUNT(*) as count
+        FROM page_views
+        WHERE created_at > NOW() - INTERVAL '${days} days'
+        GROUP BY page_path, COALESCE(device_type, 'unknown')
+      ) sub
+      GROUP BY normalized_path, device_type
       ORDER BY count DESC
       LIMIT 20
     `);
@@ -577,7 +1003,7 @@ router.get('/stats/device-breakdown', async (req, res) => {
       eventDevices: eventDevices.map(r => ({ deviceType: r.device_type, count: parseInt(r.count) })),
       uniqueUserDevices: uniqueUserDevices.map(r => ({ deviceType: r.device_type, uniqueUsers: parseInt(r.unique_users) })),
       dailyTrend: Object.values(trendMap).sort((a, b) => a.date.localeCompare(b.date)),
-      topPagesByDevice: topPagesByDevice.map(r => ({ pagePath: r.page_path, deviceType: r.device_type, count: parseInt(r.count) })),
+      topPagesByDevice: topPagesByDevice.map(r => ({ pagePath: r.normalized_path, deviceType: r.device_type, count: parseInt(r.count) })),
     });
   } catch (error) {
     console.error('Device breakdown error:', error);

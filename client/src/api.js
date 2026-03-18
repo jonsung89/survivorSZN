@@ -514,6 +514,10 @@ export const adminAPI = {
     const res = await authFetch('/admin/stats/online');
     return res.json();
   },
+  getOnlineUsersDetail: async () => {
+    const res = await authFetch('/admin/stats/online/details');
+    return res.json();
+  },
   getTopPages: async (range = '30d') => {
     const res = await authFetch(`/admin/stats/top-pages?range=${range}`);
     return res.json();
@@ -669,6 +673,18 @@ export const adminAPI = {
   },
   getDeviceBreakdown: async (range = 30) => {
     const res = await authFetch(`/admin/stats/device-breakdown?range=${range}`);
+    return res.json();
+  },
+  getTopPagesDetail: async (pattern, range = '30d') => {
+    const res = await authFetch(`/admin/stats/top-pages/detail?pattern=${encodeURIComponent(pattern)}&range=${encodeURIComponent(range)}`);
+    return res.json();
+  },
+  getScheduleEngagementDetail: async (metric, range = 30) => {
+    const res = await authFetch(`/admin/stats/schedule-engagement/detail?metric=${encodeURIComponent(metric)}&range=${range}`);
+    return res.json();
+  },
+  getBracketEngagementDetail: async (metric, range = 30) => {
+    const res = await authFetch(`/admin/stats/bracket-engagement/detail?metric=${encodeURIComponent(metric)}&range=${range}`);
     return res.json();
   },
   getUserActivity: async (userId, params = {}) => {

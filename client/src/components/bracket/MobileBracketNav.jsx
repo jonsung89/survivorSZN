@@ -101,10 +101,13 @@ export default function MobileBracketNav({
     <div className="flex flex-col">
       {/* Round selector tabs — sticky below region tabs */}
       <div className="sticky z-10 bg-surface -mx-3 px-3 pt-0 pb-2" style={{ top: 'calc(var(--navbar-height, 65px) + var(--region-tabs-height, 52px))' }}>
-        <div className="flex gap-1 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1 overflow-x-auto no-scrollbar" role="tablist" aria-label="Round navigation">
           {rounds.map((r, i) => (
             <button
               key={i}
+              role="tab"
+              aria-selected={i === roundIdx}
+              aria-label={`${r.name}${i === roundIdx ? ', current round' : ''}`}
               onClick={() => navigateTo(i)}
               disabled={isAnimating}
               className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${

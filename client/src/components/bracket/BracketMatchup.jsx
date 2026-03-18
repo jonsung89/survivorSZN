@@ -45,10 +45,10 @@ export default function BracketMatchup({
       if (position === 'top' && !hasHeader) tbdClasses += ' rounded-t-lg';
       else tbdClasses += ' rounded-b-lg';
       return (
-        <div className={tbdClasses}>
+        <div className={tbdClasses} aria-disabled="true" aria-label="Team to be determined">
           {/* Seed placeholder — matches team row structure */}
           <span className="absolute left-0 top-0 bottom-0 w-10 md:w-8 flex items-center justify-center
-            bg-white/90 text-black/30 text-base md:text-sm font-bold flex-shrink-0 rounded-none">
+            bg-white/90 text-black/30 text-base md:text-sm font-bold flex-shrink-0 rounded-none" aria-hidden="true">
             —
           </span>
           {/* Spacer to account for absolute-positioned seed block */}
@@ -92,6 +92,17 @@ export default function BracketMatchup({
       onPick?.(team.id);
     };
 
+    const handleKeyDown = (e) => {
+      if (isReadOnly) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        onPick?.(team.id);
+      }
+    };
+
+    const teamLabel = `${isSelected ? 'Selected: ' : 'Pick '}#${team.seed || '?'} ${team.name}${isCorrect ? ', correct pick' : ''}${isWrong ? ', incorrect pick' : ''}`;
+
     // Team color logic (mobile + desktop unified):
     // Always show true primary color. When a pick is made, gray out the non-selected team.
     const isLightMode = !isDark;
@@ -121,7 +132,16 @@ export default function BracketMatchup({
     const textColorClass = isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg' : 'text-white';
 
     return (
-      <div className={rowClasses} onClick={handleClick} style={rowStyle}>
+      <div
+        className={rowClasses}
+        onClick={handleClick}
+        onKeyDown={!isReadOnly ? handleKeyDown : undefined}
+        role={!isReadOnly ? 'button' : undefined}
+        tabIndex={!isReadOnly ? 0 : undefined}
+        aria-label={teamLabel}
+        aria-pressed={!isReadOnly ? isSelected : undefined}
+        style={rowStyle}
+      >
         {/* Dark gradient overlay — covers full colored background */}
         {team.color && !isGrayedOut && !isCorrect && !isWrong && (
           <div
@@ -167,9 +187,9 @@ export default function BracketMatchup({
         )}
 
         {/* Status icons */}
-        {isCorrect && <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 relative z-[2]" />}
-        {isWrong && <X className="w-4 h-4 text-red-400 flex-shrink-0 relative z-[2]" />}
-        {isSelected && !isDecided && !isLive && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0 relative z-[2]" />}
+        {isCorrect && <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
+        {isWrong && <X className="w-4 h-4 text-red-400 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
+        {isSelected && !isDecided && !isLive && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
       </div>
     );
   };
@@ -179,8 +199,10 @@ export default function BracketMatchup({
   // Always reserve mobile spacer when onDetailClick exists (keeps cards aligned)
   const showMobileSpacer = !!onDetailClick;
 
+  const matchupLabel = `Matchup: ${team1?.name || 'TBD'} vs ${team2?.name || 'TBD'}`;
+
   return (
-    <div className="relative flex items-center gap-1.5 md:gap-0 group w-full">
+    <div className="relative flex items-center gap-1.5 md:gap-0 group w-full" role="group" aria-label={matchupLabel}>
       {/* Card */}
       <div className={`relative flex-1 md:flex-none md:w-full rounded-lg transition-all duration-150 shadow-md overflow-hidden ${
         isLive ? 'border border-red-500/40 shadow-[0_0_8px_rgba(239,68,68,0.15)]' : ''
@@ -208,8 +230,8 @@ export default function BracketMatchup({
 
           if (isGameLive) {
             return (
-              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm ${isDark ? 'bg-red-500/10' : 'bg-red-50'}`}>
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
+              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm ${isDark ? 'bg-red-500/10' : 'bg-red-50'}`} aria-live="polite" aria-label="Game in progress">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" aria-hidden="true" />
                 <span className="font-bold text-red-500">LIVE</span>
                 {s.statusDetail && <span className="text-fg/60">{s.statusDetail}</span>}
                 {s.clock && <span className="text-fg/50 font-mono">{s.clock}</span>}
@@ -237,8 +259,9 @@ export default function BracketMatchup({
         <button
           onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
           className={`flex-shrink-0 p-1.5 rounded-full bg-fg/10 text-fg/40 active:bg-fg/20 md:hidden self-center ${slotData ? 'mt-7' : ''}`}
+          aria-label={`View details: ${team1?.name || 'TBD'} vs ${team2?.name || 'TBD'}`}
         >
-          <Info className="w-4 h-4" />
+          <Info className="w-4 h-4" aria-hidden="true" />
         </button>
       ) : showMobileSpacer ? (
         <div className="flex-shrink-0 w-7 md:hidden" />
@@ -248,6 +271,7 @@ export default function BracketMatchup({
       {showInfoButton && (
         <button
           onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
+          aria-label={`View details: ${team1?.name || 'TBD'} vs ${team2?.name || 'TBD'}`}
           className="absolute z-10 p-2.5 rounded-full text-fg/50 hover:text-fg/80 hover:bg-fg/15 transition-colors hidden md:flex items-center justify-center"
           style={{
             top: slotData ? 'calc(50% + 14px)' : '50%',
@@ -255,7 +279,7 @@ export default function BracketMatchup({
             ...(side === 'right' ? { left: '-36px' } : { right: '-36px' }),
           }}
         >
-          <Info className="w-4 h-4" />
+          <Info className="w-4 h-4" aria-hidden="true" />
         </button>
       )}
     </div>

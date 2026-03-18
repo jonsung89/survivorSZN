@@ -658,9 +658,9 @@ export default function BracketView({
 
   // Desktop nav bar with region tabs, progress, focus mode, zoom
   const renderDesktopNav = () => (
-    <div className="hidden md:flex items-center gap-2 sticky top-[64px] z-20 bg-surface/95 backdrop-blur-sm py-1.5 px-1 mb-0 rounded-lg border border-fg/5">
+    <div className="hidden md:flex items-center gap-2 sticky top-[64px] z-20 bg-surface/95 backdrop-blur-sm py-1.5 px-1 mb-0 rounded-lg border border-fg/5" role="toolbar" aria-label="Bracket navigation">
       {/* Region tabs with progress */}
-      <div className="flex gap-1 flex-1">
+      <div className="flex gap-1 flex-1" role="tablist" aria-label="Bracket regions">
         {regionTabs.map((tab, idx) => {
           const isActive = focusMode ? desktopTab === idx : false;
           const count = regionProgress.counts[idx];
@@ -670,6 +670,9 @@ export default function BracketView({
           return (
             <button
               key={tab}
+              role="tab"
+              aria-selected={isActive}
+              aria-label={`${tab} region, ${count} of ${total} picks${isComplete ? ', complete' : ''}`}
               onClick={() => handleDesktopTabClick(idx)}
               className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 border ${
                 isActive
@@ -703,8 +706,10 @@ export default function BracketView({
             focusMode ? 'bg-violet-500/20 text-violet-400' : 'text-fg/60 hover:text-fg/90 hover:bg-fg/10 bg-fg/[0.04]'
           }`}
           title={focusMode ? 'Exit focus mode (Esc)' : 'Focus mode (Esc)'}
+          aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'}
+          aria-pressed={focusMode}
         >
-          <Focus className="w-[18px] h-[18px]" />
+          <Focus className="w-[18px] h-[18px]" aria-hidden="true" />
         </button>
 
         {/* Zoom controls */}
@@ -714,14 +719,16 @@ export default function BracketView({
               onClick={zoomOut}
               className="p-2 rounded-md text-fg/60 hover:text-fg/90 hover:bg-fg/10 bg-fg/[0.04] transition-colors disabled:opacity-30"
               title="Zoom out (Cmd -)"
+              aria-label="Zoom out"
               disabled={zoomLevel <= ZOOM_LEVELS[0]}
             >
-              <ZoomOut className="w-[18px] h-[18px]" />
+              <ZoomOut className="w-[18px] h-[18px]" aria-hidden="true" />
             </button>
             <button
               onClick={zoomReset}
               className="px-2 py-1 rounded-md text-sm font-mono text-fg/60 hover:text-fg/90 hover:bg-fg/10 bg-fg/[0.04] transition-colors min-w-[42px] text-center"
               title="Reset zoom (Cmd 0)"
+              aria-label={`Zoom level ${Math.round(zoomLevel * 100)}%, click to reset`}
             >
               {Math.round(zoomLevel * 100)}%
             </button>
@@ -729,9 +736,10 @@ export default function BracketView({
               onClick={zoomIn}
               className="p-2 rounded-md text-fg/60 hover:text-fg/90 hover:bg-fg/10 bg-fg/[0.04] transition-colors disabled:opacity-30"
               title="Zoom in (Cmd +)"
+              aria-label="Zoom in"
               disabled={zoomLevel >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
             >
-              <ZoomIn className="w-[18px] h-[18px]" />
+              <ZoomIn className="w-[18px] h-[18px]" aria-hidden="true" />
             </button>
           </>
         )}
@@ -744,11 +752,13 @@ export default function BracketView({
               showShortcuts ? 'bg-fg/10 text-fg/70' : 'text-fg/50 hover:text-fg/80 hover:bg-fg/10 bg-fg/[0.04]'
             }`}
             title="Keyboard shortcuts"
+            aria-label="Keyboard shortcuts"
+            aria-expanded={showShortcuts}
           >
-            <Keyboard className="w-[18px] h-[18px]" />
+            <Keyboard className="w-[18px] h-[18px]" aria-hidden="true" />
           </button>
           {showShortcuts && (
-            <div className="absolute top-full right-0 mt-2 w-56 bg-elevated border border-fg/10 rounded-lg shadow-xl p-3 text-xs z-50 animate-fade-in">
+            <div className="absolute top-full right-0 mt-2 w-56 bg-elevated border border-fg/10 rounded-lg shadow-xl p-3 text-xs z-50 animate-fade-in" role="tooltip" aria-label="Keyboard shortcuts">
               <div className="font-bold text-fg/70 mb-2">Keyboard Shortcuts</div>
               <div className="space-y-1 text-fg/50">
                 <div className="flex justify-between"><span>Jump to region</span><kbd className="bg-fg/10 px-1.5 py-0.5 rounded text-fg/60">1-4</kbd></div>
@@ -769,10 +779,13 @@ export default function BracketView({
   const renderMobile = () => (
     <div className="md:hidden">
       {/* Region tabs */}
-      <div ref={regionTabsRef} className="sticky z-20 bg-surface flex gap-1 overflow-x-auto pb-2 pt-2 -mx-3 px-3" style={{ top: 'var(--navbar-height, 65px)' }}>
+      <div ref={regionTabsRef} className="sticky z-20 bg-surface flex gap-1 overflow-x-auto pb-2 pt-2 -mx-3 px-3" style={{ top: 'var(--navbar-height, 65px)' }} role="tablist" aria-label="Bracket regions">
         {regionTabs.map((tab, idx) => (
           <button
             key={tab}
+            role="tab"
+            aria-selected={mobileTab === idx}
+            aria-label={`${tab} region${regionCompletion[idx] ? ', complete' : ''}`}
             onClick={() => setMobileTab(idx)}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
               mobileTab === idx
@@ -782,7 +795,7 @@ export default function BracketView({
           >
             {tab}
             {regionCompletion[idx] && (
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full flex-shrink-0" />
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full flex-shrink-0" aria-hidden="true" />
             )}
           </button>
         ))}
@@ -864,8 +877,9 @@ export default function BracketView({
               <button
                 onClick={() => setMobileFullView(false)}
                 className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-fg/10 text-fg/70 text-xs font-semibold border border-fg/10 active:scale-95 transition-transform whitespace-nowrap"
+                aria-label="Switch to mobile view"
               >
-                <Smartphone className="w-3.5 h-3.5" />
+                <Smartphone className="w-3.5 h-3.5" aria-hidden="true" />
                 Mobile View
               </button>
             </div>
@@ -875,8 +889,9 @@ export default function BracketView({
                 onClick={() => setMobileScale(s => Math.max(0.3, +(s - 0.1).toFixed(2)))}
                 className="flex items-center justify-center w-8 h-8 rounded-md bg-fg/10 border border-fg/10 text-fg/60 active:scale-90 transition-transform disabled:opacity-30"
                 disabled={mobileScale <= 0.3}
+                aria-label="Zoom out"
               >
-                <ZoomOut className="w-3.5 h-3.5" />
+                <ZoomOut className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
               <div className="flex-1 relative h-1.5 bg-fg/10 rounded-full overflow-hidden">
                 <div
@@ -888,12 +903,14 @@ export default function BracketView({
                 onClick={() => setMobileScale(s => Math.min(1.0, +(s + 0.1).toFixed(2)))}
                 className="flex items-center justify-center w-8 h-8 rounded-md bg-fg/10 border border-fg/10 text-fg/60 active:scale-90 transition-transform disabled:opacity-30"
                 disabled={mobileScale >= 1.0}
+                aria-label="Zoom in"
               >
-                <ZoomIn className="w-3.5 h-3.5" />
+                <ZoomIn className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
               <button
                 onClick={() => setMobileScale(0.55)}
                 className="flex items-center justify-center h-8 px-2 rounded-md bg-fg/10 border border-fg/10 text-fg/50 text-xs font-mono active:scale-90 transition-transform"
+                aria-label={`Zoom level ${Math.round(mobileScale * 100)}%, click to reset`}
               >
                 {Math.round(mobileScale * 100)}%
               </button>

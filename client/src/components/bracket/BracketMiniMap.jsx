@@ -123,11 +123,13 @@ export default function BracketMiniMap({
       {/* Toggle button */}
       <button
         onClick={onToggle}
+        aria-label={visible ? 'Hide mini-map' : 'Show mini-map'}
+        aria-expanded={visible}
         className={`text-sm font-medium text-fg/60 hover:text-fg/90 bg-surface/80 hover:bg-surface backdrop-blur-sm border border-fg/15 hover:border-fg/25 rounded-md px-2.5 py-1 transition-all flex items-center gap-1.5 shadow-sm ${
           visible ? `absolute -top-8 ${showOnRight ? 'right-0' : 'left-0'}` : ''
         }`}
       >
-        {visible ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+        {visible ? <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" /> : <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />}
         {visible ? 'Hide' : 'Map'}
       </button>
 
@@ -135,12 +137,15 @@ export default function BracketMiniMap({
         <div
           ref={miniMapRef}
           onClick={handleClick}
+          role="navigation"
+          aria-label="Bracket mini-map"
           className="relative w-[200px] h-[100px] bg-surface/90 backdrop-blur-sm border border-fg/15 rounded-lg shadow-lg cursor-crosshair overflow-hidden"
         >
           {/* Region blocks */}
           {regionPositions.map((pos) => (
             <button
               key={pos.idx}
+              aria-label={`Navigate to ${pos.label} region`}
               onClick={(e) => {
                 e.stopPropagation();
                 onRegionClick?.(pos.idx);

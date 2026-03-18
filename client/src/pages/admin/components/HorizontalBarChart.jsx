@@ -23,19 +23,15 @@ function CustomTooltip({ active, payload, label, theme }) {
   );
 }
 
-export default function HorizontalBarChart({ data, dataKey = 'views', labelKey = 'path', color, height = 250, formatLabel }) {
+export default function HorizontalBarChart({ data, dataKey = 'views', labelKey = 'path', color, height = 250, formatLabel, onBarClick }) {
   const theme = useChartTheme();
 
-  const defaultFormat = (val) => {
-    if (typeof val !== 'string') return val;
-    // Shorten paths: /league/abc-123 → /league/...
-    if (val.length > 20) {
-      const parts = val.split('/').filter(Boolean);
-      if (parts.length > 1) return '/' + parts[0] + '/...';
-      return val.substring(0, 18) + '…';
-    }
-    return val;
-  };
+  // Compute YAxis width based on longest label (~7px per char at 12px font)
+  const longestLabel = data.reduce((max, row) => {
+    const label = formatLabel ? formatLabel(row[labelKey]) : String(row[labelKey] || '');
+    return label.length > max ? label.length : max;
+  }, 0);
+  const yAxisWidth = Math.min(220, Math.max(80, longestLabel * 7 + 12));
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -51,11 +47,11 @@ export default function HorizontalBarChart({ data, dataKey = 'views', labelKey =
         <YAxis
           type="category"
           dataKey={labelKey}
-          tickFormatter={formatLabel || defaultFormat}
+          tickFormatter={formatLabel}
           tick={{ fill: theme.axisLabel, fontSize: 12 }}
           axisLine={false}
           tickLine={false}
-          width={100}
+          width={yAxisWidth}
         />
         <Tooltip content={<CustomTooltip theme={theme} />} cursor={false} />
         <Bar
@@ -63,6 +59,8 @@ export default function HorizontalBarChart({ data, dataKey = 'views', labelKey =
           fill={color || theme.colors.primary}
           radius={[0, 4, 4, 0]}
           maxBarSize={24}
+          cursor={onBarClick ? 'pointer' : undefined}
+          onClick={onBarClick ? (barData) => onBarClick(barData) : undefined}
         />
       </BarChart>
     </ResponsiveContainer>

@@ -82,7 +82,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav ref={navRef} className="bg-surface sticky top-0 z-50">
+      <nav ref={navRef} className="bg-surface sticky top-0 z-50" aria-label="Main navigation">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -118,14 +118,15 @@ export default function Navbar() {
 
             {/* User Menu - Desktop */}
             {user ? (
-              <div className="hidden md:flex items-center gap-2" ref={dropdownRef}>
+              <div className="hidden md:flex items-center gap-2 relative" ref={dropdownRef}>
                 {/* Theme toggle */}
                 <button
                   onClick={toggleTheme}
                   className="p-2 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
                   title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
-                  {isDark ? <Sun className="w-4 h-4 text-fg/70" /> : <Moon className="w-4 h-4 text-fg/70" />}
+                  {isDark ? <Sun className="w-4 h-4 text-fg/70" aria-hidden="true" /> : <Moon className="w-4 h-4 text-fg/70" aria-hidden="true" />}
                 </button>
 
                 {/* Notifications */}
@@ -134,6 +135,9 @@ export default function Navbar() {
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
+                  aria-label="User menu"
+                  aria-expanded={dropdownOpen}
+                  aria-haspopup="true"
                 >
                   <Avatar
                     userId={user?.id}
@@ -149,10 +153,11 @@ export default function Navbar() {
 
                 {/* Dropdown Menu */}
                 {dropdownOpen && (
-                  <div className="absolute top-14 right-4 w-48 bg-elevated border border-fg/10 rounded-xl shadow-xl overflow-hidden animate-in z-50">
+                  <div className="absolute top-full right-0 mt-1 w-48 bg-elevated border border-fg/10 rounded-xl shadow-xl overflow-hidden animate-in z-50" role="menu" aria-label="User menu">
                     <div className="p-2">
                       <button
                         onClick={openEditModal}
+                        role="menuitem"
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-fg/80 hover:bg-fg/10 transition-colors text-left"
                       >
                         <Edit3 className="w-4 h-4" />
@@ -161,15 +166,17 @@ export default function Navbar() {
                       {user?.isAdmin && (
                         <Link
                           to="/admin"
+                          role="menuitem"
                           onClick={() => setDropdownOpen(false)}
                           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-fg/80 hover:bg-fg/10 transition-colors"
                         >
-                          <Shield className="w-4 h-4" />
+                          <Shield className="w-4 h-4" aria-hidden="true" />
                           Admin Panel
                         </Link>
                       )}
                       <button
                         onClick={handleLogout}
+                        role="menuitem"
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-left"
                       >
                         <LogOut className="w-4 h-4" />
@@ -185,8 +192,9 @@ export default function Navbar() {
                   onClick={toggleTheme}
                   className="p-2 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
                   title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
-                  {isDark ? <Sun className="w-4 h-4 text-fg/70" /> : <Moon className="w-4 h-4 text-fg/70" />}
+                  {isDark ? <Sun className="w-4 h-4 text-fg/70" aria-hidden="true" /> : <Moon className="w-4 h-4 text-fg/70" aria-hidden="true" />}
                 </button>
                 <Link
                   to="/login"
@@ -204,11 +212,13 @@ export default function Navbar() {
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="p-2 rounded-lg hover:bg-fg/10 transition-colors"
+                aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={mobileMenuOpen}
               >
                 {mobileMenuOpen ? (
-                  <X className="w-6 h-6 text-fg" />
+                  <X className="w-6 h-6 text-fg" aria-hidden="true" />
                 ) : (
-                  <Menu className="w-6 h-6 text-fg" />
+                  <Menu className="w-6 h-6 text-fg" aria-hidden="true" />
                 )}
               </button>
             </div>
@@ -217,7 +227,7 @@ export default function Navbar() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-fg/10 animate-slide-down">
+          <div className="md:hidden border-t border-fg/10 animate-slide-down" role="menu" aria-label="Navigation menu">
             <div className="px-4 py-4 space-y-2">
               {navLinks.map(({ path, label, icon: Icon }) => (
                 <Link

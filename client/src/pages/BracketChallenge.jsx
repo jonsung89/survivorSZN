@@ -63,16 +63,32 @@ export default function BracketChallenge() {
     cashapp: { name: 'Cash App', placeholder: '$cashtag', color: '#00D632' },
   };
 
-  // Generate payment app deep link URL
+  // Payment deep links: app scheme + web fallback
   const getPaymentLink = (platform, handle) => {
     const clean = handle.replace(/^[@$]/, '').trim();
     if (!clean) return null;
     switch (platform) {
-      case 'venmo': return `https://venmo.com/${clean}`;
-      case 'paypal': return `https://paypal.me/${clean}`;
-      case 'cashapp': return `https://cash.app/$${clean}`;
+      case 'venmo': return { web: `https://venmo.com/${clean}`, app: `venmo://users?username=${clean}` };
+      case 'paypal': return { web: `https://paypal.me/${clean}`, app: null };
+      case 'cashapp': return { web: `https://cash.app/$${clean}`, app: `cashapp://pay/${clean}` };
       default: return null;
     }
+  };
+
+  const handlePaymentClick = (e, link) => {
+    if (!link.app) return; // no app scheme, let the <a> navigate normally
+    // On mobile, try the app deep link first
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (!isMobile) return; // desktop: just open the web link
+    e.preventDefault();
+    const start = Date.now();
+    window.location.href = link.app;
+    // If the app didn't open (user comes back within ~2s), fall back to web
+    setTimeout(() => {
+      if (Date.now() - start < 2500) {
+        window.open(link.web, '_blank');
+      }
+    }, 1500);
   };
 
   const handleEditPayment = () => {
@@ -595,9 +611,10 @@ export default function BracketChallenge() {
                           return link ? (
                             <a
                               key={idx}
-                              href={link}
+                              href={link.web}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={(e) => handlePaymentClick(e, link)}
                               className="flex items-center gap-2.5 hover:opacity-80 transition-opacity active:opacity-60"
                             >
                               {content}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil, Lock, RotateCcw, History } from 'lucide-react';
+import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil, Lock, RotateCcw, History, Copy, ExternalLink } from 'lucide-react';
 import { bracketAPI, leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -63,32 +63,16 @@ export default function BracketChallenge() {
     cashapp: { name: 'Cash App', placeholder: '$cashtag', color: '#00D632' },
   };
 
-  // Payment deep links: app scheme + web fallback
+  // Payment links — universal links let the OS open the app automatically on mobile
   const getPaymentLink = (platform, handle) => {
     const clean = handle.replace(/^[@$]/, '').trim();
     if (!clean) return null;
     switch (platform) {
-      case 'venmo': return { web: `https://venmo.com/${clean}`, app: `venmo://users?username=${clean}` };
-      case 'paypal': return { web: `https://paypal.me/${clean}`, app: null };
-      case 'cashapp': return { web: `https://cash.app/$${clean}`, app: `cashapp://pay/${clean}` };
+      case 'venmo': return `https://venmo.com/u/${clean}`;
+      case 'paypal': return `https://paypal.me/${clean}`;
+      case 'cashapp': return `https://cash.app/$${clean}`;
       default: return null;
     }
-  };
-
-  const handlePaymentClick = (e, link) => {
-    if (!link.app) return; // no app scheme, let the <a> navigate normally
-    // On mobile, try the app deep link first
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (!isMobile) return; // desktop: just open the web link
-    e.preventDefault();
-    const start = Date.now();
-    window.location.href = link.app;
-    // If the app didn't open (user comes back within ~2s), fall back to web
-    setTimeout(() => {
-      if (Date.now() - start < 2500) {
-        window.open(link.web, '_blank');
-      }
-    }, 1500);
   };
 
   const handleEditPayment = () => {
@@ -594,34 +578,54 @@ export default function BracketChallenge() {
                         <span className="text-sm font-medium text-green-500">You're all paid up</span>
                       </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-2.5">
                         {paymentMethods.map((pm, idx) => {
                           const link = getPaymentLink(pm.platform, pm.handle);
-                          const content = (
-                            <>
-                              <span
-                                className="text-sm font-semibold px-2 py-0.5 rounded text-white flex-shrink-0"
-                                style={{ backgroundColor: PAYMENT_PLATFORMS[pm.platform]?.color || '#666' }}
+                          const platformColor = PAYMENT_PLATFORMS[pm.platform]?.color || '#666';
+                          const copyHandle = () => {
+                            navigator.clipboard.writeText(pm.handle);
+                            showToast('Copied to clipboard', 'success');
+                          };
+                          return (
+                            <div key={idx} className="flex items-center gap-2">
+                              {link ? (
+                                <a
+                                  href={link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all active:scale-[0.98]"
+                                  style={{ backgroundColor: platformColor + '12', border: `1px solid ${platformColor}30` }}
+                                >
+                                  <span
+                                    className="text-sm font-bold px-2 py-0.5 rounded text-white flex-shrink-0"
+                                    style={{ backgroundColor: platformColor }}
+                                  >
+                                    {PAYMENT_PLATFORMS[pm.platform]?.name || pm.platform}
+                                  </span>
+                                  <span className="text-base font-medium text-fg/80 truncate flex-1">{pm.handle}</span>
+                                  <ExternalLink className="w-4 h-4 text-fg/30 flex-shrink-0" />
+                                </a>
+                              ) : (
+                                <div
+                                  className="flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
+                                  style={{ backgroundColor: platformColor + '12', border: `1px solid ${platformColor}30` }}
+                                >
+                                  <span
+                                    className="text-sm font-bold px-2 py-0.5 rounded text-white flex-shrink-0"
+                                    style={{ backgroundColor: platformColor }}
+                                  >
+                                    {PAYMENT_PLATFORMS[pm.platform]?.name || pm.platform}
+                                  </span>
+                                  <span className="text-base font-medium text-fg/80 truncate flex-1">{pm.handle}</span>
+                                </div>
+                              )}
+                              <button
+                                onClick={copyHandle}
+                                className="p-2 rounded-lg bg-fg/5 hover:bg-fg/10 text-fg/40 hover:text-fg/70 transition-colors flex-shrink-0"
+                                title="Copy username"
                               >
-                                {PAYMENT_PLATFORMS[pm.platform]?.name || pm.platform}
-                              </span>
-                              <span className="text-base text-fg/80 truncate">{pm.handle}</span>
-                            </>
-                          );
-                          return link ? (
-                            <a
-                              key={idx}
-                              href={link.web}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => handlePaymentClick(e, link)}
-                              className="flex items-center gap-2.5 hover:opacity-80 transition-opacity active:opacity-60"
-                            >
-                              {content}
-                            </a>
-                          ) : (
-                            <div key={idx} className="flex items-center gap-2.5">
-                              {content}
+                                <Copy className="w-4 h-4" />
+                              </button>
                             </div>
                           );
                         })}

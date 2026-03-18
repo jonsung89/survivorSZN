@@ -339,6 +339,32 @@ router.post('/:leagueId/join', authMiddleware, async (req, res) => {
       VALUES ($1, $2, $3, 'active')
     `, [memberId, leagueId, user.id]);
 
+    // Insert system message in league chat
+    const displayName = user.display_name || 'Someone';
+    const systemMsg = await db.getOne(`
+      INSERT INTO chat_messages (league_id, user_id, message, message_type)
+      VALUES ($1, $2, $3, 'system')
+      RETURNING id, created_at
+    `, [leagueId, user.id, `${displayName} joined the league`]);
+
+    // Broadcast to online users in the league
+    const io = req.app.get('io');
+    if (io && systemMsg) {
+      io.to(`league:${leagueId}`).emit('new-message', {
+        id: systemMsg.id,
+        league_id: leagueId,
+        user_id: user.id,
+        message: `${displayName} joined the league`,
+        messageType: 'system',
+        gif: null,
+        replyTo: null,
+        reactions: {},
+        created_at: systemMsg.created_at,
+        display_name: displayName,
+        profile_image_url: user.profile_image_url || null
+      });
+    }
+
     res.json({
       success: true,
       message: 'Successfully joined league'

@@ -41,11 +41,12 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
         cm.reactions,
         cm.deleted_at,
         cm.deleted_by,
+        cm.message_type,
         cm.created_at,
         u.display_name,
         u.profile_image_url
       FROM chat_messages cm
-      JOIN users u ON cm.user_id = u.id
+      LEFT JOIN users u ON cm.user_id = u.id
       WHERE cm.league_id = $1
     `;
     const params = [leagueId];
@@ -67,7 +68,8 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
       gif: msg.gif || null,
       replyTo: msg.replyTo || null,
       deletedAt: msg.deleted_at || null,
-      deletedBy: msg.deleted_by || null
+      deletedBy: msg.deleted_by || null,
+      messageType: msg.message_type || 'user'
     }));
 
     res.json({ messages: formattedMessages });

@@ -1079,25 +1079,36 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
           {/* Messages for this date */}
           {dateMessages.map((message, idx) => {
+            // System messages (e.g., "X joined the league")
+            if (message.messageType === 'system' || message.message_type === 'system') {
+              return (
+                <div key={message.id} className="flex items-center justify-center my-3">
+                  <span className="text-sm text-fg/40">
+                    {message.message}
+                  </span>
+                </div>
+              );
+            }
+
             const isOwn = message.user_id === user?.id || message.userId === user?.id;
             const messageUserId = message.user_id || message.userId;
             const isMessageFromCommissioner = messageUserId === commissionerId;
             const prevMessage = dateMessages[idx - 1];
             const prevUserId = prevMessage?.user_id || prevMessage?.userId;
-            
+
             const messageTime = new Date(message.created_at || message.createdAt).getTime();
             const prevMessageTime = prevMessage ? new Date(prevMessage.created_at || prevMessage.createdAt).getTime() : 0;
             const timeGapMinutes = prevMessage ? (messageTime - prevMessageTime) / (1000 * 60) : 0;
             const hasSignificantTimeGap = timeGapMinutes > 5;
-            
+
             const showName = idx === 0 || prevUserId !== messageUserId || hasSignificantTimeGap;
             const displayName = message.display_name || message.displayName;
             const isBeingSwiped = swipingMessageId === message.id;
             const messageSwipeOffset = isBeingSwiped ? swipeOffset : 0;
 
             return (
-              <div 
-                key={message.id} 
+              <div
+                key={message.id}
                 className={`flex gap-2 ${showName ? 'mt-4' : 'mt-1'} relative select-none`}
                 style={{ transform: `translateX(${messageSwipeOffset}px)`, transition: isBeingSwiped ? 'none' : 'transform 0.2s' }}
                 onTouchStart={(e) => handleSwipeStart(e, message.id)}

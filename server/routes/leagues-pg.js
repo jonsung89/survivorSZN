@@ -33,7 +33,7 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'League name must be 30 characters or less' });
     }
 
-    if (!password || password.length < 4) {
+    if (password && password.length < 4) {
       return res.status(400).json({ error: 'Password must be at least 4 characters' });
     }
 
@@ -62,7 +62,7 @@ router.post('/', authMiddleware, async (req, res) => {
       const currentSeason = await provider.getCurrentSeason();
       season = currentSeason.season;
     }
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = password ? await bcrypt.hash(password, 10) : null;
     const leagueId = uuidv4();
     const memberId = uuidv4();
     const inviteCode = generateInviteCode();
@@ -71,7 +71,7 @@ router.post('/', authMiddleware, async (req, res) => {
     await db.run(`
       INSERT INTO leagues (id, name, password_hash, password_plain, commissioner_id, max_strikes, start_week, season, invite_code, sport_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    `, [leagueId, name.trim(), passwordHash, password, user.id, maxStrikes, startWeek, season, inviteCode, sportId]);
+    `, [leagueId, name.trim(), passwordHash, password || null, user.id, maxStrikes, startWeek, season, inviteCode, sportId]);
 
     // Add commissioner as first member
     await db.run(`
@@ -317,10 +317,15 @@ router.post('/:leagueId/join', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'This league is no longer active' });
     }
 
-    // Check password
-    const validPassword = await bcrypt.compare(password, league.password_hash);
-    if (!validPassword) {
-      return res.status(400).json({ error: 'Incorrect password' });
+    // Check password (skip if league is public / no password set)
+    if (league.password_hash) {
+      if (!password) {
+        return res.status(400).json({ error: 'Password is required for this league' });
+      }
+      const validPassword = await bcrypt.compare(password, league.password_hash);
+      if (!validPassword) {
+        return res.status(400).json({ error: 'Incorrect password' });
+      }
     }
 
     // Check if already a member

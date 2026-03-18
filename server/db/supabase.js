@@ -32,7 +32,7 @@ async function initDb() {
       CREATE TABLE IF NOT EXISTS leagues (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
-        password_hash TEXT NOT NULL,
+        password_hash TEXT,
         commissioner_id UUID NOT NULL,
         max_strikes INTEGER DEFAULT 1,
         start_week INTEGER DEFAULT 1,
@@ -271,6 +271,9 @@ async function initDb() {
 
     // Payment methods for commissioners (Venmo, PayPal, Zelle, Cash App)
     await client.query(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS payment_methods JSONB DEFAULT '[]'`);
+
+    // Allow public leagues (no password)
+    await client.query(`ALTER TABLE leagues ALTER COLUMN password_hash DROP NOT NULL`);
 
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_league_members_user ON league_members(user_id)`);

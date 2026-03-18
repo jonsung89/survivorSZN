@@ -3,8 +3,8 @@ const { SPORT_CONFIG } = require('./constants');
 
 module.exports = {
   id: 'ncaab',
-  name: 'NCAAB',
-  displayName: 'NCAAB Schedule',
+  name: 'NCAAM',
+  displayName: 'NCAAM Schedule',
   gameType: 'bracket',
   scheduleType: 'daily',
   provider: new NCAABProvider(),

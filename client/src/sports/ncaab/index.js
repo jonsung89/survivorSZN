@@ -2,8 +2,9 @@ import { BROADCAST_NETWORKS, SPORT_CONFIG } from './constants';
 
 export default {
   id: 'ncaab',
-  name: 'NCAAB',
-  displayName: 'NCAAB Schedule',
+  name: 'NCAAM',
+  subtitle: 'March Madness',
+  displayName: 'NCAAM Schedule',
   gameType: 'bracket',
   scheduleType: 'daily',
   periodName: 'Date',

@@ -62,14 +62,14 @@ export default function JoinLeague() {
       return;
     }
 
-    if (!password.trim()) {
+    if (league.hasPassword && !password.trim()) {
       showToast('Please enter the league password', 'error');
       return;
     }
 
     setJoiningId(league.id);
     try {
-      const result = await leagueAPI.join(league.id, password);
+      const result = await leagueAPI.join(league.id, league.hasPassword ? password : '');
       if (result.success) {
         showToast(`Joined ${league.name}!`, 'success');
         navigate(`/league/${league.id}`);
@@ -95,6 +95,12 @@ export default function JoinLeague() {
       return;
     }
 
+    // Public league — join directly
+    if (!league.hasPassword) {
+      handleJoin(league);
+      return;
+    }
+
     if (selectedLeague?.id === league.id) {
       setSelectedLeague(null);
       setPassword('');
@@ -113,7 +119,7 @@ export default function JoinLeague() {
         </h1>
         <p className="text-fg/60 mt-1 text-sm sm:text-base">
           {user
-            ? 'Find a league and join with the password from your commissioner'
+            ? 'Find a league to join — public leagues are open to everyone'
             : 'See active survivor pool leagues — sign in to join one'
           }
         </p>
@@ -239,7 +245,7 @@ export default function JoinLeague() {
                   )}
                 </div>
 
-                {user && !league.isJoined && selectedLeague?.id === league.id && (
+                {user && !league.isJoined && league.hasPassword && selectedLeague?.id === league.id && (
                   <div className="flex gap-3 mt-4 pt-4 border-t border-fg/10">
                     <div className="relative flex-1">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg/40" />

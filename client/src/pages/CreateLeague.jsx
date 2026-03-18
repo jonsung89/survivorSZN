@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import {
   Trophy,
   Lock,
+  Globe,
   Calendar,
   AlertTriangle,
   ArrowLeft,
@@ -14,6 +15,7 @@ import { leagueAPI, nflAPI, bracketAPI } from '../api';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { getAllSports, getSportModule } from '../sports';
+import { useTheme } from '../context/ThemeContext';
 import BrandLogo from '../components/BrandLogo';
 import BracketSetup from '../components/bracket/BracketSetup';
 import nflSport from '../sports/nfl';
@@ -22,17 +24,19 @@ export default function CreateLeague() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { user } = useAuth();
+  const { isDark } = useTheme();
   const [loading, setLoading] = useState(false);
   const [currentWeek, setCurrentWeek] = useState(1);
   const [seasonOverride, setSeasonOverride] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
+    isPrivate: true,
     password: '',
     confirmPassword: '',
     maxStrikes: 1,
     startWeek: 1,
-    sportId: 'nfl'
+    sportId: 'ncaab'
   });
 
   const [bracketConfig, setBracketConfig] = useState({
@@ -77,21 +81,23 @@ export default function CreateLeague() {
       return;
     }
 
-    if (formData.password.length < 4) {
-      showToast('Password must be at least 4 characters', 'error');
-      return;
-    }
+    if (formData.isPrivate) {
+      if (formData.password.length < 4) {
+        showToast('Password must be at least 4 characters', 'error');
+        return;
+      }
 
-    if (formData.password !== formData.confirmPassword) {
-      showToast('Passwords do not match', 'error');
-      return;
+      if (formData.password !== formData.confirmPassword) {
+        showToast('Passwords do not match', 'error');
+        return;
+      }
     }
 
     setLoading(true);
     try {
       const result = await leagueAPI.create({
         name: formData.name.trim(),
-        password: formData.password,
+        password: formData.isPrivate ? formData.password : null,
         maxStrikes: isBracketMode ? 1 : formData.maxStrikes,
         startWeek: isBracketMode ? 1 : formData.startWeek,
         sportId: formData.sportId,
@@ -162,25 +168,52 @@ export default function CreateLeague() {
             {getAllSports().map(sport => {
               const isAvailable = sport.gameType === 'survivor' || sport.gameType === 'bracket';
               const isSelected = formData.sportId === sport.id;
+              const sportMod = getSportModule(sport.id);
               return (
                 <button
                   key={sport.id}
                   type="button"
                   disabled={!isAvailable}
                   onClick={() => isAvailable && setFormData(prev => ({ ...prev, sportId: sport.id }))}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isSelected
-                      ? 'bg-violet-600/20 text-violet-500 border border-violet-500/40'
+                      ? 'bg-fg/15 text-fg border border-fg/30 font-semibold'
                       : isAvailable
                       ? 'bg-fg/5 text-fg/60 border border-transparent hover:text-fg/80 hover:bg-fg/10'
                       : 'bg-fg/[0.03] text-fg/20 border border-transparent cursor-not-allowed'
                   }`}
                 >
+                  {sportMod.logo && (
+                    <img
+                      src={sportMod.logo}
+                      alt={sport.name}
+                      className={`w-auto object-contain ${!isAvailable ? 'opacity-30' : isSelected ? '' : 'opacity-60'}`}
+                      style={{ height: 18 }}
+                    />
+                  )}
                   {sport.name}
                   {!isAvailable && <span className="ml-1.5 text-[10px] uppercase tracking-wide">Soon</span>}
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Challenge Type (auto-selected based on sport) */}
+        <div>
+          <label className="block text-fg/80 text-sm font-medium mb-2">
+            Type
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {isBracketMode ? (
+              <div className="flex items-center gap-3 px-4 py-2 rounded-lg text-sm text-fg bg-fg/15 border border-fg/30">
+                🏀 March Madness Bracket
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 px-4 py-2 rounded-lg text-sm text-fg bg-fg/15 border border-fg/30">
+                🏈 Survivor Pool
+              </div>
+            )}
           </div>
         </div>
 
@@ -219,39 +252,82 @@ export default function CreateLeague() {
           />
         </div>
 
-        {/* Password */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="block text-fg/80 text-sm font-medium mb-2">
-              <Lock className="w-4 h-4 inline mr-2" />
-              League Password
-            </label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="••••••••"
-              className="input-field"
-            />
-          </div>
-          <div>
-            <label className="block text-fg/80 text-sm font-medium mb-2">
-              Confirm Password
-            </label>
-            <input
-              type="password"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              placeholder="••••••••"
-              className="input-field"
-            />
+        {/* Privacy Toggle */}
+        <div>
+          <label className="block text-fg/80 text-sm font-medium mb-3">
+            League Visibility
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setFormData(prev => ({ ...prev, isPrivate: false, password: '', confirmPassword: '' }))}
+              className={`flex items-center gap-2.5 p-3 rounded-xl border transition-colors ${
+                !formData.isPrivate
+                  ? 'bg-fg/10 border-fg/30 text-fg'
+                  : 'bg-fg/5 border-fg/10 text-fg/50 hover:text-fg/70'
+              }`}
+            >
+              <Globe className="w-4 h-4" />
+              <div className="text-left">
+                <p className="text-sm font-medium">Public</p>
+                <p className="text-sm text-fg/40">Anyone can join</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormData(prev => ({ ...prev, isPrivate: true }))}
+              className={`flex items-center gap-2.5 p-3 rounded-xl border transition-colors ${
+                formData.isPrivate
+                  ? 'bg-fg/10 border-fg/30 text-fg'
+                  : 'bg-fg/5 border-fg/10 text-fg/50 hover:text-fg/70'
+              }`}
+            >
+              <Lock className="w-4 h-4" />
+              <div className="text-left">
+                <p className="text-sm font-medium">Private</p>
+                <p className="text-sm text-fg/40">Password required</p>
+              </div>
+            </button>
           </div>
         </div>
-        <p className="text-fg/40 text-xs -mt-4">
-          Share this password with people you want to join your league
-        </p>
+
+        {/* Password (only for private leagues) */}
+        {formData.isPrivate && (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 -mt-2">
+              <div>
+                <label className="block text-fg/80 text-sm font-medium mb-2">
+                  <Lock className="w-4 h-4 inline mr-2" />
+                  League Password
+                </label>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="••••••••"
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-fg/80 text-sm font-medium mb-2">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  placeholder="••••••••"
+                  className="input-field"
+                />
+              </div>
+            </div>
+            <p className="text-fg/40 text-sm -mt-4">
+              Share this password with people you want to join your league
+            </p>
+          </>
+        )}
 
         {/* Bracket-specific settings */}
         {isBracketMode ? (
@@ -302,9 +378,9 @@ export default function CreateLeague() {
             </div>
 
             {/* Info Box */}
-            <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-4">
+            <div className="bg-fg/5 border border-fg/10 rounded-xl p-4">
               <div className="flex gap-3">
-                <Info className="w-5 h-5 text-violet-400 flex-shrink-0 mt-0.5" />
+                <Info className="w-5 h-5 text-fg/50 flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
                   <p className="font-medium text-fg/80 mb-1">How Survivor Pools Work</p>
                   <ul className="space-y-1 list-disc list-inside text-fg/50">

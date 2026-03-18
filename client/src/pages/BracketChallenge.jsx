@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil, Lock, RotateCcw } from 'lucide-react';
+import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil, Lock, RotateCcw, History } from 'lucide-react';
 import { bracketAPI, leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -47,6 +47,8 @@ export default function BracketChallenge() {
   const [editingPayment, setEditingPayment] = useState(false);
   const [paymentDraft, setPaymentDraft] = useState([]);
   const [savingPayment, setSavingPayment] = useState(false);
+  const [actionLog, setActionLog] = useState([]);
+  const [showActionLog, setShowActionLog] = useState(false);
 
   const isCommissioner = league?.commissionerId === user?.id || league?.commissioner_id === user?.id;
   const isTournamentLocked = tournamentStartTime && new Date() >= new Date(tournamentStartTime);
@@ -191,6 +193,16 @@ export default function BracketChallenge() {
           setLeaderboard(lb.leaderboard || []);
           setTournamentStarted(lb.tournamentStarted || false);
         } catch { /* leaderboard is optional */ }
+      }
+
+      // Fetch activity log
+      try {
+        const logResult = await leagueAPI.getActionLog(leagueId);
+        if (logResult.success && logResult.log) {
+          setActionLog(logResult.log);
+        }
+      } catch (e) {
+        // Action log might not exist yet
       }
     } catch (err) {
       showToast('Failed to load bracket challenge', 'error');
@@ -355,13 +367,30 @@ export default function BracketChallenge() {
         {/* Action buttons */}
         <div className="flex items-center gap-2">
           <ShareLeagueButton onClick={() => setShowShareModal(true)} />
-          {isCommissioner && (
+          {isCommissioner ? (
+            <>
+              <button
+                onClick={() => setShowActionLog(true)}
+                className="btn-secondary flex items-center gap-2 text-sm py-2.5"
+              >
+                <History className="w-4 h-4" />
+                <span className="hidden sm:inline">History</span>
+              </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="btn-secondary flex items-center gap-2 text-sm py-2.5"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline">Settings</span>
+              </button>
+            </>
+          ) : actionLog.length > 0 && (
             <button
-              onClick={() => setShowSettings(true)}
+              onClick={() => setShowActionLog(true)}
               className="btn-secondary flex items-center gap-2 text-sm py-2.5"
             >
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Settings</span>
+              <History className="w-4 h-4" />
+              <span className="hidden sm:inline">History</span>
             </button>
           )}
         </div>
@@ -821,6 +850,82 @@ export default function BracketChallenge() {
           onClose={() => setShowSettings(false)}
           onUpdate={loadData}
         />
+      )}
+
+      {/* Activity Log Modal */}
+      {showActionLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowActionLog(false)}>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-lg rounded-2xl p-6 animate-in max-h-[85vh] overflow-y-auto"
+            style={{ background: 'rgb(var(--color-elevated))', border: '1px solid rgba(255,255,255,0.1)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-display font-bold text-fg flex items-center gap-2">
+                <History className="w-5 h-5" />
+                Activity Log
+              </h2>
+              <button
+                onClick={() => setShowActionLog(false)}
+                className="p-1 rounded hover:bg-fg/10 text-fg/50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {actionLog.length === 0 ? (
+                <div className="text-center py-8">
+                  <History className="w-10 h-10 text-fg/30 mx-auto mb-3" />
+                  <p className="text-fg/50">No activity yet</p>
+                </div>
+              ) : (
+                actionLog.map((log, idx) => {
+                  const actionLabel =
+                    log.action === 'challenge_settings_changed' || log.action === 'settings_changed'
+                      ? 'Settings Changed'
+                      : log.action === 'payment_received'
+                      ? 'Payment Received'
+                      : log.action === 'payment_removed'
+                      ? 'Payment Removed'
+                      : log.action;
+
+                  const icon =
+                    log.action === 'challenge_settings_changed' || log.action === 'settings_changed'
+                      ? <Settings className="w-4 h-4 text-fg/70" />
+                      : log.action === 'payment_received' || log.action === 'payment_removed'
+                      ? <DollarSign className="w-4 h-4 text-fg/70" />
+                      : <Clock className="w-4 h-4 text-fg/70" />;
+
+                  return (
+                    <div key={log.id || idx} className="bg-fg/5 rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-fg/10 flex-shrink-0">
+                            {icon}
+                          </div>
+                          <div>
+                            <p className="text-fg text-base font-medium">{actionLabel}</p>
+                            <p className="text-fg/70 text-sm">{log.reason}</p>
+                            {log.performedBy && (
+                              <p className="text-fg/50 text-sm mt-0.5">by {log.performedBy}</p>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-fg/60 text-sm whitespace-nowrap text-right">
+                          {new Date(log.timestamp).toLocaleDateString()}
+                          <br />
+                          <span className="text-fg/45">{new Date(log.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Share Modal */}

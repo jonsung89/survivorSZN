@@ -183,6 +183,44 @@ router.put('/challenges/:challengeId', authMiddleware, async (req, res) => {
       await db.run('UPDATE leagues SET entry_fee = $1 WHERE id = $2', [parseFloat(entryFee) || 0, updated.league_id]);
     }
 
+    // Log settings changes
+    try {
+      const changes = [];
+      if (maxBracketsPerUser !== undefined && maxBracketsPerUser !== challenge.max_brackets_per_user) {
+        changes.push(`Max brackets: ${challenge.max_brackets_per_user} → ${maxBracketsPerUser}`);
+      }
+      if (scoringPreset !== undefined && scoringPreset !== challenge.scoring_preset) {
+        changes.push(`Scoring: ${challenge.scoring_preset} → ${scoringPreset}`);
+      }
+      if (tiebreakerType !== undefined && tiebreakerType !== challenge.tiebreaker_type) {
+        changes.push(`Tiebreaker: ${challenge.tiebreaker_type} → ${tiebreakerType}`);
+      }
+      if (entryFee !== undefined && (parseFloat(entryFee) || 0) !== (parseFloat(challenge.entry_fee) || 0)) {
+        changes.push(`Entry fee: $${parseFloat(challenge.entry_fee) || 0} → $${parseFloat(entryFee) || 0}`);
+      }
+      if (entryDeadline !== undefined) {
+        const oldDeadline = challenge.entry_deadline ? new Date(challenge.entry_deadline).toLocaleString() : 'auto';
+        const newDeadline = entryDeadline ? new Date(entryDeadline).toLocaleString() : 'auto';
+        if (oldDeadline !== newDeadline) {
+          changes.push(`Entry deadline: ${oldDeadline} → ${newDeadline}`);
+        }
+      }
+      if (changes.length > 0) {
+        await db.run(`
+          INSERT INTO commissioner_actions (id, league_id, performed_by, action, reason, created_at)
+          VALUES ($1, $2, $3, $4, $5, NOW())
+        `, [
+          require('uuid').v4(),
+          challenge.league_id,
+          user.id,
+          'challenge_settings_changed',
+          changes.join(', ')
+        ]);
+      }
+    } catch (logError) {
+      console.log('Could not log action:', logError.message);
+    }
+
     res.json({ success: true, challenge: updated });
   } catch (error) {
     console.error('Error updating bracket challenge:', error);

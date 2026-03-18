@@ -5,11 +5,11 @@ import nhl from './nhl';
 import ncaab from './ncaab';
 
 const sportModules = {
+  ncaab,
   nfl,
   nba,
   mlb,
   nhl,
-  ncaab,
 };
 
 export function getSportModule(sportId) {

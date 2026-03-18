@@ -32,9 +32,9 @@ export default function BracketSetup({ config, onChange }) {
   return (
     <div className="space-y-5">
       {/* Bracket Challenge Info */}
-      <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4">
+      <div className="bg-fg/5 border border-fg/10 rounded-xl p-4">
         <div className="flex gap-3">
-          <Trophy className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+          <Trophy className="w-5 h-5 text-fg/50 flex-shrink-0 mt-0.5" />
           <div className="text-sm">
             <p className="font-medium text-fg/80 mb-1">March Madness Bracket Challenge</p>
             <ul className="space-y-1 list-disc list-inside text-fg/50">

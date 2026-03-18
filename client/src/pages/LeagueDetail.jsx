@@ -849,7 +849,7 @@ export default function LeagueDetail() {
               <div>
                 <p className="text-fg/60 text-sm">Prize Pot{isCommissioner && league.prizePotOverride ? ' (Manual)' : ''}</p>
                 <p className="text-2xl sm:text-3xl font-bold text-fg">
-                  ${(league.prizePotOverride || (league.entryFee * (league.members?.length || 0))).toLocaleString()}
+                  ${(league.prizePotOverride || (league.entryFee * (league.members?.filter(m => m.hasPaid).length || 0))).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -1471,7 +1471,7 @@ export default function LeagueDetail() {
         {/* isLoadingWeek: true when standings data doesn't match the selected week yet */}
         {(() => {
           const isLoadingWeek = loadingStandings || loadedWeek !== selectedWeek;
-          const prizePot = league.prizePotOverride || (league.entryFee * (league.members?.length || 0));
+          const prizePot = league.prizePotOverride || (league.entryFee * (league.members?.filter(m => m.hasPaid).length || 0));
           const winnerCount = seasonOver ? (league.members?.filter(m => m.status === 'active')?.length || 0) : 0;
           const perWinnerPrize = prizePot > 0 && winnerCount > 0 ? Math.floor(prizePot / winnerCount) : 0;
           return (<>

@@ -435,7 +435,7 @@ export default function BracketChallenge() {
                     <div>
                       <p className="text-fg/60 text-sm">Prize Pot</p>
                       <p className="text-2xl font-bold text-fg">
-                        ${(entryFee * leaderboard.length).toLocaleString()}
+                        ${(entryFee * paidCount).toLocaleString()}
                       </p>
                     </div>
                   </div>

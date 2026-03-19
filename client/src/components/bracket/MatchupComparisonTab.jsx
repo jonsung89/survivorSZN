@@ -84,7 +84,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
       {/* Matchup Analysis — at the top */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-fg/60 uppercase tracking-wider">Matchup Analysis</h3>
+          <h3 className="text-md font-bold text-fg/60 uppercase tracking-wider">Matchup Analysis</h3>
           {matchupReport && !reportLoading && (
             <div className="flex items-center bg-fg/5 rounded-lg p-0.5">
               <button
@@ -116,7 +116,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
             Matchup analysis unavailable
           </div>
         ) : (
-          <div className="prose-scout text-sm text-fg/80 leading-relaxed">
+          <div className="prose-scout text-md sm:text-md text-fg/80 leading-relaxed">
             <ReactMarkdown>
               {reportMode === 'concise' ? (conciseReport || matchupReport) : matchupReport}
             </ReactMarkdown>
@@ -157,7 +157,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
 
       {/* Stat Comparison — values centered under each team */}
       <div>
-        <h3 className="text-sm font-bold text-fg/60 uppercase tracking-wider mb-3">Stat Comparison</h3>
+        <h3 className="text-md font-bold text-fg/60 uppercase tracking-wider mb-3">Stat Comparison</h3>
         {/* Team header row */}
         <div className="flex items-center mb-2">
           <div className="flex-1 flex items-center justify-center gap-1.5">
@@ -189,7 +189,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
 
             return (
               <div key={stat.key} className="flex items-center py-1 border-b border-fg/5 last:border-0">
-                <span className={`flex-1 text-center text-sm font-mono ${t1Advantage ? 'font-bold text-fg' : 'text-fg/60'}`}>
+                <span className={`flex-1 text-center text-md font-mono ${t1Advantage ? 'font-bold text-fg' : 'text-fg/60'}`}>
                   {v1 ? v1.toFixed(1) : '—'}
                 </span>
                 <button
@@ -201,7 +201,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                 <span className="text-sm font-semibold text-fg/60 hidden md:block md:w-40 text-center">
                   {stat.fullLabel}
                 </span>
-                <span className={`flex-1 text-center text-sm font-mono ${t2Advantage ? 'font-bold text-fg' : 'text-fg/60'}`}>
+                <span className={`flex-1 text-center text-md font-mono ${t2Advantage ? 'font-bold text-fg' : 'text-fg/60'}`}>
                   {v2 ? v2.toFixed(1) : '—'}
                 </span>
               </div>
@@ -213,7 +213,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
       {/* Key Player Matchup */}
       {(t1Players.length > 0 || t2Players.length > 0) && (
         <div>
-          <h3 className="text-sm font-bold text-fg/60 uppercase tracking-wider mb-3">Key Player Matchup</h3>
+          <h3 className="text-md font-bold text-fg/60 uppercase tracking-wider mb-1">Key Player Matchup</h3>
           <div className="space-y-3">
             {Array.from({ length: Math.min(3, Math.max(t1Players.length, t2Players.length)) }).map((_, i) => {
               const p1 = t1Players[i];
@@ -232,7 +232,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                   {/* Player names + headshots — stacked on mobile, inline on desktop */}
                   <div className="flex items-center justify-center gap-4 md:gap-6 mb-3">
                     {/* Player 1 */}
-                    <div className="flex flex-col items-center gap-1 flex-1">
+                    <div className="flex flex-col items-center gap-2 flex-1">
                       <div className="relative">
                         {p1?.headshot ? (
                           <img src={p1.headshot} alt="" className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2" style={{ borderColor: t1Color }} />
@@ -243,7 +243,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                         )}
                         <DraftBadge rank={p1?.draftRank} teamColor={t1Color} />
                       </div>
-                      <span className="text-sm font-semibold text-fg text-center truncate max-w-full">
+                      <span className="text-sm sm:text-lg font-semibold text-fg text-center truncate max-w-full">
                         {p1?.jersey && <span className="text-fg/60 mr-1">#{p1.jersey}</span>}{p1?.name || '—'}{p1?.position && <span className="text-fg/60 ml-1">· {p1.position}</span>}
                       </span>
                     </div>
@@ -251,7 +251,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                     <span className="text-base font-extrabold text-fg/60 flex-shrink-0">VS</span>
 
                     {/* Player 2 */}
-                    <div className="flex flex-col items-center gap-1 flex-1">
+                    <div className="flex flex-col items-center gap-2 flex-1">
                       <div className="relative">
                         {p2?.headshot ? (
                           <img src={p2.headshot} alt="" className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2" style={{ borderColor: t2Color }} />
@@ -262,7 +262,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                         )}
                         <DraftBadge rank={p2?.draftRank} teamColor={t2Color} />
                       </div>
-                      <span className="text-sm font-semibold text-fg text-center truncate max-w-full">
+                      <span className="text-sm sm:text-lg font-semibold text-fg text-center truncate max-w-full">
                         {p2?.jersey && <span className="text-fg/60 mr-1">#{p2.jersey}</span>}{p2?.name || '—'}{p2?.position && <span className="text-fg/60 ml-1">· {p2.position}</span>}
                       </span>
                     </div>
@@ -274,11 +274,11 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                       const n2 = parseFloat(s.v2) || 0;
                       return (
                         <div key={s.label} className="flex items-center py-0.5">
-                          <span className={`flex-1 text-center text-sm font-mono ${n1 > n2 ? 'font-bold text-fg' : 'text-fg/60'}`}>
+                          <span className={`flex-1 text-center text-md font-mono ${n1 > n2 ? 'font-bold text-fg' : 'text-fg/60'}`}>
                             {n1 > 0 ? n1.toFixed(1) : '—'}
                           </span>
                           <span className="text-sm font-semibold text-fg/60 w-16 text-center">{s.label}</span>
-                          <span className={`flex-1 text-center text-sm font-mono ${n2 > n1 ? 'font-bold text-fg' : 'text-fg/60'}`}>
+                          <span className={`flex-1 text-center text-md font-mono ${n2 > n1 ? 'font-bold text-fg' : 'text-fg/60'}`}>
                             {n2 > 0 ? n2.toFixed(1) : '—'}
                           </span>
                         </div>
@@ -295,7 +295,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
       {/* BPI / Projections Comparison */}
       {team1Data?.bpiData && team2Data?.bpiData && (
         <div>
-          <h3 className="text-sm font-bold text-fg/60 uppercase tracking-wider mb-3">Power Ratings</h3>
+          <h3 className="text-md font-bold text-fg/60 uppercase tracking-wider mb-3">Power Ratings</h3>
           <div className="grid grid-cols-3 gap-2 text-center">
             {[
               { label: 'BPI', get: (d) => d.bpiData?.bpi },
@@ -355,7 +355,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
 
       {/* Team Comparison */}
       <div>
-        <h3 className="text-sm font-bold text-fg/60 uppercase tracking-wider mb-3">Team Comparison</h3>
+        <h3 className="text-md font-bold text-fg/60 uppercase tracking-wider mb-3">Team Comparison</h3>
         <div className="space-y-1">
           {[
             { label: 'Overall', fullLabel: 'Overall Record', v1: team1Data?.record, v2: team2Data?.record },
@@ -383,19 +383,19 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
             const n2 = dot ? parseInt(v2) || 999 : 0;
             return (
               <div key={label} className="flex items-center py-0.5">
-                <span className={`flex-1 text-center text-sm font-medium ${dot && n1 < n2 ? 'font-bold text-fg' : dot && n2 < n1 ? 'text-fg/60' : 'text-fg'}`}>
+                <span className={`flex-1 text-center text-md font-medium ${dot && n1 < n2 ? 'font-bold text-fg' : dot && n2 < n1 ? 'text-fg/60' : 'text-fg'}`}>
                   {v1 || '—'}
                 </span>
                 <button
-                  className="text-sm font-semibold text-fg/60 w-20 text-center md:hidden"
+                  className="text-md font-semibold text-fg/60 w-20 text-center md:hidden"
                   onClick={() => setTappedLabel(tappedLabel === label ? null : label)}
                 >
                   {tappedLabel === label ? fullLabel : label}
                 </button>
-                <span className="text-sm font-semibold text-fg/60 hidden md:block md:w-44 text-center">
+                <span className="text-md font-semibold text-fg/60 hidden md:block md:w-44 text-center">
                   {fullLabel}
                 </span>
-                <span className={`flex-1 text-center text-sm font-medium ${dot && n2 < n1 ? 'font-bold text-fg' : dot && n1 < n2 ? 'text-fg/60' : 'text-fg'}`}>
+                <span className={`flex-1 text-center text-md font-medium ${dot && n2 < n1 ? 'font-bold text-fg' : dot && n1 < n2 ? 'text-fg/60' : 'text-fg'}`}>
                   {v2 || '—'}
                 </span>
               </div>
@@ -407,7 +407,7 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
       {/* Last 10 Games */}
       {(team1Data?.last10?.games?.length > 0 || team2Data?.last10?.games?.length > 0) && (
         <div>
-          <h3 className="text-sm font-bold text-fg/60 uppercase tracking-wider mb-3">Last 10 Games</h3>
+          <h3 className="text-md font-bold text-fg/60 uppercase tracking-wider mb-3">Last 10 Games</h3>
 
           {/* Desktop: side-by-side columns, always expanded */}
           <div className="hidden md:grid md:grid-cols-2 md:gap-3">
@@ -419,10 +419,10 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                 <div className="px-3 py-2.5 border-b border-fg/10">
                   <div className="flex items-center gap-2">
                     {teamInfo?.logo && <img src={getThemeLogo(teamInfo.logo, isDark)} alt="" className="w-5 h-5 object-contain" />}
-                    <span className="text-sm font-semibold text-fg">{teamInfo?.name || teamInfo?.abbreviation}</span>
+                    <span className="text-md font-semibold text-fg">{teamInfo?.name || teamInfo?.abbreviation}</span>
                     <span className="text-sm font-bold text-fg ml-auto">{last10.record}</span>
                   </div>
-                  <div className="text-sm text-fg/60 mt-0.5">
+                  <div className="text-md text-fg/60 mt-0.5">
                     Home {last10.home}, Away {last10.away}
                     {last10.neutral !== '0-0' ? `, Neutral ${last10.neutral}` : ''}
                   </div>

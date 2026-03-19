@@ -1,10 +1,15 @@
 import { useState, Fragment } from 'react';
 import { Trophy, ChevronDown, Eye } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
+import { getThemedLogo } from '../../utils/logo';
+import FinalFourPreviewDialog from './FinalFourPreviewDialog';
 
 const ROUND_LABELS = ['R64', 'R32', 'S16', 'E8', 'F4', 'CHAMP'];
 
-export default function BracketLeaderboard({ leaderboard, currentUserId, scoringSystem, tournamentStarted, onBracketClick }) {
+export default function BracketLeaderboard({ leaderboard, currentUserId, scoringSystem, tournamentStarted, tournamentData, eliminatedTeamIds, onBracketClick }) {
   const [expandedRow, setExpandedRow] = useState(null);
+  const [previewEntry, setPreviewEntry] = useState(null);
+  const { isDark } = useTheme();
 
   if (!leaderboard || leaderboard.length === 0) {
     return (
@@ -34,6 +39,18 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, scoring
   const toggleExpand = (e, bracketId) => {
     e.stopPropagation();
     setExpandedRow(prev => prev === bracketId ? null : bracketId);
+  };
+
+  const handleChampionClick = (e, entry) => {
+    e.stopPropagation();
+    if (tournamentStarted || entry.userId === currentUserId) {
+      setPreviewEntry(entry);
+    }
+  };
+
+  const getChampionTeam = (entry) => {
+    if (!entry.championTeamId || !tournamentData?.teams) return null;
+    return tournamentData.teams[entry.championTeamId] || null;
   };
 
   // Column count for mobile: #, Player, R64, Total = 4
@@ -66,6 +83,7 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, scoring
             const isMe = entry.userId === currentUserId;
             const clickable = isMe || tournamentStarted;
             const isExpanded = expandedRow === entry.bracketId;
+            const champTeam = getChampionTeam(entry);
 
             return (
               <Fragment key={entry.bracketId}>
@@ -92,19 +110,33 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, scoring
                   {/* Player */}
                   <td className="py-3 px-2" onClick={() => handleRowClick(entry)}>
                     <div className="flex items-center gap-1.5">
-                      <span className={`font-medium ${isMe ? 'text-violet-400' : 'text-fg'}`}>
+                      <span className={`font-medium ${isMe ? (isDark ? 'text-violet-400' : 'text-violet-600') : 'text-fg'}`}>
                         {entry.displayName || 'Anonymous'}
                       </span>
-                      {isMe && <span className="text-sm text-violet-400/60">(you)</span>}
-                      {/* Bracket icon — show when tournament is locked and brackets are viewable */}
+                      {isMe && <span className="text-sm" style={{ color: isDark ? 'rgba(167,139,250,0.6)' : 'rgba(109,40,217,0.5)' }}>(you)</span>}
+                      {/* Champion logo or eye icon */}
                       {(tournamentStarted || isMe) && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onBracketClick?.(entry.bracketId); }}
-                          className="p-0.5 rounded text-fg/30 hover:text-violet-400 transition-colors flex-shrink-0"
-                          title={`View ${isMe ? 'your' : entry.displayName + "'s"} bracket`}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                        champTeam?.logo ? (
+                          <button
+                            onClick={(e) => handleChampionClick(e, entry)}
+                            className="flex-shrink-0 hover:opacity-75 transition-opacity"
+                            title={`${entry.displayName}'s champion: ${champTeam.name}`}
+                          >
+                            <img
+                              src={getThemedLogo(champTeam.logo, isDark)}
+                              alt={champTeam.name}
+                              className="w-7 h-7 object-contain"
+                            />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onBracketClick?.(entry.bracketId); }}
+                            className="p-0.5 rounded text-fg/30 hover:text-violet-400 transition-colors flex-shrink-0"
+                            title={`View ${isMe ? 'your' : entry.displayName + "'s"} bracket`}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        )
                       )}
                     </div>
                   </td>
@@ -184,6 +216,20 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, scoring
           })}
         </tbody>
       </table>
+
+      {/* Final Four Preview Dialog */}
+      {previewEntry && (
+        <FinalFourPreviewDialog
+          entry={previewEntry}
+          tournamentData={tournamentData}
+          eliminatedTeamIds={eliminatedTeamIds || []}
+          onBracketClick={(bracketId) => {
+            setPreviewEntry(null);
+            onBracketClick?.(bracketId);
+          }}
+          onClose={() => setPreviewEntry(null)}
+        />
+      )}
     </div>
   );
 }

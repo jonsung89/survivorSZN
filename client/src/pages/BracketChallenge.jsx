@@ -43,6 +43,8 @@ export default function BracketChallenge() {
   const [chatCollapsed, setChatCollapsed] = useState(true);
   const [tournamentStartTime, setTournamentStartTime] = useState(null);
   const [tournamentStarted, setTournamentStarted] = useState(false);
+  const [tournamentData, setTournamentData] = useState(null);
+  const [eliminatedTeamIds, setEliminatedTeamIds] = useState([]);
   const [lockCountdown, setLockCountdown] = useState(null);
   const [editingPayment, setEditingPayment] = useState(false);
   const [showPaymentStatus, setShowPaymentStatus] = useState(false);
@@ -179,12 +181,13 @@ export default function BracketChallenge() {
       // Check if tournament field has been announced + fetch selection date
       try {
         const season = leagueObj.season || new Date().getFullYear();
-        const [tournamentData, selectionData, firstGameData] = await Promise.all([
+        const [tData, selectionData, firstGameData] = await Promise.all([
           bracketAPI.getTournamentData(season),
           bracketAPI.getSelectionDate(season).catch(() => null),
           bracketAPI.getFirstGameTime(season).catch(() => null),
         ]);
-        const realTeams = Object.values(tournamentData.teams || {}).filter(t => t.name !== 'TBD');
+        setTournamentData(tData);
+        const realTeams = Object.values(tData.teams || {}).filter(t => t.name !== 'TBD');
         setFieldAnnounced(realTeams.length >= 64);
 
         // Use ESPN-derived date, or null if not available
@@ -205,6 +208,7 @@ export default function BracketChallenge() {
           const lb = await bracketAPI.getLeaderboard(challengeData.challenge.id);
           setLeaderboard(lb.leaderboard || []);
           setTournamentStarted(lb.tournamentStarted || false);
+          setEliminatedTeamIds(lb.eliminatedTeamIds || []);
         } catch { /* leaderboard is optional */ }
       }
 
@@ -818,6 +822,8 @@ export default function BracketChallenge() {
           currentUserId={user?.id}
           scoringSystem={scoringSystem}
           tournamentStarted={tournamentStarted}
+          tournamentData={tournamentData}
+          eliminatedTeamIds={eliminatedTeamIds}
           onBracketClick={(bracketId) => navigate(`/league/${leagueId}/bracket/${bracketId}`)}
         />
       )}

@@ -1134,8 +1134,12 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
 
     const results = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);
     const resultsMap = {};
+    const eliminatedTeamIds = [];
     for (const r of results) {
       resultsMap[r.slot_number] = r;
+      if (r.status === 'final' && r.losing_team_id) {
+        eliminatedTeamIds.push(String(r.losing_team_id));
+      }
     }
 
     const scoringSystem = challenge.scoring_system || [1, 2, 4, 8, 16, 32];
@@ -1143,6 +1147,13 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
     const leaderboard = brackets.map((b, idx) => {
       const { roundScores, correctPicks, totalDecided } = calculateBracketScore(b.picks || {}, resultsMap, scoringSystem);
       const potentialPoints = calculatePotentialPoints(b.picks || {}, resultsMap, scoringSystem);
+
+      // Extract Final Four + Championship picks (slots 57-63) for preview
+      const picks = b.picks || {};
+      const finalFourPicks = {};
+      for (let s = 57; s <= 63; s++) {
+        if (picks[s] || picks[String(s)]) finalFourPicks[s] = picks[s] || picks[String(s)];
+      }
 
       return {
         rank: idx + 1,
@@ -1157,6 +1168,9 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
         totalDecided,
         potentialPoints,
         tiebreakerValue: b.tiebreaker_value,
+        tiebreakerScores: b.tiebreaker_scores || null,
+        championTeamId: picks[63] || picks['63'] || null,
+        finalFourPicks,
         isCurrentUser: b.user_id === user.id,
       };
     });
@@ -1185,7 +1199,7 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
     // Check if tournament has started (to control bracket visibility)
     const tournamentStarted = await checkTournamentStarted(challenge.season);
 
-    res.json({ leaderboard, results: resultsMap, scoringSystem, entryFee: parseFloat(challenge.entry_fee) || 0, tournamentStarted });
+    res.json({ leaderboard, results: resultsMap, scoringSystem, entryFee: parseFloat(challenge.entry_fee) || 0, tournamentStarted, eliminatedTeamIds });
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });

@@ -137,6 +137,31 @@ export default function BracketChallenge() {
     loadData();
   }, [leagueId]);
 
+  // Auto-refresh bracket results + leaderboard during tournament (every 30s)
+  useEffect(() => {
+    if (!isTournamentLocked || !challenge?.id) return;
+    const refreshResults = async () => {
+      try {
+        // First update results from ESPN (processes completed games)
+        await bracketAPI.updateResults();
+        // Then fetch fresh leaderboard with updated scores
+        const [lb, tData] = await Promise.all([
+          bracketAPI.getLeaderboard(challenge.id),
+          bracketAPI.getTournamentData(challenge.season || new Date().getFullYear()),
+        ]);
+        setLeaderboard(lb.leaderboard || []);
+        setTournamentStarted(lb.tournamentStarted || false);
+        setEliminatedTeamIds(lb.eliminatedTeamIds || []);
+        setBracketResults(lb.results || {});
+        if (tData) setTournamentData(tData);
+      } catch { /* ignore */ }
+    };
+    // Run immediately on mount, then every 30s
+    refreshResults();
+    const interval = setInterval(refreshResults, 30000);
+    return () => clearInterval(interval);
+  }, [isTournamentLocked, challenge?.id]);
+
   // Selection Show countdown (date fetched from ESPN standings API)
   useEffect(() => {
     if (fieldAnnounced !== false || !selectionDate) return;
@@ -434,8 +459,8 @@ export default function BracketChallenge() {
         </div>
       </div>
 
-      {/* Tournament Games (replaces locked banner when tournament has started) */}
-      {isTournamentLocked && isOpen && (
+      {/* Tournament Games — show when tournament has started (regardless of challenge status) */}
+      {isTournamentLocked && (
         <TournamentGames tournamentData={tournamentData} season={challenge?.season} />
       )}
 

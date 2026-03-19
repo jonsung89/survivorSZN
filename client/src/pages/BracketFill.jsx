@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil, Save, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Loader2, Check, Lock, Send, AlertCircle, Pencil, Save, RotateCcw, Trophy, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { bracketAPI, trackingAPI } from '../api';
 import { trackEvent } from '../utils/analytics';
 import { ROUND_BOUNDARIES } from '../utils/bracketSlots';
@@ -52,6 +53,7 @@ export default function BracketFill() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
   const [chatCollapsed, setChatCollapsed] = useState(true);
+  const [showScoreDialog, setShowScoreDialog] = useState(false);
   const [tournamentStarted, setTournamentStarted] = useState(false);
   const matchupOpenedAtRef = useRef(null);
 
@@ -63,11 +65,22 @@ export default function BracketFill() {
 
   // Merge live data into results for score display
   const mergedResults = useMemo(() => {
-    if (!Object.keys(liveSlotData).length) return results;
-    const merged = { ...results };
+    // First, build competitors from DB results (winning_score/losing_score) for final games
+    const merged = {};
+    for (const [slot, r] of Object.entries(results)) {
+      const entry = { ...r };
+      if (!entry.competitors && entry.status === 'final' && entry.winning_team_id) {
+        entry.competitors = [
+          { teamId: String(entry.winning_team_id), score: entry.winning_score ?? 0 },
+          ...(entry.losing_team_id ? [{ teamId: String(entry.losing_team_id), score: entry.losing_score ?? 0 }] : []),
+        ];
+      }
+      merged[slot] = entry;
+    }
+
+    // Then overlay live data from websocket
     for (const [slot, live] of Object.entries(liveSlotData)) {
       const existing = merged[slot] || {};
-      // Map status from websocket format to our internal format
       let status = existing.status;
       if (live.status === 'STATUS_FINAL' || live.status === 'final') {
         status = 'final';
@@ -404,7 +417,20 @@ export default function BracketFill() {
               <Loader2 className="w-3 h-3 animate-spin" /> Saving...
             </span>
           )}
-          {bracket.is_submitted && (
+          {bracket.is_submitted && scoreData && (
+            <button
+              onClick={() => setShowScoreDialog(true)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-semibold transition-colors ${
+                isDark ? 'bg-fg/10 text-fg/60 hover:bg-fg/15' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5" />
+              {scoreData.totalScore} pts
+              <span className="text-fg/40">·</span>
+              {scoreData.correctPicks}/{scoreData.totalDecided}
+            </button>
+          )}
+          {bracket.is_submitted && !scoreData && (
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-semibold ${
               isDark ? 'bg-fg/10 text-fg/60' : 'bg-gray-100 text-gray-600'
             }`}>
@@ -414,18 +440,36 @@ export default function BracketFill() {
         </div>
       </div>
 
-      {/* Score Header (for submitted brackets) */}
-      {bracket.is_submitted && scoreData && (
-        <div className="mb-4">
-          <BracketScoreHeader
-            roundScores={scoreData.roundScores}
-            totalScore={scoreData.totalScore}
-            potentialPoints={potential}
-            scoringSystem={scoringSystem}
-            correctPicks={scoreData.correctPicks}
-            totalDecided={scoreData.totalDecided}
-          />
-        </div>
+      {/* Score Dialog (portaled, for submitted brackets) */}
+      {showScoreDialog && scoreData && createPortal(
+        <div
+          className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4"
+          onClick={() => setShowScoreDialog(false)}
+          style={{ touchAction: 'none' }}
+        >
+          <div
+            className={`${isDark ? 'bg-gray-900' : 'bg-white'} rounded-2xl w-full max-w-lg shadow-2xl border border-fg/10 overflow-hidden`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-fg/10">
+              <span className="text-base font-semibold text-fg">Bracket Score</span>
+              <button onClick={() => setShowScoreDialog(false)} className="p-1.5 rounded-lg hover:bg-fg/10 transition-colors">
+                <X className="w-5 h-5 text-fg/60" />
+              </button>
+            </div>
+            <div className="p-4 overscroll-contain" style={{ touchAction: 'pan-y' }}>
+              <BracketScoreHeader
+                roundScores={scoreData.roundScores}
+                totalScore={scoreData.totalScore}
+                potentialPoints={potential}
+                scoringSystem={scoringSystem}
+                correctPicks={scoreData.correctPicks}
+                totalDecided={scoreData.totalDecided}
+              />
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Bracket */}
@@ -443,6 +487,7 @@ export default function BracketFill() {
           tiebreakerValue={tiebreakerValue}
           tiebreakerScores={tiebreakerScores}
           onTiebreakerChange={handleTiebreakerChange}
+          hasScoreHeader={false}
         />
       </div>
 

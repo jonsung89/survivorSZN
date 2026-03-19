@@ -30,7 +30,7 @@ export default function BracketScoreHeader({ roundScores, totalScore, potentialP
           return (
             <div key={name} className="text-center">
               <div className={`text-sm font-medium mb-1 ${isDark ? 'text-fg/50' : 'text-gray-500'}`}>{name}</div>
-              <div className={`text-base font-mono font-semibold py-0.5 rounded ${score > 0 ? 'text-rank-good' : (isDark ? 'text-fg/30' : 'text-gray-400')}`}>
+              <div className={`text-base font-semibold py-0.5 rounded ${score > 0 ? 'text-rank-good' : (isDark ? 'text-fg/30' : 'text-gray-400')}`}>
                 {score}
               </div>
               <div className={`text-sm mt-0.5 ${isDark ? 'text-fg/30' : 'text-gray-400'}`}>/{maxPossible}</div>

@@ -190,7 +190,7 @@ export default function BracketMatchup({
             : (team.shortName || team.name || team.abbreviation)}
         </span>
         {team.record && !isLive && !isDecided && (
-          <span className={`text-xs font-mono flex-shrink-0 relative z-[2] ${isWrong ? (isDark ? 'text-white/30' : 'text-fg/30') : isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg/60' : 'text-white/80'}`}>
+          <span className={`text-xs flex-shrink-0 relative z-[2] ${isWrong ? (isDark ? 'text-white/30' : 'text-fg/30') : isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg/60' : 'text-white/80'}`}>
             {team.record}
           </span>
         )}
@@ -198,12 +198,12 @@ export default function BracketMatchup({
         {/* Pre-pick check (before game decided) */}
         {isSelected && !isDecided && !isLive && !isBusted && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
 
-        {/* Score (live/final) — same size for both teams so they align vertically */}
+        {/* Score (live/final) — white square container with bold score */}
         {(isLive || isDecided) && team.score !== null && team.score !== undefined && (
-          <span className={`text-sm font-mono flex-shrink-0 relative z-[2] min-w-[24px] text-right ${
-            isActualWinner
-              ? `font-bold ${(isWrong || isBusted) ? (isDark ? 'text-white/70' : 'text-fg/70') : 'text-white'}`
-              : `font-medium ${(isWrong || isBusted) ? (isDark ? 'text-white/35' : 'text-fg/35') : (isCorrect ? 'text-white/50' : 'text-white/50')}`
+          <span className={`flex-shrink-0 relative z-[2] min-w-[28px] h-7 flex items-center justify-center rounded px-1 text-base font-bold ${
+            isGrayedOut || isEliminated
+              ? 'bg-white/20 text-fg/40'
+              : 'bg-white/90 text-black'
           }`}>
             {team.score}
           </span>
@@ -235,9 +235,7 @@ export default function BracketMatchup({
   return (
     <div className="relative flex items-center gap-1.5 md:gap-0 group w-full" role="group" aria-label={matchupLabel}>
       {/* Card */}
-      <div className={`relative flex-1 md:flex-none md:w-full rounded-lg transition-all duration-150 shadow-md overflow-hidden ${
-        isLive ? 'border border-red-500/40 shadow-[0_0_8px_rgba(239,68,68,0.15)]' : ''
-      } bg-surface`}>
+      <div className={`relative flex-1 md:flex-none md:w-full rounded-lg transition-all duration-150 shadow-md overflow-hidden bg-surface`}>
         {/* Game status header */}
         {slotData && (() => {
           const s = slotData;
@@ -261,13 +259,12 @@ export default function BracketMatchup({
 
           if (isGameLive) {
             return (
-              <div className={`flex items-center gap-2 px-2.5 py-1.5 text-sm ${isDark ? 'bg-red-500/15' : 'bg-red-50'}`} aria-live="polite" aria-label="Game in progress">
+              <div className={`flex items-center gap-2 px-2.5 py-1.5 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`} aria-live="polite" aria-label="Game in progress">
                 <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-bold tracking-wide">
                   <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse flex-shrink-0" aria-hidden="true" />
                   LIVE
                 </span>
-                {s.statusDetail && <span className={`font-medium ${isDark ? 'text-fg/70' : 'text-fg/60'}`}>{s.statusDetail}</span>}
-                {s.clock && <span className={`font-mono font-semibold ${isDark ? 'text-fg/80' : 'text-fg/70'}`}>{s.clock}</span>}
+                {s.statusDetail && <span className="font-medium text-fg">{s.statusDetail}</span>}
               </div>
             );
           }

@@ -53,13 +53,17 @@ export default function BracketRegion({
     return picks?.[slot] || picks?.[String(slot)] || null;
   };
 
-  // Build slotData for a given slot — combines tournament info with live overlay
+  // Build slotData for a given slot — combines tournament info with live overlay + result status
   const slotDataFor = (slot) => {
     const base = tournamentData?.slots?.[slot] || tournamentData?.slots?.[String(slot)] || {};
     const live = liveSlotData?.[slot] || liveSlotData?.[String(slot)] || null;
+    const result = results?.[slot] || results?.[String(slot)] || null;
+    const status = result?.status === 'final' ? 'STATUS_FINAL'
+      : result?.status === 'in_progress' ? 'STATUS_IN_PROGRESS'
+      : live?.status || base.status;
     return {
       startDate: base.startDate,
-      status: live?.status || base.status,
+      status,
       statusDetail: live?.statusDetail || base.statusDetail,
       clock: live?.clock,
       period: live?.period,

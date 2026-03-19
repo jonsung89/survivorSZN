@@ -24,6 +24,7 @@ export default function BracketView({
   tiebreakerValue,
   tiebreakerScores,
   onTiebreakerChange,
+  hasScoreHeader = false,
 }) {
   const [mobileTab, setMobileTab] = useState(0);
   const [mobileFullView, setMobileFullView] = useState(false);
@@ -251,13 +252,18 @@ export default function BracketView({
   const resultFor = (slot) => results?.[slot] || results?.[String(slot)] || null;
   const pickedFor = (slot) => picks?.[slot] || picks?.[String(slot)] || null;
 
-  // Build slotData for a given slot — combines tournament info with live overlay
+  // Build slotData for a given slot — combines tournament info with live overlay + result status
   const slotDataFor = (slot) => {
     const base = tournamentData?.slots?.[slot] || tournamentData?.slots?.[String(slot)] || {};
     const live = liveSlotData?.[slot] || liveSlotData?.[String(slot)] || null;
+    const result = results?.[slot] || results?.[String(slot)] || null;
+    // Result status takes priority (final from DB), then live, then base
+    const status = result?.status === 'final' ? 'STATUS_FINAL'
+      : result?.status === 'in_progress' ? 'STATUS_IN_PROGRESS'
+      : live?.status || base.status;
     return {
       startDate: base.startDate,
-      status: live?.status || base.status,
+      status,
       statusDetail: live?.statusDetail || base.statusDetail,
       clock: live?.clock,
       period: live?.period,
@@ -538,7 +544,22 @@ export default function BracketView({
 
     // Full bracket view (scroll mode)
     return (
-      <div ref={scrollContainerRef} className="hidden md:block overflow-x-auto overflow-y-auto pb-4" style={{ height: 'calc(100vh - 390px)' }}>
+      <div ref={(el) => {
+        scrollContainerRef.current = el;
+        if (!el) return;
+        const resize = () => {
+          const top = el.getBoundingClientRect().top;
+          const chatBarH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--chat-bar-height') || '0');
+          el.style.height = `${window.innerHeight - top - chatBarH - 8}px`;
+        };
+        resize();
+        if (!el._resizeAttached) {
+          el._resizeAttached = true;
+          const observer = new MutationObserver(resize);
+          observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+          window.addEventListener('resize', resize);
+        }
+      }} className="hidden md:block overflow-x-auto overflow-y-auto pb-4">
         {/* Zoom wrapper — scales the grid visually while adjusting scrollable area */}
         <div ref={zoomWrapperRef} style={{ width: `${2950 * zoomLevel}px` }}>
           <div

@@ -6,7 +6,7 @@ import FinalFourPreviewDialog from './FinalFourPreviewDialog';
 
 const ROUND_LABELS = ['R64', 'R32', 'S16', 'E8', 'F4', 'CHAMP'];
 
-export default function BracketLeaderboard({ leaderboard, currentUserId, scoringSystem, tournamentStarted, tournamentData, eliminatedTeamIds, onBracketClick }) {
+export default function BracketLeaderboard({ leaderboard, currentUserId, leagueId, scoringSystem, tournamentStarted, tournamentData, eliminatedTeamIds, onBracketClick }) {
   const [expandedRow, setExpandedRow] = useState(null);
   const [previewEntry, setPreviewEntry] = useState(null);
   const { isDark } = useTheme();
@@ -223,6 +223,8 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, scoring
           entry={previewEntry}
           tournamentData={tournamentData}
           eliminatedTeamIds={eliminatedTeamIds || []}
+          currentUserId={currentUserId}
+          leagueId={leagueId}
           onBracketClick={(bracketId) => {
             setPreviewEntry(null);
             onBracketClick?.(bracketId);

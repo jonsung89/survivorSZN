@@ -42,6 +42,7 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
         cm.deleted_at,
         cm.deleted_by,
         cm.message_type,
+        cm.metadata,
         cm.created_at,
         u.display_name,
         u.profile_image_url
@@ -69,7 +70,8 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
       replyTo: msg.replyTo || null,
       deletedAt: msg.deleted_at || null,
       deletedBy: msg.deleted_by || null,
-      messageType: msg.message_type || 'user'
+      messageType: msg.message_type || 'user',
+      metadata: msg.metadata || null
     }));
 
     res.json({ messages: formattedMessages });

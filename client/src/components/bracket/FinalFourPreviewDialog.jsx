@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
-import { Trophy, ExternalLink, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Trophy, ExternalLink, X, MessageCircle, Check } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemedLogo, getThemedColor } from '../../utils/logo';
+import { useSocket } from '../../context/SocketContext';
 
 function getDarkBgLogo(logoUrl) {
   if (!logoUrl) return logoUrl;
@@ -13,8 +14,11 @@ function getTeam(teamId, tournamentData) {
   return tournamentData.teams[teamId] || tournamentData.teams[String(teamId)] || null;
 }
 
-export default function FinalFourPreviewDialog({ entry, tournamentData, eliminatedTeamIds = [], onBracketClick, onClose }) {
+export default function FinalFourPreviewDialog({ entry, tournamentData, eliminatedTeamIds = [], currentUserId, leagueId, onBracketClick, onClose }) {
   const { isDark } = useTheme();
+  const { sendMessage } = useSocket();
+  const [shared, setShared] = useState(false);
+  const isOwnBracket = currentUserId && entry.userId === currentUserId;
 
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -43,6 +47,36 @@ export default function FinalFourPreviewDialog({ entry, tournamentData, eliminat
   const totalScore = entry.tiebreakerValue;
 
   const championColor = champion?.color || '#6B7280';
+
+  const handleShareToChat = () => {
+    if (!leagueId || shared) return;
+
+    // Build metadata with team info for rich rendering
+    const buildTeamInfo = (team) => team ? {
+      id: team.id, name: team.name, abbreviation: team.abbreviation,
+      shortName: team.shortName, logo: team.logo, color: team.color, seed: team.seed,
+    } : null;
+
+    const metadata = {
+      type: 'bracket_share',
+      champion: buildTeamInfo(champion),
+      championship: { team1: buildTeamInfo(champTeam1), team2: buildTeamInfo(champTeam2) },
+      semis: [
+        { team1: buildTeamInfo(semi1Team1), team2: buildTeamInfo(semi1Team2), winnerId: champTeam1Id },
+        { team1: buildTeamInfo(semi2Team1), team2: buildTeamInfo(semi2Team2), winnerId: champTeam2Id },
+      ],
+      tiebreakerValue: totalScore,
+      tiebreakerScores: scores,
+      bracketId: entry.bracketId,
+    };
+
+    const champName = champion?.abbreviation || champion?.shortName || 'TBD';
+    sendMessage(leagueId, `🏆 My champion: ${champName}`, null, null, {
+      messageType: 'bracket_share',
+      metadata,
+    });
+    setShared(true);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -103,7 +137,7 @@ export default function FinalFourPreviewDialog({ entry, tournamentData, eliminat
 
         {/* Championship Game */}
         <div className="px-4 pt-4 pb-3">
-          <div className="text-xs font-semibold text-fg/40 uppercase tracking-wider mb-2">Championship Game</div>
+          <div className="text-sm font-semibold text-fg/60 uppercase tracking-wider mb-2">Championship Game</div>
           <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-fg/10' : 'border-gray-200'}`}>
             <ChampionshipMatchup
               team1={champTeam1}
@@ -119,7 +153,7 @@ export default function FinalFourPreviewDialog({ entry, tournamentData, eliminat
 
         {/* Final Four Semis */}
         <div className="px-4 pb-4">
-          <div className="text-xs font-semibold text-fg/40 uppercase tracking-wider mb-2">Final Four</div>
+          <div className="text-sm font-semibold text-fg/60 uppercase tracking-wider mb-2">Final Four</div>
           <div className="grid grid-cols-2 gap-2">
             <SemiMatchup
               team1={semi1Team1}
@@ -138,16 +172,30 @@ export default function FinalFourPreviewDialog({ entry, tournamentData, eliminat
           </div>
         </div>
 
-        {/* View Full Bracket Button */}
-        <div className="px-4 pb-4">
+        {/* Action Buttons */}
+        <div className="px-4 pb-4 flex gap-2">
           <button
             onClick={() => onBracketClick(entry.bracketId)}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-opacity hover:opacity-85 text-white"
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-opacity hover:opacity-85 text-white"
             style={{ background: getThemedColor(champion, isDark) }}
           >
             <ExternalLink className="w-4 h-4" />
             View Full Bracket
           </button>
+          {isOwnBracket && leagueId && (
+            <button
+              onClick={handleShareToChat}
+              disabled={shared}
+              className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                shared
+                  ? isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
+                  : isDark ? 'bg-fg/10 text-fg/70 hover:bg-fg/15' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {shared ? <Check className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
+              {shared ? 'Sent' : 'Share'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -166,8 +214,8 @@ function ChampionshipMatchup({ team1, team2, winnerId, scores, totalScore, elimi
       <div className={`border-t ${isDark ? 'border-fg/10' : 'border-gray-200'}`} />
       <TeamRow team={team2} isWinner={team2IsWinner} isEliminated={team2Eliminated} score={scores?.score2} isDark={isDark} />
       {totalScore != null && (
-        <div className={`text-center py-1.5 text-xs font-mono text-fg/40 border-t ${isDark ? 'border-fg/10 bg-fg/[0.03]' : 'border-gray-200 bg-gray-50'}`}>
-          Total: <span className="font-semibold text-fg/60">{totalScore}</span>
+        <div className={`text-center py-2 text-sm font-mono text-fg/50 border-t ${isDark ? 'border-fg/10 bg-fg/[0.03]' : 'border-gray-200 bg-gray-50'}`}>
+          Total: <span className="font-bold text-fg/80">{totalScore}</span>
         </div>
       )}
     </div>
@@ -177,39 +225,39 @@ function ChampionshipMatchup({ team1, team2, winnerId, scores, totalScore, elimi
 function TeamRow({ team, isWinner, isEliminated, score, isDark }) {
   if (!team) {
     return (
-      <div className={`flex items-center gap-2 px-3 py-2.5 ${isDark ? 'bg-fg/[0.03]' : 'bg-gray-50'}`}>
-        <div className="w-6 h-6 rounded-full bg-fg/10" />
-        <span className="text-sm text-fg/30">TBD</span>
+      <div className={`flex items-center gap-2.5 px-3 py-3 ${isDark ? 'bg-fg/[0.03]' : 'bg-gray-50'}`}>
+        <div className="w-7 h-7 rounded-full bg-fg/10" />
+        <span className="text-base text-fg/30">TBD</span>
       </div>
     );
   }
 
+  const isLoser = !isWinner && !isEliminated;
+
   return (
-    <div className={`flex items-center gap-2 px-3 py-2.5 ${isWinner ? (isDark ? 'bg-emerald-500/8' : 'bg-emerald-50/60') : ''}`}>
+    <div className={`flex items-center gap-2.5 px-3 py-3`}>
       {team.logo ? (
-        <img src={getThemedLogo(team.logo, isDark)} alt="" className={`w-6 h-6 object-contain flex-shrink-0 ${isEliminated ? 'opacity-40 grayscale' : ''}`} />
+        <img src={getThemedLogo(team.logo, isDark)} alt="" className={`w-7 h-7 object-contain flex-shrink-0 ${isEliminated ? 'opacity-40 grayscale' : isLoser ? 'opacity-50' : ''}`} />
       ) : (
-        <div className="w-6 h-6 rounded-full bg-fg/10 flex-shrink-0" />
+        <div className="w-7 h-7 rounded-full bg-fg/10 flex-shrink-0" />
       )}
       <div className="flex items-center gap-1.5 flex-1 min-w-0">
         {team.seed && (
-          <span className={`text-xs font-mono ${isEliminated ? 'text-fg/20' : 'text-fg/40'}`}>{team.seed}</span>
+          <span className={`text-sm font-mono ${isEliminated || isLoser ? 'text-fg/25' : 'text-fg/50'}`}>{team.seed}</span>
         )}
-        <span className={`text-sm font-medium truncate ${
+        <span className={`text-base font-medium truncate ${
           isEliminated ? 'text-fg/30 line-through' :
-          isWinner ? (isDark ? 'text-emerald-400' : 'text-emerald-700') : 'text-fg'
+          isLoser ? 'text-fg/35 line-through' :
+          'text-fg'
         }`}>
           {team.shortName || team.abbreviation || team.name}
         </span>
-        {isWinner && !isEliminated && (
-          <span className={`text-xs font-bold flex-shrink-0 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>WIN</span>
-        )}
         {isEliminated && (
-          <span className="text-xs font-bold text-red-500 flex-shrink-0">✗</span>
+          <span className="text-sm font-bold text-red-500 flex-shrink-0">✗</span>
         )}
       </div>
       {score != null && (
-        <span className={`font-mono font-bold text-sm flex-shrink-0 ${isEliminated ? 'text-fg/30' : 'text-fg/70'}`}>{score}</span>
+        <span className={`font-mono font-bold text-lg flex-shrink-0 ${isEliminated || isLoser ? 'text-fg/30' : 'text-fg/80'}`}>{score}</span>
       )}
     </div>
   );
@@ -233,32 +281,35 @@ function SemiMatchup({ team1, team2, winnerId, eliminatedTeamIds, isDark }) {
 function SemiTeamRow({ team, isWinner, isEliminated, isDark }) {
   if (!team) {
     return (
-      <div className="flex items-center gap-1.5 px-2 py-2">
-        <div className="w-5 h-5 rounded-full bg-fg/10" />
+      <div className="flex items-center gap-2 px-2.5 py-2.5">
+        <div className="w-6 h-6 rounded-full bg-fg/10" />
         <span className="text-sm text-fg/30">TBD</span>
       </div>
     );
   }
 
+  const isLoser = !isWinner && !isEliminated;
+
   return (
-    <div className={`flex items-center gap-1.5 px-2 py-2 ${isWinner ? (isDark ? 'bg-emerald-500/8' : 'bg-emerald-50/60') : ''}`}>
+    <div className={`flex items-center gap-2 px-2.5 py-2.5`}>
       {team.logo ? (
-        <img src={getThemedLogo(team.logo, isDark)} alt="" className={`w-5 h-5 object-contain flex-shrink-0 ${isEliminated ? 'opacity-40 grayscale' : ''}`} />
+        <img src={getThemedLogo(team.logo, isDark)} alt="" className={`w-6 h-6 object-contain flex-shrink-0 ${isEliminated ? 'opacity-40 grayscale' : isLoser ? 'opacity-50' : ''}`} />
       ) : (
-        <div className="w-5 h-5 rounded-full bg-fg/10 flex-shrink-0" />
+        <div className="w-6 h-6 rounded-full bg-fg/10 flex-shrink-0" />
       )}
       <div className="flex items-center gap-1 flex-1 min-w-0">
         {team.seed && (
-          <span className={`text-xs font-mono ${isEliminated ? 'text-fg/20' : 'text-fg/40'}`}>{team.seed}</span>
+          <span className={`text-sm font-mono ${isEliminated || isLoser ? 'text-fg/25' : 'text-fg/50'}`}>{team.seed}</span>
         )}
-        <span className={`text-sm truncate ${
+        <span className={`text-base truncate ${
           isEliminated ? 'text-fg/30 line-through' :
-          isWinner ? (isDark ? 'text-emerald-400 font-medium' : 'text-emerald-700 font-medium') : 'text-fg/80'
+          isLoser ? 'text-fg/35 line-through' :
+          isWinner ? 'text-fg font-medium' : 'text-fg/80'
         }`}>
           {team.abbreviation || team.shortName || team.name}
         </span>
         {isEliminated && (
-          <span className="text-xs font-bold text-red-500 flex-shrink-0">✗</span>
+          <span className="text-sm font-bold text-red-500 flex-shrink-0">✗</span>
         )}
       </div>
     </div>

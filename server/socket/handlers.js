@@ -115,11 +115,11 @@ function setupSocketHandlers(io) {
       leaveLeague(socket, io, leagueId);
     });
 
-    // Send chat message (with GIF and reply support)
-    socket.on('chat-message', async ({ leagueId, message, replyTo, gif }) => {
+    // Send chat message (with GIF, reply, and metadata support)
+    socket.on('chat-message', async ({ leagueId, message, replyTo, gif, messageType, metadata }) => {
       try {
-        // Allow empty message if there's a GIF
-        if ((!message || message.trim().length === 0) && !gif) return;
+        // Allow empty message if there's a GIF or metadata (bracket share, etc.)
+        if ((!message || message.trim().length === 0) && !gif && !metadata) return;
         if (message && message.length > 1000) {
           socket.emit('error', { message: 'Message too long' });
           return;
@@ -150,17 +150,20 @@ function setupSocketHandlers(io) {
           return;
         }
 
-        // Save message to database (with gif and reply_to)
+        // Save message to database
+        const msgType = messageType || 'user';
         const result = await db.getOne(
-          `INSERT INTO chat_messages (league_id, user_id, message, gif, reply_to)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO chat_messages (league_id, user_id, message, gif, reply_to, message_type, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id, created_at, reactions`,
           [
-            leagueId, 
-            socket.userId, 
+            leagueId,
+            socket.userId,
             message ? message.trim() : null,
             gif ? JSON.stringify(gif) : null,
-            replyTo ? JSON.stringify(replyTo) : null
+            replyTo ? JSON.stringify(replyTo) : null,
+            msgType,
+            metadata ? JSON.stringify(metadata) : null
           ]
         );
 
@@ -169,7 +172,7 @@ function setupSocketHandlers(io) {
           id: result.id,
           leagueId,
           userId: socket.userId,
-          user_id: socket.userId, // Include both formats for compatibility
+          user_id: socket.userId,
           displayName: socket.displayName,
           display_name: socket.displayName,
           profileImageUrl: socket.profileImageUrl,
@@ -177,6 +180,9 @@ function setupSocketHandlers(io) {
           gif: gif || null,
           replyTo: replyTo || null,
           reactions: result.reactions || {},
+          messageType: msgType,
+          message_type: msgType,
+          metadata: metadata || null,
           createdAt: result.created_at,
           created_at: result.created_at
         });

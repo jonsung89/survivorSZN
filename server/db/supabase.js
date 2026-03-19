@@ -272,6 +272,7 @@ async function initDb() {
 
     // Add message_type to chat_messages for system messages (e.g., "X joined the league")
     await client.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'user'`);
+    await client.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS metadata JSONB`);
 
     // Payment methods for commissioners (Venmo, PayPal, Zelle, Cash App)
     await client.query(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS payment_methods JSONB DEFAULT '[]'`);

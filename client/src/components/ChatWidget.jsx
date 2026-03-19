@@ -4,6 +4,7 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
 import CommishBadge from './CommishBadge';
+import BracketShareCard from './bracket/BracketShareCard';
 import { useThemedLogo } from '../utils/logo';
 import { useTheme } from '../context/ThemeContext';
 
@@ -100,7 +101,7 @@ const NFL_TEAMS = {
   '34': { name: 'Texans', abbreviation: 'HOU', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/hou.png' },
 };
 
-export default function ChatWidget({ leagueId, leagueName, commissionerId, members: membersProp = [], maxStrikes = 1, onCollapsedChange }) {
+export default function ChatWidget({ leagueId, leagueName, commissionerId, members: membersProp = [], maxStrikes = 1, championsByUserId, onCollapsedChange }) {
   const { user, getIdToken } = useAuth();
   const tl = useThemedLogo();
   const { isDark } = useTheme();
@@ -1147,6 +1148,14 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         {displayName}
                         {isOwn && <span className="text-fg/40 font-normal ml-1">(you)</span>}
                       </span>
+                      {championsByUserId?.[messageUserId]?.logo && (
+                        <img
+                          src={tl(championsByUserId[messageUserId].logo)}
+                          alt=""
+                          className="w-4 h-4 object-contain"
+                          title={`Champion: ${championsByUserId[messageUserId].name}`}
+                        />
+                      )}
                       {isMessageFromCommissioner && <CommishBadge />}
                       <span className="text-fg/50 text-xs">{formatTime(message.created_at || message.createdAt)}</span>
                     </p>
@@ -1178,6 +1187,11 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                     </div>
                   ) : (
                     <>
+                      {/* Bracket share card */}
+                      {(message.messageType === 'bracket_share' || message.message_type === 'bracket_share') && message.metadata && (
+                        <BracketShareCard metadata={message.metadata} displayName={displayName} />
+                      )}
+
                       {/* GIF content - displayed without bubble */}
                       {message.gif && (
                         <div 
@@ -1193,8 +1207,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         </div>
                       )}
 
-                      {/* Text content with bubble - only show if there's actual text (not just [GIF]) */}
-                      {message.message && message.message !== '[GIF]' && (
+                      {/* Text content with bubble - only show if there's actual text (not just [GIF] or bracket share) */}
+                      {message.message && message.message !== '[GIF]' && !(message.messageType === 'bracket_share' || message.message_type === 'bracket_share') && (
                         <div
                           className={`inline-block px-3 py-2 rounded-2xl rounded-tl-md cursor-pointer active:scale-[0.98] transition-all hover:ring-1 hover:ring-fg/20 ${
                             isOwn

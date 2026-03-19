@@ -59,6 +59,19 @@ export default function BracketChallenge() {
   const members = league?.members || [];
   const paymentMethods = league?.paymentMethods || [];
 
+  // Build userId -> champion team info map from leaderboard data
+  const buildChampionsMap = () => {
+    if (!leaderboard?.length || !tournamentData?.teams) return null;
+    const map = {};
+    for (const entry of leaderboard) {
+      if (entry.championTeamId) {
+        const team = tournamentData.teams[entry.championTeamId];
+        if (team) map[entry.userId] = { logo: team.logo, name: team.abbreviation || team.shortName, color: team.color };
+      }
+    }
+    return Object.keys(map).length > 0 ? map : null;
+  };
+
   const PAYMENT_PLATFORMS = {
     venmo: { name: 'Venmo', placeholder: '@username', color: '#3D95CE' },
     paypal: { name: 'PayPal', placeholder: 'email@example.com', color: '#003087' },
@@ -820,6 +833,7 @@ export default function BracketChallenge() {
         <BracketLeaderboard
           leaderboard={leaderboard}
           currentUserId={user?.id}
+          leagueId={leagueId}
           scoringSystem={scoringSystem}
           tournamentStarted={tournamentStarted}
           tournamentData={tournamentData}
@@ -1063,6 +1077,7 @@ export default function BracketChallenge() {
           leagueName={league.name}
           commissionerId={league.commissionerId || league.commissioner_id}
           members={members}
+          championsByUserId={tournamentStarted && (challenge?.max_brackets_per_user || 1) === 1 && tournamentData ? buildChampionsMap() : null}
           onCollapsedChange={setChatCollapsed}
         />
       )}

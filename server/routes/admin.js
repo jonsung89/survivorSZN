@@ -56,17 +56,17 @@ router.get('/stats', async (req, res) => {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
     const [users, leagues, reports, brackets, active24h, active7d, active30d, chatToday, signupTrend, leagueTrend] = await Promise.all([
-      db.getOne('SELECT COUNT(*) as count FROM users'),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE is_bot IS NOT TRUE'),
       db.getOne('SELECT COUNT(*) as count FROM leagues'),
       db.getOne('SELECT COUNT(*) as count FROM scouting_reports'),
-      db.getOne('SELECT COUNT(*) as count FROM brackets'),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day1]),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day7]),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day30]),
+      db.getOne('SELECT COUNT(*) as count FROM brackets WHERE user_id NOT IN (SELECT id FROM users WHERE is_bot = TRUE)'),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND is_bot IS NOT TRUE', [day1]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND is_bot IS NOT TRUE', [day7]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND is_bot IS NOT TRUE', [day30]),
       db.getOne("SELECT COUNT(*) as count FROM chat_messages WHERE created_at >= $1 AND COALESCE(message_type, 'user') != 'system'", [todayStart]),
       db.getAll(
         `SELECT DATE(created_at) as date, COUNT(*) as count
-         FROM users WHERE created_at >= $1
+         FROM users WHERE created_at >= $1 AND is_bot IS NOT TRUE
          GROUP BY DATE(created_at) ORDER BY date`,
         [day30]
       ),
@@ -499,14 +499,14 @@ router.get('/stats/dashboard', async (req, res) => {
       newUsersToday, returningUsersToday,
     ] = await Promise.all([
       // Today vs yesterday
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at >= $1', [todayStart]),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at >= $1 AND created_at < $2', [yesterdayStart, todayStart]),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [todayStart]),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND last_login_at < $2', [yesterdayStart, todayStart]),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1', [day1Ago]),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND last_login_at < $2', [day2Ago, day1Ago]),
-      db.getOne('SELECT COUNT(*) as count FROM users'),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at < $1', [day7Ago]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at >= $1 AND is_bot IS NOT TRUE', [todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at >= $1 AND created_at < $2 AND is_bot IS NOT TRUE', [yesterdayStart, todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND is_bot IS NOT TRUE', [todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND last_login_at < $2 AND is_bot IS NOT TRUE', [yesterdayStart, todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND is_bot IS NOT TRUE', [day1Ago]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE last_login_at >= $1 AND last_login_at < $2 AND is_bot IS NOT TRUE', [day2Ago, day1Ago]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE is_bot IS NOT TRUE'),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at < $1 AND is_bot IS NOT TRUE', [day7Ago]),
 
       // Page views today vs yesterday
       db.getOne('SELECT COUNT(*) as count FROM page_views WHERE created_at >= $1', [todayStart]),
@@ -517,12 +517,12 @@ router.get('/stats/dashboard', async (req, res) => {
       // Time-series (range-based)
       db.getAll(
         `SELECT DATE(last_login_at) as date, COUNT(DISTINCT id) as count
-         FROM users WHERE last_login_at >= $1
+         FROM users WHERE last_login_at >= $1 AND is_bot IS NOT TRUE
          GROUP BY DATE(last_login_at) ORDER BY date`, [rangeStart]
       ),
       db.getAll(
         `SELECT DATE(created_at) as date, COUNT(*) as count
-         FROM users WHERE created_at >= $1
+         FROM users WHERE created_at >= $1 AND is_bot IS NOT TRUE
          GROUP BY DATE(created_at) ORDER BY date`, [rangeStart]
       ),
       db.getAll(
@@ -532,7 +532,7 @@ router.get('/stats/dashboard', async (req, res) => {
       ),
       db.getAll(
         `SELECT DATE(joined_at) as date, COUNT(*) as count
-         FROM league_members WHERE joined_at >= $1
+         FROM league_members lm WHERE lm.joined_at >= $1 AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = lm.user_id AND u.is_bot = TRUE)
          GROUP BY DATE(joined_at) ORDER BY date`, [rangeStart]
       ),
       db.getAll(
@@ -549,7 +549,7 @@ router.get('/stats/dashboard', async (req, res) => {
       // Monthly aggregates (12 months)
       db.getAll(
         `SELECT TO_CHAR(last_login_at, 'YYYY-MM') as month, COUNT(DISTINCT id) as count
-         FROM users WHERE last_login_at >= $1
+         FROM users WHERE last_login_at >= $1 AND is_bot IS NOT TRUE
          GROUP BY TO_CHAR(last_login_at, 'YYYY-MM') ORDER BY month`, [month12Ago]
       ),
       db.getAll(
@@ -569,9 +569,9 @@ router.get('/stats/dashboard', async (req, res) => {
       ),
 
       // Engagement
-      db.getOne('SELECT COUNT(*) as count FROM brackets WHERE is_submitted = true'),
+      db.getOne('SELECT COUNT(*) as count FROM brackets WHERE is_submitted = true AND user_id NOT IN (SELECT id FROM users WHERE is_bot = TRUE)'),
       db.getOne('SELECT COUNT(*) as count FROM gamecast_sessions WHERE started_at >= $1', [day30Ago]),
-      db.getOne('SELECT COUNT(*) as count FROM picks WHERE created_at >= $1', [day30Ago]),
+      db.getOne('SELECT COUNT(*) as count FROM picks WHERE created_at >= $1 AND user_id NOT IN (SELECT id FROM users WHERE is_bot = TRUE)', [day30Ago]),
       db.getOne("SELECT COUNT(*) as count FROM leagues WHERE status = 'active'"),
       db.getOne('SELECT COUNT(*) as count FROM leagues'),
 
@@ -596,12 +596,12 @@ router.get('/stats/dashboard', async (req, res) => {
       // Recent signups (last 8)
       db.getAll(
         `SELECT id, display_name, email, profile_image_url, created_at
-         FROM users ORDER BY created_at DESC LIMIT 8`
+         FROM users WHERE is_bot IS NOT TRUE ORDER BY created_at DESC LIMIT 8`
       ),
 
       // New vs returning users today
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at >= $1 AND last_login_at >= $1', [todayStart]),
-      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at < $1 AND last_login_at >= $1', [todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at >= $1 AND last_login_at >= $1 AND is_bot IS NOT TRUE', [todayStart]),
+      db.getOne('SELECT COUNT(*) as count FROM users WHERE created_at < $1 AND last_login_at >= $1 AND is_bot IS NOT TRUE', [todayStart]),
     ]);
 
     const p = v => parseInt(v?.count || 0);
@@ -1043,7 +1043,7 @@ router.get('/users', async (req, res) => {
 
     const dataParams = [...params, parseInt(limit), offset];
     const users = await db.getAll(
-      `SELECT u.id, u.display_name, u.first_name, u.last_name, u.profile_image_url, u.email, u.phone, u.is_admin, u.created_at, u.last_login_at,
+      `SELECT u.id, u.display_name, u.first_name, u.last_name, u.profile_image_url, u.email, u.phone, u.is_admin, u.is_bot, u.created_at, u.last_login_at,
               (SELECT COUNT(*) FROM league_members lm WHERE lm.user_id = u.id) as league_count
        FROM users u
        ${whereClause}
@@ -1062,6 +1062,7 @@ router.get('/users', async (req, res) => {
         email: u.email,
         phone: u.phone,
         isAdmin: u.is_admin || false,
+        isBot: u.is_bot || false,
         leagueCount: parseInt(u.league_count),
         createdAt: u.created_at,
         lastLoginAt: u.last_login_at,
@@ -1079,7 +1080,7 @@ router.get('/users', async (req, res) => {
 router.get('/users/:id', async (req, res) => {
   try {
     const user = await db.getOne(
-      `SELECT id, display_name, first_name, last_name, profile_image_url, email, phone, firebase_uid, is_admin, is_disabled, created_at, updated_at, last_login_at
+      `SELECT id, display_name, first_name, last_name, profile_image_url, email, phone, firebase_uid, is_admin, is_disabled, is_bot, created_at, updated_at, last_login_at
        FROM users WHERE id = $1`,
       [req.params.id]
     );
@@ -1144,6 +1145,7 @@ router.get('/users/:id', async (req, res) => {
       firebaseUid: user.firebase_uid,
       isAdmin: user.is_admin || false,
       isDisabled: user.is_disabled || false,
+      isBot: user.is_bot || false,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
       lastLoginAt: user.last_login_at,
@@ -1271,7 +1273,7 @@ router.get('/leagues', async (req, res) => {
     const leagues = await db.getAll(
       `SELECT l.id, l.name, l.sport_id, l.status, l.season, l.created_at,
               u.display_name as commissioner_name,
-              (SELECT COUNT(*) FROM league_members lm WHERE lm.league_id = l.id) as member_count
+              (SELECT COUNT(*) FROM league_members lm WHERE lm.league_id = l.id AND NOT EXISTS (SELECT 1 FROM users u2 WHERE u2.id = lm.user_id AND u2.is_bot = TRUE)) as member_count
        FROM leagues l
        LEFT JOIN users u ON u.id = l.commissioner_id
        ${whereClause}
@@ -1455,8 +1457,8 @@ router.get('/challenges', async (req, res) => {
     const challenges = await db.getAll(`
       SELECT bc.id, bc.league_id, bc.season, bc.status, bc.scoring_system, bc.tournament_data,
              l.name as league_name,
-             (SELECT COUNT(*) FROM brackets b WHERE b.challenge_id = bc.id) as bracket_count,
-             (SELECT COUNT(*) FROM brackets b WHERE b.challenge_id = bc.id AND b.is_submitted = true) as submitted_count
+             (SELECT COUNT(*) FROM brackets b WHERE b.challenge_id = bc.id AND b.user_id NOT IN (SELECT id FROM users WHERE is_bot = TRUE)) as bracket_count,
+             (SELECT COUNT(*) FROM brackets b WHERE b.challenge_id = bc.id AND b.is_submitted = true AND b.user_id NOT IN (SELECT id FROM users WHERE is_bot = TRUE)) as submitted_count
       FROM bracket_challenges bc
       JOIN leagues l ON l.id = bc.league_id
       ORDER BY bc.created_at DESC

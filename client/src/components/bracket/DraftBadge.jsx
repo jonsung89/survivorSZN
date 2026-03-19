@@ -236,13 +236,13 @@ export default function DraftBadge({ rank, teamColor, className = '' }) {
   if (!rank) return null;
 
   return (
-    <div className={`absolute -top-1.5 -right-1.5 z-10 ${className}`}>
+    <div className={`absolute -top-1.5 -right-4 z-10 ${className}`}>
       <button
         onClick={(e) => { e.stopPropagation(); setShowDialog(true); }}
-        className={`flex items-center gap-0.5 rounded-full pl-0.5 pr-1.5 py-0.5 shadow-md cursor-pointer transition-transform hover:scale-110 active:scale-95 ${isDark ? 'bg-[#1d428a] ring-1 ring-white/20' : 'bg-[#1d428a] ring-1 ring-black/10'}`}
+        className={`flex items-center  rounded-full pl-0.5 pr-1.5 py-0.5 shadow-md cursor-pointer transition-transform hover:scale-110 active:scale-95 ${isDark ? 'bg-[#1d428a]' : 'bg-[#1d428a]'}`}
       >
-        <img src={NBA_LOGO} alt="" className="w-5 h-5 rounded-full" />
-        <span className="text-[11px] font-bold text-white leading-none">
+        <img src={NBA_LOGO} alt="" className="w-5 h-6 rounded-full" />
+        <span className="text-[13px] sm:text-[14px] font-bold text-white leading-none">
           #{rank}
         </span>
       </button>

@@ -21,14 +21,14 @@ router.post('/pageview', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'path is required' });
     }
 
-    // Look up user to check admin status (skip tracking for admins)
+    // Look up user to check admin/bot status (skip tracking for admins and bots)
     const user = await db.getOne(
-      'SELECT id, is_admin FROM users WHERE firebase_uid = $1',
+      'SELECT id, is_admin, is_bot FROM users WHERE firebase_uid = $1',
       [req.firebaseUser.uid]
     );
 
-    if (!user || user.is_admin) {
-      // Skip tracking for admins or unknown users, but still return 200
+    if (!user || user.is_admin || user.is_bot) {
+      // Skip tracking for admins, bots, or unknown users, but still return 200
       return res.json({ ok: true });
     }
 
@@ -59,13 +59,13 @@ router.post('/event', optionalAuth, async (req, res) => {
 
     let userId = null;
 
-    // If authenticated, look up user and skip admins
+    // If authenticated, look up user and skip admins/bots
     if (req.firebaseUser) {
       const user = await db.getOne(
-        'SELECT id, is_admin FROM users WHERE firebase_uid = $1',
+        'SELECT id, is_admin, is_bot FROM users WHERE firebase_uid = $1',
         [req.firebaseUser.uid]
       );
-      if (!user || user.is_admin) {
+      if (!user || user.is_admin || user.is_bot) {
         return res.json({ ok: true });
       }
       userId = user.id;

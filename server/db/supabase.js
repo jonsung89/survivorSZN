@@ -207,6 +207,7 @@ async function initDb() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_url TEXT`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT FALSE`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_bot BOOLEAN DEFAULT FALSE`);
     // Auto-mark existing users with display_name as onboarding complete
     await client.query(`UPDATE users SET onboarding_complete = TRUE WHERE display_name IS NOT NULL AND onboarding_complete = FALSE`);
 

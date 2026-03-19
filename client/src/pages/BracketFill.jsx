@@ -39,6 +39,7 @@ export default function BracketFill() {
   const [picks, setPicks] = useState({});
   const [results, setResults] = useState({});
   const [tiebreakerValue, setTiebreakerValue] = useState(null);
+  const [tiebreakerScores, setTiebreakerScores] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // 'saving' | 'saved' | 'error'
@@ -117,6 +118,7 @@ export default function BracketFill() {
       setBracket(b);
       setPicks(b.picks || {});
       setTiebreakerValue(b.tiebreaker_value);
+      setTiebreakerScores(b.tiebreaker_scores || null);
       setResults(data.results || {});
       lastSavedPicksRef.current = JSON.stringify(b.picks || {});
 
@@ -145,7 +147,7 @@ export default function BracketFill() {
   };
 
   // Debounced auto-save
-  const debouncedSave = useCallback((newPicks, newTiebreaker) => {
+  const debouncedSave = useCallback((newPicks, newTiebreaker, newTiebreakerScores) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
       const picksStr = JSON.stringify(newPicks);
@@ -157,6 +159,7 @@ export default function BracketFill() {
       try {
         const body = { picks: newPicks };
         if (newTiebreaker !== undefined) body.tiebreakerValue = newTiebreaker;
+        if (newTiebreakerScores) body.tiebreakerScores = newTiebreakerScores;
         await bracketAPI.updateBracket(bracketId, body);
         lastSavedPicksRef.current = picksStr;
         setSaveStatus('saved');
@@ -242,9 +245,10 @@ export default function BracketFill() {
     }
   }, [matchupDialog, handlePick]);
 
-  const handleTiebreakerChange = (value) => {
+  const handleTiebreakerChange = (value, scores) => {
     setTiebreakerValue(value);
-    debouncedSave(picks, value);
+    if (scores) setTiebreakerScores(scores);
+    debouncedSave(picks, value, scores);
   };
 
   const handleNameSave = async () => {
@@ -273,7 +277,9 @@ export default function BracketFill() {
     setSubmitting(true);
     try {
       // Save final state first
-      await bracketAPI.updateBracket(bracketId, { picks, tiebreakerValue });
+      const submitBody = { picks, tiebreakerValue };
+      if (tiebreakerScores) submitBody.tiebreakerScores = tiebreakerScores;
+      await bracketAPI.updateBracket(bracketId, submitBody);
       const result = await bracketAPI.submitBracket(bracketId);
       if (result.success) {
         showToast('Bracket submitted! Good luck!', 'success');
@@ -295,7 +301,8 @@ export default function BracketFill() {
       if (result.success) {
         setPicks({});
         setTiebreakerValue(null);
-        setBracket(prev => ({ ...prev, picks: {}, tiebreaker_value: null, is_submitted: false, submitted_at: null }));
+        setTiebreakerScores(null);
+        setBracket(prev => ({ ...prev, picks: {}, tiebreaker_value: null, tiebreaker_scores: null, is_submitted: false, submitted_at: null }));
         lastSavedPicksRef.current = '{}';
         showToast('Bracket reset', 'success');
       } else {
@@ -418,6 +425,7 @@ export default function BracketFill() {
           isReadOnly={isReadOnly}
           tiebreakerType={challenge?.tiebreaker_type}
           tiebreakerValue={tiebreakerValue}
+          tiebreakerScores={tiebreakerScores}
           onTiebreakerChange={handleTiebreakerChange}
         />
       </div>

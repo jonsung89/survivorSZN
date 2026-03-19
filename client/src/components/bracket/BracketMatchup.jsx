@@ -1,4 +1,4 @@
-import { Check, X, Info, Play } from 'lucide-react';
+import { Check, X, Info, Play, Circle } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
 function hexToRgba(hex, alpha) {
@@ -111,9 +111,17 @@ export default function BracketMatchup({
     const rowStyle = {};
 
     if (isCorrect) {
-      rowStyle.backgroundColor = 'rgba(16, 185, 129, 0.2)';
+      // Correct: keep team color, add green left border
+      if (team.color) {
+        rowStyle.backgroundColor = hexToRgba(team.color, trueAlpha);
+      } else {
+        rowStyle.backgroundColor = isDark ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.15)';
+      }
+      rowStyle.borderLeft = '3.5px solid rgb(16, 185, 129)';
     } else if (isWrong) {
-      rowStyle.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+      // Wrong: muted/grayed bg, add red left border
+      rowStyle.backgroundColor = isDark ? 'rgba(100, 100, 100, 0.35)' : 'rgba(140, 140, 140, 0.20)';
+      rowStyle.borderLeft = '3.5px solid rgb(239, 68, 68)';
     } else if (isOtherPicked && !isDecided) {
       // Gray out the non-selected team
       rowStyle.backgroundColor = isLightMode ? 'rgba(150, 150, 150, 0.25)' : 'rgba(100, 100, 100, 0.30)';
@@ -123,13 +131,15 @@ export default function BracketMatchup({
     }
 
     // Use white/dark-bg logo when on team color bg; use normal logo when grayed out
-    const isGrayedOut = isOtherPicked && !isDecided;
+    const isGrayedOut = (isOtherPicked && !isDecided) || isWrong;
     const teamLogo = isGrayedOut ? team.logo : getDarkBgLogo(team.logo);
 
     // Text color: white on team color, muted on gray
     // First Four placeholder teams have no real team color — use fg text in light mode
     const isFirstFourPlaceholder = team.isFirstFour;
-    const textColorClass = isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg' : 'text-white';
+    const textColorClass = isWrong
+      ? (isDark ? 'text-white/50' : 'text-fg/50')
+      : isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg' : 'text-white';
 
     return (
       <div
@@ -143,7 +153,7 @@ export default function BracketMatchup({
         style={rowStyle}
       >
         {/* Dark gradient overlay — covers full colored background */}
-        {team.color && !isGrayedOut && !isCorrect && !isWrong && (
+        {team.color && !isGrayedOut && !isWrong && (
           <div
             className="pointer-events-none absolute inset-0 z-[1]"
             style={{
@@ -168,28 +178,40 @@ export default function BracketMatchup({
         )}
 
         {/* Team name + record */}
-        <span className={`text-sm font-semibold flex-1 truncate relative z-[2] ${isEliminated ? 'line-through text-white/40' : textColorClass}`}>
+        <span className={`text-sm font-semibold flex-1 truncate relative z-[2] ${isWrong ? `line-through ${isDark ? 'text-white/40' : 'text-fg/40'}` : isEliminated ? 'line-through text-white/40' : textColorClass}`}>
           {compact
             ? (team.abbreviation || team.shortName || team.name)
             : (team.shortName || team.name || team.abbreviation)}
         </span>
-        {team.record && (
-          <span className={`text-xs font-mono flex-shrink-0 relative z-[2] ${isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg/60' : 'text-white/80'}`}>
+        {team.record && !isLive && !isDecided && (
+          <span className={`text-xs font-mono flex-shrink-0 relative z-[2] ${isWrong ? (isDark ? 'text-white/30' : 'text-fg/30') : isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg/60' : 'text-white/80'}`}>
             {team.record}
           </span>
         )}
 
-        {/* Score (live/final) */}
+        {/* Status icons — filled circle badges for correct/wrong, placed BEFORE score so scores align */}
+        {isCorrect && (
+          <span className="flex-shrink-0 relative z-[2] w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+            <Check className="w-3 h-3 text-white" strokeWidth={3} aria-hidden="true" />
+          </span>
+        )}
+        {isWrong && (
+          <span className="flex-shrink-0 relative z-[2] w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm">
+            <X className="w-3 h-3 text-white" strokeWidth={3} aria-hidden="true" />
+          </span>
+        )}
+        {isSelected && !isDecided && !isLive && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
+
+        {/* Score (live/final) — same size for both teams so they align vertically */}
         {(isLive || isDecided) && team.score !== null && team.score !== undefined && (
-          <span className={`text-sm font-mono font-bold flex-shrink-0 relative z-[2] ${isActualWinner ? 'text-white' : 'text-white/50'}`}>
+          <span className={`text-sm font-mono flex-shrink-0 relative z-[2] min-w-[24px] text-right ${
+            isActualWinner
+              ? `font-bold ${isWrong ? (isDark ? 'text-white/70' : 'text-fg/70') : 'text-white'}`
+              : `font-medium ${isWrong ? (isDark ? 'text-white/35' : 'text-fg/35') : (isCorrect ? 'text-white/50' : 'text-white/50')}`
+          }`}>
             {team.score}
           </span>
         )}
-
-        {/* Status icons */}
-        {isCorrect && <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
-        {isWrong && <X className="w-4 h-4 text-red-400 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
-        {isSelected && !isDecided && !isLive && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
       </div>
     );
   };
@@ -230,19 +252,21 @@ export default function BracketMatchup({
 
           if (isGameLive) {
             return (
-              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm ${isDark ? 'bg-red-500/10' : 'bg-red-50'}`} aria-live="polite" aria-label="Game in progress">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" aria-hidden="true" />
-                <span className="font-bold text-red-500">LIVE</span>
-                {s.statusDetail && <span className="text-fg/60">{s.statusDetail}</span>}
-                {s.clock && <span className="text-fg/50 font-mono">{s.clock}</span>}
+              <div className={`flex items-center gap-2 px-2.5 py-1.5 text-sm ${isDark ? 'bg-red-500/15' : 'bg-red-50'}`} aria-live="polite" aria-label="Game in progress">
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-bold tracking-wide">
+                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse flex-shrink-0" aria-hidden="true" />
+                  LIVE
+                </span>
+                {s.statusDetail && <span className={`font-medium ${isDark ? 'text-fg/70' : 'text-fg/60'}`}>{s.statusDetail}</span>}
+                {s.clock && <span className={`font-mono font-semibold ${isDark ? 'text-fg/80' : 'text-fg/70'}`}>{s.clock}</span>}
               </div>
             );
           }
 
           if (isFinal) {
             return (
-              <div className={`px-2.5 py-1.5 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
-                <span className="text-fg/60 font-medium">Final</span>
+              <div className={`flex items-center px-2.5 py-1.5 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
+                <span className={`font-semibold tracking-wide uppercase text-xs ${isDark ? 'text-fg/50' : 'text-fg/45'}`}>Final</span>
               </div>
             );
           }

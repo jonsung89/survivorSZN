@@ -138,6 +138,7 @@ async function initDb() {
         name TEXT,
         picks JSONB NOT NULL DEFAULT '{}',
         tiebreaker_value INTEGER,
+        tiebreaker_scores JSONB,
         total_score INTEGER NOT NULL DEFAULT 0,
         is_submitted BOOLEAN NOT NULL DEFAULT false,
         submitted_at TIMESTAMPTZ,
@@ -146,6 +147,8 @@ async function initDb() {
         UNIQUE(challenge_id, user_id, bracket_number)
       )
     `);
+
+    await client.query(`ALTER TABLE brackets ADD COLUMN IF NOT EXISTS tiebreaker_scores JSONB`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS bracket_results (

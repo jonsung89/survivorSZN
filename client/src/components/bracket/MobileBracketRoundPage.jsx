@@ -19,6 +19,7 @@ export default function MobileBracketRoundPage({
   champTeam,
   tiebreakerType,
   tiebreakerValue,
+  tiebreakerScores,
   onTiebreakerChange,
 }) {
   const getTeamsForSlot = (slot) => getMatchupTeams(slot, picks, tournamentData);
@@ -93,6 +94,7 @@ export default function MobileBracketRoundPage({
               <TiebreakerInput
                 type={tiebreakerType}
                 value={tiebreakerValue}
+                scores={tiebreakerScores}
                 onChange={onTiebreakerChange}
                 disabled={isReadOnly}
                 picks={picks}

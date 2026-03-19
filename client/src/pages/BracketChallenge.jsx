@@ -833,70 +833,64 @@ export default function BracketChallenge() {
             return (
               <div
                 key={member.id}
-                className={`glass-card rounded-xl p-4 flex items-center justify-between ${isMe ? 'border border-violet-500/20' : ''}`}
+                className={`glass-card rounded-xl p-3 sm:p-4 ${isMe ? 'border border-violet-500/20' : ''}`}
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-3">
                   <Avatar
                     userId={member.userId}
                     name={member.displayName || '?'}
                     imageUrl={member.profileImageUrl}
                     size="md"
                   />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-medium truncate ${isMe ? 'text-violet-400' : 'text-fg'}`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-base font-semibold truncate ${isMe ? (isDark ? 'text-violet-400' : 'text-violet-600') : 'text-fg'}`}>
                         {member.displayName || 'Anonymous'}
                       </span>
-                      {isMe && <span className="text-xs text-violet-400/60">(you)</span>}
+                      {isMe && <span className="text-sm font-medium flex-shrink-0" style={{ color: isDark ? 'rgba(167,139,250,0.6)' : 'rgba(109,40,217,0.5)' }}>(you)</span>}
                       {memberCommissioner && (
-                        <span className="inline-flex items-center gap-0.5 text-xs text-amber-400">
-                          <Crown className="w-3 h-3" />
+                        <span className="inline-flex items-center text-amber-400 flex-shrink-0">
+                          <Crown className="w-3.5 h-3.5" />
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-fg/40 mt-0.5 truncate">
+                    <p className="text-sm text-fg/50 truncate">
                       {member.firstName && member.lastName
                         ? `${member.firstName} ${member.lastName}`
                         : member.email}
                     </p>
+                    <p className={`text-sm mt-0.5 ${bracketCount > 0 ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : 'text-fg/30'}`}>
+                      {bracketCount > 0
+                        ? `${bracketCount} bracket${bracketCount !== 1 ? 's' : ''} submitted`
+                        : 'No brackets submitted'}
+                    </p>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <div className="text-sm text-fg/40 text-right">
-                    {bracketCount > 0 ? (
-                      <span className="text-emerald-400">{bracketCount} bracket{bracketCount !== 1 ? 's' : ''} submitted</span>
-                    ) : (
-                      <span>No brackets submitted</span>
-                    )}
-                  </div>
-
-                {/* Payment toggle (commissioner only, when entry fee > 0) */}
-                {isCommissioner && entryFee > 0 && (
-                  <button
-                    onClick={() => handleTogglePayment(member)}
-                    disabled={togglingPayment === member.id}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 flex-shrink-0 ${
-                      member.hasPaid
-                        ? 'bg-fg/10 text-green-500 hover:bg-fg/15'
-                        : 'bg-fg/10 text-fg/60 hover:bg-fg/15'
-                    }`}
-                  >
-                    {togglingPayment === member.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : member.hasPaid ? (
-                      <>
-                        <Check className="w-4 h-4" />
-                        Paid
-                      </>
-                    ) : (
-                      <>
-                        <DollarSign className="w-4 h-4" />
-                        Mark Paid
-                      </>
-                    )}
-                  </button>
-                )}
+                  {/* Payment toggle (commissioner only, when entry fee > 0) */}
+                  {isCommissioner && entryFee > 0 && (
+                    <button
+                      onClick={() => handleTogglePayment(member)}
+                      disabled={togglingPayment === member.id}
+                      className={`px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 flex-shrink-0 ${
+                        member.hasPaid
+                          ? isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-50 text-emerald-700'
+                          : isDark ? 'bg-fg/10 text-fg/60 hover:bg-fg/15' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >
+                      {togglingPayment === member.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : member.hasPaid ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Paid
+                        </>
+                      ) : (
+                        <>
+                          <DollarSign className="w-4 h-4" />
+                          Mark Paid
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             );

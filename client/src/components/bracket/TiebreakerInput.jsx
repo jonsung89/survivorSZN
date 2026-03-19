@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Trophy } from 'lucide-react';
 import { getChildSlots } from '../../utils/bracketSlots';
 
-export default function TiebreakerInput({ type, value, onChange, disabled, picks, tournamentData }) {
+export default function TiebreakerInput({ type, value, scores, onChange, disabled, picks, tournamentData }) {
   if (type !== 'total_score') return null;
 
   // Get the two championship teams from picks (slot 63's children are slots 61, 62)
@@ -17,14 +17,21 @@ export default function TiebreakerInput({ type, value, onChange, disabled, picks
 
   const [score1, setScore1] = useState('');
   const [score2, setScore2] = useState('');
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    if (value && !score1 && !score2) {
+    if (initialized) return;
+    if (scores?.score1 != null && scores?.score2 != null) {
+      setScore1(String(scores.score1));
+      setScore2(String(scores.score2));
+      setInitialized(true);
+    } else if (value && !score1 && !score2) {
       const half = Math.floor(value / 2);
       setScore1(String(half + (value % 2)));
       setScore2(String(half));
+      setInitialized(true);
     }
-  }, [value]);
+  }, [value, scores]);
 
   const handleScoreChange = (which, val) => {
     const numVal = val === '' ? '' : val;
@@ -37,9 +44,9 @@ export default function TiebreakerInput({ type, value, onChange, disabled, picks
     const n1 = parseInt(s1) || 0;
     const n2 = parseInt(s2) || 0;
     if (n1 > 0 && n2 > 0) {
-      onChange(n1 + n2);
+      onChange(n1 + n2, { score1: n1, score2: n2 });
     } else {
-      onChange(null);
+      onChange(null, null);
     }
   };
 

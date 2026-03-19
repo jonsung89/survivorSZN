@@ -14,6 +14,7 @@ export default function MobileBracketNav({
   champTeam,
   tiebreakerType,
   tiebreakerValue,
+  tiebreakerScores,
   onTiebreakerChange,
 }) {
   const [roundIdx, setRoundIdx] = useState(0);
@@ -167,6 +168,7 @@ export default function MobileBracketNav({
             champTeam={champTeam}
             tiebreakerType={tiebreakerType}
             tiebreakerValue={tiebreakerValue}
+            tiebreakerScores={tiebreakerScores}
             onTiebreakerChange={onTiebreakerChange}
           />
         </div>

@@ -21,6 +21,7 @@ export default function BracketView({
   isReadOnly,
   tiebreakerType,
   tiebreakerValue,
+  tiebreakerScores,
   onTiebreakerChange,
 }) {
   const [mobileTab, setMobileTab] = useState(0);
@@ -512,6 +513,7 @@ export default function BracketView({
                       <TiebreakerInput
                         type={tiebreakerType}
                         value={tiebreakerValue}
+                        scores={tiebreakerScores}
                         onChange={onTiebreakerChange}
                         disabled={isReadOnly}
                         picks={picks}
@@ -587,6 +589,7 @@ export default function BracketView({
                     <TiebreakerInput
                       type={tiebreakerType}
                       value={tiebreakerValue}
+                      scores={tiebreakerScores}
                       onChange={onTiebreakerChange}
                       disabled={isReadOnly}
                       picks={picks}
@@ -685,7 +688,7 @@ export default function BracketView({
               {/* Progress indicator */}
               <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
                 isComplete
-                  ? 'bg-emerald-500/20 text-emerald-400'
+                  ? 'bg-emerald-500 text-white'
                   : isActive
                     ? 'bg-white/20 text-white/80'
                     : 'bg-fg/8 text-fg/60'
@@ -818,6 +821,7 @@ export default function BracketView({
           })()}
           tiebreakerType={tiebreakerType}
           tiebreakerValue={tiebreakerValue}
+          tiebreakerScores={tiebreakerScores}
           onTiebreakerChange={onTiebreakerChange}
         />
       </div>

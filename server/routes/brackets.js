@@ -387,7 +387,7 @@ router.put('/:bracketId', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Tournament has already started — brackets are locked' });
     }
 
-    const { picks, tiebreakerValue, name } = req.body;
+    const { picks, tiebreakerValue, tiebreakerScores, name } = req.body;
 
     const updates = [];
     const values = [];
@@ -410,6 +410,11 @@ router.put('/:bracketId', authMiddleware, async (req, res) => {
     if (tiebreakerValue !== undefined) {
       updates.push(`tiebreaker_value = $${idx++}`);
       values.push(tiebreakerValue);
+    }
+
+    if (tiebreakerScores !== undefined) {
+      updates.push(`tiebreaker_scores = $${idx++}`);
+      values.push(JSON.stringify(tiebreakerScores));
     }
 
     if (name !== undefined) {
@@ -495,7 +500,7 @@ router.post('/:bracketId/reset', authMiddleware, async (req, res) => {
     }
 
     const updated = await db.getOne(`
-      UPDATE brackets SET picks = '{}', tiebreaker_value = NULL, is_submitted = false, submitted_at = NULL, updated_at = NOW()
+      UPDATE brackets SET picks = '{}', tiebreaker_value = NULL, tiebreaker_scores = NULL, is_submitted = false, submitted_at = NULL, updated_at = NOW()
       WHERE id = $1 RETURNING *
     `, [bracket.id]);
 

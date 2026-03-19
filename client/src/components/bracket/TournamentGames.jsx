@@ -138,7 +138,7 @@ const SEASON_STATS_CONFIG = [
   { key: 'avgAssists', label: 'APG' },
 ];
 
-export default function TournamentGames({ tournamentData, season, leaderboard = [] }) {
+export default function TournamentGames({ tournamentData, season, leaderboard = [], prospects = [] }) {
   const { isDark } = useTheme();
   const tl = useThemedLogo();
   const tc = useThemedColor();
@@ -173,37 +173,57 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
   const pickDistribution = useMemo(() => {
     if (!leaderboard?.length || !tournamentData?.slots) return {};
     const teams = tournamentData.teams || {};
+    // Round slot ranges: [start, end] for each round
+    const roundRanges = [[1,32],[33,48],[49,56],[57,60],[61,62],[63,63]];
+    const getRoundRange = (s) => roundRanges.find(([a, b]) => s >= a && s <= b) || [1, 32];
+
     const dist = {};
     for (const [slotNum, slotData] of Object.entries(tournamentData.slots)) {
       const slot = parseInt(slotNum);
       const team1Id = slotData.team1?.id ? String(slotData.team1.id) : null;
       const team2Id = slotData.team2?.id ? String(slotData.team2.id) : null;
-      const team1Seed = slotData.team1?.seed;
-      const team2Seed = slotData.team2?.seed;
       const team1Pickers = [];
       const team2Pickers = [];
+      const [roundStart, roundEnd] = getRoundRange(slot);
 
       for (const entry of leaderboard) {
-        const pick = entry.picks?.[slot] || entry.picks?.[String(slot)];
-        if (!pick) continue;
-        const pickStr = String(pick);
+        const picks = entry.picks || {};
         const picker = { displayName: entry.displayName, bracketName: entry.bracketName };
 
-        // Direct ID match
-        if (pickStr === team1Id) {
-          team1Pickers.push(picker);
-        } else if (pickStr === team2Id) {
-          team2Pickers.push(picker);
-        } else {
-          // Stale ID — resolve by matching the picked team's seed to slot team seeds
-          const pickedTeam = teams[pickStr];
-          if (pickedTeam?.seed && team1Seed && pickedTeam.seed === team1Seed) {
+        // Search all picks within this round's slot range for a direct team ID match.
+        // Picks are keyed by challenge slot numbers which may differ from live slot numbers
+        // (ESPN can reorder regions between when brackets were filled and the live tournament).
+        let matched = false;
+        for (let s = roundStart; s <= roundEnd; s++) {
+          const p = picks[s] || picks[String(s)];
+          if (!p) continue;
+          const pStr = String(p);
+          if (pStr === team1Id) {
             team1Pickers.push(picker);
-          } else if (pickedTeam?.seed && team2Seed && pickedTeam.seed === team2Seed) {
+            matched = true;
+            break;
+          } else if (pStr === team2Id) {
             team2Pickers.push(picker);
-          } else {
-            // Last resort: assign to team2 (lower seed / underdog)
-            team2Pickers.push(picker);
+            matched = true;
+            break;
+          }
+        }
+
+        // Fallback for stale picks (team IDs changed after field finalization):
+        // check the same-numbered slot for seed matching
+        if (!matched) {
+          const pick = picks[slot] || picks[String(slot)];
+          if (pick) {
+            const pickedTeam = teams[String(pick)];
+            if (pickedTeam?.seed) {
+              const team1Seed = slotData.team1?.seed;
+              const team2Seed = slotData.team2?.seed;
+              if (team1Seed && pickedTeam.seed === team1Seed) {
+                team1Pickers.push(picker);
+              } else if (team2Seed && pickedTeam.seed === team2Seed) {
+                team2Pickers.push(picker);
+              }
+            }
           }
         }
       }
@@ -251,6 +271,36 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
       total,
     };
   }, [eventToSlot, pickDistribution, tournamentData]);
+
+  // Map prospects to games by team ID
+  const prospectsByGame = useMemo(() => {
+    if (!prospects?.length) return {};
+    const map = {};
+    for (const p of prospects) {
+      if (!p.teamId) continue;
+      // Find games where this prospect's team is playing
+      for (const tg of (p.tournamentGames || [])) {
+        if (tg.gameId) {
+          if (!map[tg.gameId]) map[tg.gameId] = { away: [], home: [] };
+          // We'll assign away/home when rendering since we need the game object
+          if (!map[tg.gameId]._all) map[tg.gameId]._all = [];
+          map[tg.gameId]._all.push({ ...p, gameStats: tg.stats, gameResult: tg.result });
+        }
+      }
+      // Also check currentGame for live games
+      if (p.currentGame?.gameId) {
+        const gid = p.currentGame.gameId;
+        if (!map[gid]) map[gid] = { away: [], home: [] };
+        if (!map[gid]._all) map[gid]._all = [];
+        // Only add if not already present from tournamentGames
+        if (!map[gid]._all.find(x => x.name === p.name)) {
+          map[gid]._all.push({ ...p, gameStats: p.currentGame.prospectStats, gameResult: 'LIVE' });
+        }
+      }
+    }
+    return map;
+  }, [prospects]);
+
   const [sheetOpen, setSheetOpen] = useState(false); // controls entry animation
   const [sheetClosing, setSheetClosing] = useState(false); // controls exit animation
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -595,7 +645,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
           openGameDialog(game);
         }}
         className={`
-          flex-shrink-0 glass-card rounded-xl p-3 sm:p-4 w-[220px] sm:w-[270px] cursor-pointer transition-all hover:bg-fg/5 text-left
+          flex-shrink-0 glass-card rounded-xl p-3 sm:p-4 w-[280px] sm:w-[340px] cursor-pointer transition-all hover:bg-fg/5 text-left
           ${live ? 'ring-1 ring-red-500/30' : ''}
         `}
       >
@@ -702,6 +752,62 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
               <div className="flex justify-between mt-0.5">
                 <span className="text-[11px] sm:text-sm text-fg/40">{dist.awayPicks.length} pick{dist.awayPicks.length !== 1 ? 's' : ''}</span>
                 <span className="text-[11px] sm:text-sm text-fg/40">{dist.homePicks.length} pick{dist.homePicks.length !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
+          );
+        })()}
+        {/* NBA Prospect Watch — hidden for now */}
+        {(() => {
+          return null;
+          const gameProspects = prospectsByGame[String(game.id)];
+          if (!gameProspects?._all?.length) return null;
+          const awayId = String(game.awayTeam?.id);
+          const awayProspects = gameProspects._all.filter(p => String(p.teamId) === awayId).slice(0, 3);
+          const homeProspects = gameProspects._all.filter(p => String(p.teamId) !== awayId).slice(0, 3);
+          if (!awayProspects.length && !homeProspects.length) return null;
+          const hasStats = live || isPast;
+
+          const renderProspect = (p, teamColor) => {
+            const initials = p.name?.split(' ').map((n, i, a) => i === a.length - 1 ? n : n[0] + '.').join(' ') || p.name;
+            return (
+              <div key={p.name} className="flex items-center gap-1.5 min-w-0">
+                <span
+                  className="text-[11px] sm:text-sm font-bold flex-shrink-0 w-5 text-center rounded"
+                  style={{ color: teamColor }}
+                >
+                  #{p.rank}
+                </span>
+                {p.headshot ? (
+                  <img src={p.headshot} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0 bg-fg/10" />
+                ) : (
+                  <div className="w-5 h-5 rounded-full flex-shrink-0 bg-fg/10" />
+                )}
+                <span className="text-sm text-fg/80 truncate flex-1 font-medium">{initials}</span>
+                {hasStats && p.gameStats ? (
+                  <span className="text-sm text-fg/60 flex-shrink-0">
+                    {p.gameStats.pts ?? 0}<span className="text-fg/30">p</span>{' '}
+                    {p.gameStats.reb ?? 0}<span className="text-fg/30">r</span>{' '}
+                    {p.gameStats.ast ?? 0}<span className="text-fg/30">a</span>
+                  </span>
+                ) : p.seasonStats?.ppg != null ? (
+                  <span className="text-sm text-fg/40 flex-shrink-0">{p.seasonStats.ppg} ppg</span>
+                ) : null}
+              </div>
+            );
+          };
+
+          return (
+            <div className="mt-2 pt-2 border-t border-fg/10" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <img src="/logos/nba.png" alt="NBA" className="w-4 h-4 object-contain opacity-50" />
+                <span className="text-[11px] sm:text-sm font-semibold text-fg/40 uppercase tracking-wider">NBA Prospects</span>
+              </div>
+              <div className="space-y-1">
+                {awayProspects.map(p => renderProspect(p, tc(game.awayTeam)))}
+                {awayProspects.length > 0 && homeProspects.length > 0 && (
+                  <div className="border-t border-fg/5 my-1" />
+                )}
+                {homeProspects.map(p => renderProspect(p, tc(game.homeTeam)))}
               </div>
             </div>
           );

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil, Lock, RotateCcw, History, Copy, ExternalLink, ChevronDown } from 'lucide-react';
 import { bracketAPI, leagueAPI } from '../api';
@@ -163,6 +163,31 @@ export default function BracketChallenge() {
     const interval = setInterval(refreshResults, 30000);
     return () => clearInterval(interval);
   }, [isTournamentLocked, challenge?.id]);
+
+  // Fetch NBA prospect tournament data — disabled for now
+  const prospectTimerRef = useRef(null);
+  useEffect(() => {
+    if (true) return; // disabled — prospects hidden from game cards
+    if (!isTournamentLocked || !challenge?.season) return;
+    const fetchProspects = async () => {
+      try {
+        const data = await bracketAPI.getProspectWatch(challenge.season);
+        setProspects(data?.prospects || []);
+        // Auto-refresh if any prospect is currently playing
+        const hasLive = (data?.prospects || []).some(p => p.isPlaying);
+        if (hasLive) {
+          prospectTimerRef.current = setTimeout(fetchProspects, 60000);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchProspects();
+    // Also refresh every 5 minutes even without live games
+    const interval = setInterval(fetchProspects, 300000);
+    return () => {
+      clearInterval(interval);
+      if (prospectTimerRef.current) clearTimeout(prospectTimerRef.current);
+    };
+  }, [isTournamentLocked, challenge?.season]);
 
   // Selection Show countdown (date fetched from ESPN standings API)
   useEffect(() => {
@@ -463,7 +488,7 @@ export default function BracketChallenge() {
 
       {/* Tournament Games — show when tournament has started (regardless of challenge status) */}
       {isTournamentLocked && (
-        <TournamentGames tournamentData={tournamentData} season={challenge?.season} leaderboard={leaderboard} />
+        <TournamentGames tournamentData={tournamentData} season={challenge?.season} leaderboard={leaderboard} prospects={prospects} />
       )}
 
       {/* Prospect Watch — NBA draft prospects in the tournament (hidden for now)

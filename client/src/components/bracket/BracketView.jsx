@@ -288,7 +288,7 @@ export default function BracketView({
   const renderStickyRoundHeaders = () => {
     if (focusMode) return null;
     const leftRounds = topLeft.rounds;
-    const rightRounds = [...topRight.rounds].reverse();
+    const rightRounds = topRight.rounds;
     return (
       <div
         ref={roundHeadersRef}

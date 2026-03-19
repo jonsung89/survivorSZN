@@ -1000,9 +1000,9 @@ export default function BracketChallenge() {
       {/* Share Modal */}
       {/* Payment Status Dialog */}
       {showPaymentStatus && entryFee > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowPaymentStatus(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pb-20" onClick={() => setShowPaymentStatus(false)}>
           <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-surface rounded-2xl shadow-2xl w-full max-w-sm max-h-[70vh] overflow-hidden animate-in" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-surface rounded-2xl shadow-2xl w-full max-w-sm max-h-[60vh] overflow-hidden animate-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-fg/10">
               <div>
                 <h3 className="text-lg font-bold text-fg">Payment Status</h3>
@@ -1012,7 +1012,7 @@ export default function BracketChallenge() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="overflow-y-auto max-h-[calc(70vh-64px)] p-2">
+            <div className="overflow-y-auto max-h-[calc(60vh-64px)] p-2 pb-6">
               {/* Paid members first, then unpaid */}
               {[...members].sort((a, b) => (b.hasPaid ? 1 : 0) - (a.hasPaid ? 1 : 0)).map(member => (
                 <div key={member.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg">

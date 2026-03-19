@@ -1171,6 +1171,7 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
         tiebreakerScores: b.tiebreaker_scores || null,
         championTeamId: picks[63] || picks['63'] || null,
         finalFourPicks,
+        picks,
         isCurrentUser: b.user_id === user.id,
       };
     });

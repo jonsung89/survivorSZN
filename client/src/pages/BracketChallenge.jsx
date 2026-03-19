@@ -461,7 +461,7 @@ export default function BracketChallenge() {
 
       {/* Tournament Games — show when tournament has started (regardless of challenge status) */}
       {isTournamentLocked && (
-        <TournamentGames tournamentData={tournamentData} season={challenge?.season} />
+        <TournamentGames tournamentData={tournamentData} season={challenge?.season} leaderboard={leaderboard} />
       )}
 
       {/* Countdown + Prize Pot — side by side on desktop */}

@@ -138,7 +138,7 @@ const SEASON_STATS_CONFIG = [
   { key: 'avgAssists', label: 'APG' },
 ];
 
-export default function TournamentGames({ tournamentData, season }) {
+export default function TournamentGames({ tournamentData, season, leaderboard = [] }) {
   const { isDark } = useTheme();
   const tl = useThemedLogo();
   const tc = useThemedColor();
@@ -153,6 +153,68 @@ export default function TournamentGames({ tournamentData, season }) {
   const [statRankingDialog, setStatRankingDialog] = useState(null);
   const [matchupDialog, setMatchupDialog] = useState(null); // { slot, team1, team2 }
   const [gameFilter, setGameFilter] = useState('all'); // 'all' | 'live' | 'scheduled' | 'final'
+  const [pickBreakdownGame, setPickBreakdownGame] = useState(null); // game object for pick breakdown dialog
+
+  // Build espnEventId → slotNumber mapping
+  const eventToSlot = useMemo(() => {
+    const map = {};
+    if (!tournamentData?.slots) return map;
+    for (const [slotNum, slotData] of Object.entries(tournamentData.slots)) {
+      if (slotData?.espnEventId) {
+        map[String(slotData.espnEventId)] = parseInt(slotNum);
+      }
+    }
+    return map;
+  }, [tournamentData]);
+
+  // Build pick distribution for each slot: { slotNumber: { teamId: [{ displayName, bracketName }], ... } }
+  const pickDistribution = useMemo(() => {
+    if (!leaderboard?.length || !tournamentData?.slots) return {};
+    const dist = {};
+    for (const [slotNum, slotData] of Object.entries(tournamentData.slots)) {
+      const slot = parseInt(slotNum);
+      const teamPicks = {};
+      // Get the two team IDs for this slot
+      const team1Id = slotData.team1?.id ? String(slotData.team1.id) : null;
+      const team2Id = slotData.team2?.id ? String(slotData.team2.id) : null;
+      if (team1Id) teamPicks[team1Id] = [];
+      if (team2Id) teamPicks[team2Id] = [];
+
+      for (const entry of leaderboard) {
+        const pick = entry.picks?.[slot] || entry.picks?.[String(slot)];
+        if (pick) {
+          const pickStr = String(pick);
+          if (!teamPicks[pickStr]) teamPicks[pickStr] = [];
+          teamPicks[pickStr].push({ displayName: entry.displayName, bracketName: entry.bracketName });
+        }
+      }
+      dist[slot] = teamPicks;
+    }
+    return dist;
+  }, [leaderboard, tournamentData]);
+
+  // Helper: get pick distribution for a game
+  const getGamePickDist = useCallback((game) => {
+    const slot = eventToSlot[String(game.id)];
+    if (slot === undefined) return null;
+    const dist = pickDistribution[slot];
+    if (!dist) return null;
+
+    const awayId = String(game.awayTeam?.id);
+    const homeId = String(game.homeTeam?.id);
+    const awayPicks = dist[awayId] || [];
+    const homePicks = dist[homeId] || [];
+    const total = awayPicks.length + homePicks.length;
+    if (total === 0) return null;
+
+    return {
+      awayId, homeId,
+      awayPicks, homePicks,
+      awayPct: Math.round((awayPicks.length / total) * 100),
+      homePct: Math.round((homePicks.length / total) * 100),
+      total,
+    };
+  }, [eventToSlot, pickDistribution]);
   const [sheetOpen, setSheetOpen] = useState(false); // controls entry animation
   const [sheetClosing, setSheetClosing] = useState(false); // controls exit animation
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -461,7 +523,7 @@ export default function TournamentGames({ tournamentData, season }) {
           openGameDialog(game);
         }}
         className={`
-          flex-shrink-0 glass-card rounded-xl p-3 sm:p-4 w-[200px] sm:w-[240px] cursor-pointer transition-all hover:bg-fg/5 text-left
+          flex-shrink-0 glass-card rounded-xl p-3 sm:p-4 w-[220px] sm:w-[270px] cursor-pointer transition-all hover:bg-fg/5 text-left
           ${live ? 'ring-1 ring-red-500/30' : ''}
         `}
       >
@@ -524,6 +586,54 @@ export default function TournamentGames({ tournamentData, season }) {
           )}
           {!live && !isPast && game.broadcast && <BroadcastIcon broadcast={game.broadcast} />}
         </div>
+        {/* Pick Distribution Bar */}
+        {(() => {
+          const dist = getGamePickDist(game);
+          if (!dist) return null;
+          const awayColor = tc(game.awayTeam);
+          const homeColor = tc(game.homeTeam);
+          return (
+            <div
+              className="mt-2 pt-2 border-t border-fg/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPickBreakdownGame(game);
+              }}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold text-fg/60 w-8 text-right">{dist.awayPct}%</span>
+                <div className="flex-1 h-2.5 rounded-full overflow-hidden flex bg-fg/10">
+                  {dist.awayPct > 0 && (
+                    <div
+                      className="h-full transition-all duration-300"
+                      style={{
+                        width: `${dist.awayPct}%`,
+                        backgroundColor: awayColor,
+                        backgroundImage: 'repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 5px)',
+                        borderRadius: dist.homePct === 0 ? '9999px' : '9999px 0 0 9999px',
+                      }}
+                    />
+                  )}
+                  {dist.homePct > 0 && (
+                    <div
+                      className="h-full transition-all duration-300"
+                      style={{
+                        width: `${dist.homePct}%`,
+                        backgroundColor: homeColor,
+                        borderRadius: dist.awayPct === 0 ? '9999px' : '0 9999px 9999px 0',
+                      }}
+                    />
+                  )}
+                </div>
+                <span className="text-sm font-bold text-fg/60 w-8">{dist.homePct}%</span>
+              </div>
+              <div className="flex justify-between mt-0.5">
+                <span className="text-[11px] sm:text-sm text-fg/40">{dist.awayPicks.length} pick{dist.awayPicks.length !== 1 ? 's' : ''}</span>
+                <span className="text-[11px] sm:text-sm text-fg/40">{dist.homePicks.length} pick{dist.homePicks.length !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
+          );
+        })()}
       </button>
     );
   };
@@ -723,7 +833,7 @@ export default function TournamentGames({ tournamentData, season }) {
                 <div className="flex-1 h-3 rounded-full overflow-hidden flex">
                   <div className="h-full transition-all duration-300" style={{
                     width: `${awayPct}%`, backgroundColor: awayColor,
-                    backgroundImage: `repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(255,255,255,0.15) 3px, rgba(255,255,255,0.15) 5px)`
+                    backgroundImage: `repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 5px)`
                   }} />
                   <div className="h-full transition-all duration-300" style={{ width: `${homePct}%`, backgroundColor: homeColor }} />
                 </div>
@@ -1189,6 +1299,134 @@ export default function TournamentGames({ tournamentData, season }) {
           onClose={() => setMatchupDialog(null)}
           isReadOnly
         />,
+        document.body
+      )}
+
+      {/* Pick Breakdown Dialog — portaled to body */}
+      {pickBreakdownGame && createPortal(
+        <div
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setPickBreakdownGame(null)}
+        >
+          <div
+            className={`${isDark ? 'bg-gray-900' : 'bg-white'} rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[80vh] overflow-hidden flex flex-col shadow-2xl border border-fg/10`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-fg/10 flex-shrink-0">
+              <span className="text-base font-semibold text-fg">Pick Distribution</span>
+              <button onClick={() => setPickBreakdownGame(null)} className="p-1.5 rounded-lg hover:bg-fg/10 transition-colors">
+                <X className="w-5 h-5 text-fg/60" />
+              </button>
+            </div>
+            {/* Content */}
+            <div className="p-4 overflow-y-auto flex-1 overscroll-contain">
+              {(() => {
+                const game = pickBreakdownGame;
+                const dist = getGamePickDist(game);
+                if (!dist) return <div className="text-center text-fg/40 text-sm py-4">No picks data available</div>;
+
+                const awayColor = tc(game.awayTeam);
+                const homeColor = tc(game.homeTeam);
+
+                return (
+                  <div className="space-y-4">
+                    {/* Bar */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {game.awayTeam?.logo && <img src={tl(game.awayTeam.logo)} alt="" className="w-5 h-5 object-contain" />}
+                          <span className="text-sm font-semibold text-fg">{game.awayTeam?.abbreviation}</span>
+                        </div>
+                        <span className="text-sm font-bold text-fg ml-auto">{dist.awayPct}%</span>
+                      </div>
+                      <div className="h-4 rounded-full overflow-hidden flex bg-fg/10 mb-1">
+                        {dist.awayPct > 0 && (
+                          <div
+                            className="h-full transition-all duration-300"
+                            style={{
+                              width: `${dist.awayPct}%`,
+                              backgroundColor: awayColor,
+                              backgroundImage: 'repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 5px)',
+                              borderRadius: dist.homePct === 0 ? '9999px' : '9999px 0 0 9999px',
+                            }}
+                          />
+                        )}
+                        {dist.homePct > 0 && (
+                          <div
+                            className="h-full transition-all duration-300"
+                            style={{
+                              width: `${dist.homePct}%`,
+                              backgroundColor: homeColor,
+                              borderRadius: dist.awayPct === 0 ? '9999px' : '0 9999px 9999px 0',
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 justify-end">
+                        <span className="text-sm font-bold text-fg">{dist.homePct}%</span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm font-semibold text-fg">{game.homeTeam?.abbreviation}</span>
+                          {game.homeTeam?.logo && <img src={tl(game.homeTeam.logo)} alt="" className="w-5 h-5 object-contain" />}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Member breakdown */}
+                    <div className="space-y-3">
+                      {/* Away team picks */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: awayColor }} />
+                          {game.awayTeam?.logo && <img src={tl(game.awayTeam.logo)} alt="" className="w-5 h-5 object-contain" />}
+                          <span className="text-sm font-semibold text-fg">{game.awayTeam?.abbreviation || game.awayTeam?.name}</span>
+                          <span className="text-sm text-fg/50 ml-auto">{dist.awayPicks.length} pick{dist.awayPicks.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        {dist.awayPicks.length > 0 ? (
+                          <div className="space-y-1 pl-5">
+                            {dist.awayPicks.map((p, i) => (
+                              <div key={i} className="flex items-center gap-2 py-1">
+                                <Users className="w-3.5 h-3.5 text-fg/30" />
+                                <span className="text-sm text-fg">{p.displayName}</span>
+                                {p.bracketName && <span className="text-sm text-fg/40">({p.bracketName})</span>}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="pl-5 text-sm text-fg/30">No picks</div>
+                        )}
+                      </div>
+
+                      {/* Home team picks */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: homeColor }} />
+                          {game.homeTeam?.logo && <img src={tl(game.homeTeam.logo)} alt="" className="w-5 h-5 object-contain" />}
+                          <span className="text-sm font-semibold text-fg">{game.homeTeam?.abbreviation || game.homeTeam?.name}</span>
+                          <span className="text-sm text-fg/50 ml-auto">{dist.homePicks.length} pick{dist.homePicks.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        {dist.homePicks.length > 0 ? (
+                          <div className="space-y-1 pl-5">
+                            {dist.homePicks.map((p, i) => (
+                              <div key={i} className="flex items-center gap-2 py-1">
+                                <Users className="w-3.5 h-3.5 text-fg/30" />
+                                <span className="text-sm text-fg">{p.displayName}</span>
+                                {p.bracketName && <span className="text-sm text-fg/40">({p.bracketName})</span>}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="pl-5 text-sm text-fg/30">No picks</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>,
         document.body
       )}
     </div>

@@ -1673,11 +1673,13 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       )}
                     </p>
                     <p className="text-fg/50 text-sm truncate">
-                      {messages[messages.length - 1]?.gif 
-                        ? 'Sent a GIF 🎞️' 
+                      {messages[messages.length - 1]?.gif
+                        ? 'Sent a GIF 🎞️'
                         : messages[messages.length - 1]?.message === '[GIF]'
                           ? 'Sent a GIF 🎞️'
-                          : messages[messages.length - 1]?.message || 'No messages yet'
+                          : (messages[messages.length - 1]?.messageType === 'bracket_share' || messages[messages.length - 1]?.message_type === 'bracket_share')
+                            ? 'Shared their bracket picks 🏀'
+                            : messages[messages.length - 1]?.message || 'No messages yet'
                       }
                     </p>
                   </>

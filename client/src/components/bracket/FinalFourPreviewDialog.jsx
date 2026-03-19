@@ -74,8 +74,7 @@ export default function FinalFourPreviewDialog({ entry, tournamentData, eliminat
       bracketId: entry.bracketId,
     };
 
-    const champName = champion?.abbreviation || champion?.shortName || 'TBD';
-    sendMessage(leagueId, `🏆 My champion: ${champName}`, null, null, {
+    sendMessage(leagueId, '[Bracket]', null, null, {
       messageType: 'bracket_share',
       metadata,
     });

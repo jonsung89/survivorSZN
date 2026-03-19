@@ -1,19 +1,21 @@
-import { ROUND_BOUNDARIES } from '../../utils/bracketSlots';
+import { useTheme } from '../../context/ThemeContext';
 
 const ROUND_SHORT_NAMES = ['R64', 'R32', 'S16', 'E8', 'F4', 'CHAMP'];
 
 export default function BracketScoreHeader({ roundScores, totalScore, potentialPoints, scoringSystem, correctPicks, totalDecided }) {
+  const { isDark } = useTheme();
+
   return (
-    <div className="bg-fg/5 border border-fg/10 rounded-xl p-3 sm:p-4">
+    <div className={`rounded-xl p-3.5 sm:p-4 ${isDark ? 'bg-fg/[0.06] border border-fg/10' : 'bg-white border border-gray-200 shadow-sm'}`}>
       <div className="flex items-center justify-between mb-3">
         <div>
-          <span className="text-2xl font-display font-bold text-fg">{totalScore}</span>
-          <span className="text-fg/40 text-sm ml-2">pts</span>
+          <span className="text-3xl font-display font-bold text-fg">{totalScore}</span>
+          <span className={`text-base ml-2 ${isDark ? 'text-fg/50' : 'text-gray-500'}`}>pts</span>
         </div>
-        <div className="text-right text-sm">
-          <div className="text-fg/50">{correctPicks || 0}/{totalDecided || 0} correct</div>
+        <div className="text-right">
+          <div className={`text-sm font-medium ${isDark ? 'text-fg/60' : 'text-gray-600'}`}>{correctPicks || 0}/{totalDecided || 0} correct</div>
           {potentialPoints !== undefined && (
-            <div className="text-fg/40 text-sm">{potentialPoints} pts possible</div>
+            <div className={`text-sm ${isDark ? 'text-fg/45' : 'text-gray-500'}`}>{potentialPoints} pts possible</div>
           )}
         </div>
       </div>
@@ -27,11 +29,11 @@ export default function BracketScoreHeader({ roundScores, totalScore, potentialP
 
           return (
             <div key={name} className="text-center">
-              <div className="text-xs text-fg/40 mb-1">{name}</div>
-              <div className={`text-sm font-mono font-medium py-0.5 rounded ${score > 0 ? 'text-rank-good' : 'text-fg/30'}`}>
+              <div className={`text-sm font-medium mb-1 ${isDark ? 'text-fg/50' : 'text-gray-500'}`}>{name}</div>
+              <div className={`text-base font-mono font-semibold py-0.5 rounded ${score > 0 ? 'text-rank-good' : (isDark ? 'text-fg/30' : 'text-gray-400')}`}>
                 {score}
               </div>
-              <div className="text-[11px] text-fg/25 mt-0.5">/{maxPossible}</div>
+              <div className={`text-sm mt-0.5 ${isDark ? 'text-fg/30' : 'text-gray-400'}`}>/{maxPossible}</div>
             </div>
           );
         })}

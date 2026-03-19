@@ -5,6 +5,7 @@ import { bracketAPI, trackingAPI } from '../api';
 import { trackEvent } from '../utils/analytics';
 import { ROUND_BOUNDARIES } from '../utils/bracketSlots';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const TOTAL_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
 import { useToast } from '../components/Toast';
@@ -31,6 +32,7 @@ export default function BracketFill() {
   const { leagueId, bracketId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isDark } = useTheme();
   const { showToast } = useToast();
 
   const [bracket, setBracket] = useState(null);
@@ -392,8 +394,10 @@ export default function BracketFill() {
             </span>
           )}
           {bracket.is_submitted && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 text-sm font-medium">
-              <Lock className="w-3 h-3" /> Submitted
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-semibold ${
+              isDark ? 'bg-fg/10 text-fg/60' : 'bg-gray-100 text-gray-600'
+            }`}>
+              <Lock className="w-3.5 h-3.5" /> Submitted
             </span>
           )}
         </div>
@@ -473,7 +477,9 @@ export default function BracketFill() {
             {bracket?.is_submitted ? (
               /* Already submitted — show status + reset option */
               <div className="flex items-center gap-2">
-                <div className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 text-sm font-medium">
+                <div className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium ${
+                  isDark ? 'bg-fg/10 text-fg/60' : 'bg-gray-100 text-gray-600'
+                }`}>
                   <Check className="w-4 h-4" />
                   Submitted — edits save automatically
                 </div>

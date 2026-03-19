@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useScoresSocket } from '../context/ScoresSocketContext';
+import { scheduleAPI } from '../api';
 
 /**
  * useBracketLiveScores — Real-time score updates for bracket matchup cells.
@@ -98,6 +99,18 @@ export default function useBracketLiveScores(tournamentData) {
       unsubscribeScores('ncaab');
     };
   }, [hasSlots, socket, connected, subscribeScores, unsubscribeScores, handleScoreUpdate]);
+
+  // Initial fetch of current scores via REST (don't wait for websocket push)
+  useEffect(() => {
+    if (!hasSlots) return;
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    scheduleAPI.getScheduleByDate('ncaab', dateStr).then(result => {
+      if (!result?.games?.length) return;
+      // Simulate a score-update with all today's games
+      handleScoreUpdate({ sport: 'ncaab', games: result.games });
+    }).catch(() => {});
+  }, [hasSlots, handleScoreUpdate]);
 
   // Re-subscribe on reconnect
   useEffect(() => {

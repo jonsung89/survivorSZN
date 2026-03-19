@@ -1,5 +1,7 @@
 import { Check, X, Info, Play, Circle } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
+import { getSlotRound } from '../../utils/bracketSlots';
+import { SCORING_PRESETS } from '../../utils/bracketSlots';
 
 function hexToRgba(hex, alpha) {
   if (!hex) return undefined;
@@ -129,23 +131,29 @@ export default function BracketMatchup({
       // Busted: team eliminated in earlier round — gray out like wrong pick
       rowStyle.backgroundColor = isDark ? 'rgba(100, 100, 100, 0.35)' : 'rgba(140, 140, 140, 0.20)';
     } else if (isOtherPicked && !isDecided) {
-      // Gray out the non-selected team
+      // Gray background for non-selected team (keeps team distinguishable)
       rowStyle.backgroundColor = isLightMode ? 'rgba(150, 150, 150, 0.25)' : 'rgba(100, 100, 100, 0.30)';
     } else if (team.color) {
       // Show true team primary color (both default and selected states)
       rowStyle.backgroundColor = hexToRgba(team.color, trueAlpha);
     }
 
-    // Use white/dark-bg logo when on team color bg; use normal logo when grayed out
-    const isGrayedOut = (isOtherPicked && !isDecided) || isWrong || isBusted;
-    const teamLogo = isGrayedOut ? team.logo : getDarkBgLogo(team.logo);
+    // Use white/dark-bg logo when on team color bg; fade logo/text only for wrong/busted picks (not live/scheduled)
+    const isGrayedOut = isWrong || isBusted;
+    // Gray bg but full-opacity content for non-selected during scheduled/live
+    const hasGrayBg = (isOtherPicked && !isDecided) || isGrayedOut;
+    const teamLogo = hasGrayBg ? team.logo : getDarkBgLogo(team.logo);
 
     // Text color: white on team color, muted on gray
     // First Four placeholder teams have no real team color — use fg text in light mode
     const isFirstFourPlaceholder = team.isFirstFour;
+    // Slight fade for unselected team during live/scheduled (but not full gray-out)
+    const isSlightlyFaded = isOtherPicked && !isDecided && !isGrayedOut;
     const textColorClass = isWrong || isBusted
       ? (isDark ? 'text-white/50' : 'text-fg/50')
-      : isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg' : 'text-white';
+      : isSlightlyFaded ? 'text-fg/50'
+      : isGrayedOut ? 'text-fg/40'
+      : (isFirstFourPlaceholder && isLightMode) ? 'text-fg' : 'text-white';
 
     return (
       <div
@@ -178,7 +186,7 @@ export default function BracketMatchup({
 
         {/* Logo — white variant on team color bg, normal + faded on grayed out */}
         {team.logo ? (
-          <img src={teamLogo} alt="" className={`w-8 h-8 flex-shrink-0 object-contain relative z-[2] ${isGrayedOut ? 'opacity-40' : ''}`} />
+          <img src={teamLogo} alt="" className={`w-8 h-8 flex-shrink-0 object-contain relative z-[2] ${isGrayedOut ? 'opacity-40' : isSlightlyFaded ? 'opacity-50' : ''}`} />
         ) : (
           <div className="w-8 h-8 flex-shrink-0 rounded-full bg-fg/10 relative z-[2]" />
         )}
@@ -190,52 +198,61 @@ export default function BracketMatchup({
             : (team.shortName || team.name || team.abbreviation)}
         </span>
         {team.record && !isLive && !isDecided && (
-          <span className={`text-xs flex-shrink-0 relative z-[2] ${isWrong ? (isDark ? 'text-white/30' : 'text-fg/30') : isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg/60' : 'text-white/80'}`}>
+          <span className={`text-xs flex-shrink-0 relative z-[2] ${isWrong ? (isDark ? 'text-white/30' : 'text-fg/30') : isGrayedOut ? 'text-fg/40' : hasGrayBg ? 'text-fg/60' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg/60' : 'text-white/80'}`}>
             {team.record}
           </span>
         )}
 
-        {/* Pre-pick check (before game decided) */}
-        {isSelected && !isDecided && !isLive && !isBusted && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
+        {/* Pre-pick check (before game decided, not live) */}
+        {isSelected && !isDecided && !isLive && !isBusted && <Check className="w-5 h-5 text-white flex-shrink-0 relative z-[2]" strokeWidth={3} aria-hidden="true" />}
 
         {/* Score (live/final) — white square container with bold score */}
         {(isLive || isDecided) && team.score !== null && team.score !== undefined && (
           <span className={`flex-shrink-0 relative z-[2] min-w-[28px] h-7 flex items-center justify-center rounded px-1 text-base font-bold ${
-            isGrayedOut || isEliminated
-              ? 'bg-white/20 text-fg/40'
+            isLive ? 'bg-white/90 text-black'
+              : (isGrayedOut || isEliminated) ? 'bg-white/20 text-fg/40'
               : 'bg-white/90 text-black'
           }`}>
             {team.score}
           </span>
         )}
 
-        {/* Status icon slot — always w-5 for vertical alignment */}
-        {isCorrect ? (
-          <span className="flex-shrink-0 relative z-[2] w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
-            <Check className="w-3 h-3 text-white" strokeWidth={3} aria-hidden="true" />
-          </span>
-        ) : (isWrong || isBusted) ? (
-          <span className="flex-shrink-0 relative z-[2] w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm">
-            <X className="w-3 h-3 text-white" strokeWidth={3} aria-hidden="true" />
-          </span>
-        ) : isDecided ? (
-          <span className="w-5 h-5 flex-shrink-0" />
-        ) : null}
       </div>
     );
   };
 
-  // Show info button when at least one team is known (not both TBD)
-  const showInfoButton = (team1 || team2) && onDetailClick;
+  // Show info button when not read-only and at least one team is known
+  const showInfoButton = !isReadOnly && (team1 || team2) && onDetailClick;
   // Always reserve mobile spacer when onDetailClick exists (keeps cards aligned)
   const showMobileSpacer = !!onDetailClick;
 
   const matchupLabel = `Matchup: ${team1?.name || 'TBD'} vs ${team2?.name || 'TBD'}`;
 
+  // Compute pick status for external indicators
+  const getPickStatus = (team) => {
+    if (!team) return null;
+    const isSelected = String(pickedTeamId) === String(team.id);
+    const isTeamGloballyEliminated = eliminatedTeamIds.includes(String(team.id));
+    const isBusted = !isDecided && isSelected && isTeamGloballyEliminated;
+    if (isDecided) {
+      if (isSelected && String(winningTeamId) === String(team.id)) return 'correct';
+      if (isSelected && String(winningTeamId) !== String(team.id)) return 'wrong';
+      if (isBusted) return 'wrong';
+    }
+    // Show pick indicator for live/scheduled games
+    if (isLive && isSelected) return 'picked';
+    return null;
+  };
+  const team1Status = getPickStatus(team1);
+  const team2Status = getPickStatus(team2);
+
   return (
-    <div className="relative flex items-center gap-1.5 md:gap-0 group w-full" role="group" aria-label={matchupLabel}>
+    <div className="relative flex items-center gap-1 md:gap-0 group w-full" role="group" aria-label={matchupLabel}>
       {/* Card */}
-      <div className={`relative flex-1 md:flex-none md:w-full rounded-lg transition-all duration-150 shadow-md overflow-hidden bg-surface`}>
+      <div
+        className={`relative flex-1 md:flex-none md:w-full rounded-lg transition-all duration-150 shadow-md overflow-hidden bg-surface ${isReadOnly && onDetailClick ? 'cursor-pointer hover:brightness-105' : ''}`}
+        onClick={isReadOnly && onDetailClick ? (e) => { e.stopPropagation(); onDetailClick(); } : undefined}
+      >
         {/* Game status header */}
         {slotData && (() => {
           const s = slotData;
@@ -251,7 +268,7 @@ export default function BracketMatchup({
             const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
             return (
               <div className={`flex items-center justify-between px-2.5 py-1.5 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
-                <span className="text-fg/80">{dateStr} · {timeStr}</span>
+                <span className="text-fg">{dateStr} · {timeStr}</span>
                 {s.broadcast && <span className="text-fg/60 truncate ml-1">{s.broadcast}</span>}
               </div>
             );
@@ -270,9 +287,17 @@ export default function BracketMatchup({
           }
 
           if (isFinal) {
+            const pickStatus = team1Status || team2Status;
+            const round = getSlotRound(slot);
+            const pts = pickStatus === 'correct' ? (SCORING_PRESETS?.standard?.points?.[round] || [1,2,4,8,16,32][round] || 0) : 0;
             return (
-              <div className={`flex items-center px-2.5 py-1.5 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
-                <span className={`font-semibold tracking-wide uppercase text-xs ${isDark ? 'text-fg/50' : 'text-fg/45'}`}>Final</span>
+              <div className={`flex items-center justify-between px-2.5 py-1.5 text-sm ${isDark ? 'bg-fg/[0.08]' : 'bg-fg/[0.04]'}`}>
+                <span className="font-semibold tracking-wide uppercase text-sm text-fg">Final</span>
+                {pickStatus && (
+                  <span className={`font-bold text-base ${pickStatus === 'correct' ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {pickStatus === 'correct' ? `+${pts} pt${pts !== 1 ? 's' : ''}` : 'Wrong'}
+                  </span>
+                )}
               </div>
             );
           }
@@ -284,33 +309,90 @@ export default function BracketMatchup({
         {renderTeamRow(team2, 'bottom')}
       </div>
 
-      {/* Mobile: info button outside the card on the right (or invisible spacer to keep alignment) */}
-      {showInfoButton ? (
-        <button
-          onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
-          className={`flex-shrink-0 p-1.5 rounded-full bg-fg/10 text-fg/40 active:bg-fg/20 md:hidden self-center ${slotData ? 'mt-7' : ''}`}
-          aria-label={`View details: ${team1?.name || 'TBD'} vs ${team2?.name || 'TBD'}`}
-        >
-          <Info className="w-4 h-4" aria-hidden="true" />
-        </button>
-      ) : showMobileSpacer ? (
-        <div className="flex-shrink-0 w-7 md:hidden" />
-      ) : null}
+      {/* Mobile: indicators + info button outside card */}
+      {(() => {
+        const hasStatus = team1Status || team2Status;
+        if (hasStatus) {
+          // Show check/X aligned with the picked team's row, info button on the other row
+          return (
+            <div className={`flex-shrink-0 flex flex-col items-center md:hidden w-6`} style={slotData ? { marginTop: '30px' } : undefined}>
+              <div className="flex items-center justify-center" style={{ height: '40px' }}>
+                {team1Status === 'correct' ? (
+                  <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm"><Check className="w-3 h-3 text-white" strokeWidth={3} /></span>
+                ) : team1Status === 'wrong' ? (
+                  <span className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm"><X className="w-3 h-3 text-white" strokeWidth={3} /></span>
+                ) : team1Status === 'picked' ? (
+                  <Check className="w-5 h-5 text-emerald-500" strokeWidth={3.5} />
+                ) : null}
+              </div>
+              <div className="flex items-center justify-center" style={{ height: '40px' }}>
+                {team2Status === 'correct' ? (
+                  <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm"><Check className="w-3 h-3 text-white" strokeWidth={3} /></span>
+                ) : team2Status === 'wrong' ? (
+                  <span className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm"><X className="w-3 h-3 text-white" strokeWidth={3} /></span>
+                ) : team2Status === 'picked' ? (
+                  <Check className="w-5 h-5 text-emerald-500" strokeWidth={3.5} />
+                ) : null}
+              </div>
+            </div>
+          );
+        }
+        if (showInfoButton) {
+          return (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
+              className={`flex-shrink-0 p-1.5 rounded-full bg-fg/10 text-fg/40 active:bg-fg/20 md:hidden self-center ${slotData ? 'mt-7' : ''}`}
+              aria-label={`View details`}
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          );
+        }
+        if (onDetailClick) return <div className="flex-shrink-0 w-7 md:hidden" />;
+        return null;
+      })()}
 
-      {/* Desktop: info button centered on team rows (offset down by header height when present) */}
-      {showInfoButton && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
-          aria-label={`View details: ${team1?.name || 'TBD'} vs ${team2?.name || 'TBD'}`}
-          className="absolute z-10 p-2.5 rounded-full text-fg/50 hover:text-fg/80 hover:bg-fg/15 transition-colors hidden md:flex items-center justify-center"
+      {/* Desktop: info button + status indicators outside the card */}
+      {(showInfoButton || team1Status || team2Status) && (
+        <div
+          className="absolute z-10 hidden md:flex flex-col items-center gap-0"
           style={{
-            top: slotData ? 'calc(50% + 14px)' : '50%',
-            transform: 'translateY(-50%)',
-            ...(side === 'right' ? { left: '-36px' } : { right: '-36px' }),
+            top: slotData ? '30px' : '0',
+            bottom: '0',
+            ...(side === 'right' ? { left: '-30px' } : { right: '-30px' }),
           }}
         >
-          <Info className="w-4 h-4" aria-hidden="true" />
-        </button>
+          {/* Indicator for team1 row */}
+          <div className="flex-1 flex items-center justify-center">
+            {team1Status === 'correct' ? (
+              <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm"><Check className="w-3 h-3 text-white" strokeWidth={3} /></span>
+            ) : team1Status === 'wrong' ? (
+              <span className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm"><X className="w-3 h-3 text-white" strokeWidth={3} /></span>
+            ) : team1Status === 'picked' ? (
+              <Check className="w-5 h-5 text-emerald-500" strokeWidth={3.5} />
+            ) : null}
+          </div>
+          {/* Info button centered */}
+          {!(team1Status || team2Status) && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDetailClick(); }}
+              aria-label={`View details`}
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-2.5 rounded-full text-fg/50 hover:text-fg/80 hover:bg-fg/15 transition-colors flex items-center justify-center"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          )}
+          {/* Indicator for team2 row */}
+          <div className="flex-1 flex items-center justify-center">
+            {team2Status === 'correct' ? (
+              <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm"><Check className="w-3 h-3 text-white" strokeWidth={3} /></span>
+            ) : team2Status === 'wrong' ? (
+              <span className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm"><X className="w-3 h-3 text-white" strokeWidth={3} /></span>
+            ) : team2Status === 'picked' ? (
+              <Check className="w-5 h-5 text-emerald-500" strokeWidth={3.5} />
+            ) : null}
+          </div>
+        </div>
       )}
     </div>
   );

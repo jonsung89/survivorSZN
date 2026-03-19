@@ -450,6 +450,10 @@ export const bracketAPI = {
     const res = await fetch(`${API_URL}/brackets/draft-prospects`);
     return res.json();
   },
+  getProspectWatch: async (season) => {
+    const res = await fetch(`${API_URL}/brackets/prospect-watch?season=${season}`);
+    return res.json();
+  },
   getConciseReport: async (season, teamId) => {
     const res = await fetch(`${API_URL}/brackets/tournament/${season}/team/${teamId}/concise-report`);
     return res.json();

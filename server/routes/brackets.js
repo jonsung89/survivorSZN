@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport } = require('../services/ncaab-tournament');
+const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport, getProspectTournamentStats } = require('../services/ncaab-tournament');
 const { getDraftProspects, enrichPlayersWithDraftRank } = require('../services/nba-draft');
 const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, getNextSlot, getRegionForSlot, getChildSlots, countPicks, DEFAULT_REGIONS } = require('../utils/bracket-slots');
 
@@ -519,6 +519,18 @@ router.get('/draft-prospects', async (req, res) => {
   } catch (error) {
     console.error('Error fetching draft prospects:', error);
     res.status(500).json({ error: 'Failed to fetch draft prospects' });
+  }
+});
+
+// Get prospect tournament watch data
+router.get('/prospect-watch', async (req, res) => {
+  try {
+    const season = parseInt(req.query.season) || new Date().getFullYear();
+    const data = await getProspectTournamentStats(season);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching prospect watch data:', error);
+    res.status(500).json({ error: 'Failed to fetch prospect watch data' });
   }
 });
 

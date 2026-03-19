@@ -194,18 +194,40 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
   }, [leaderboard, tournamentData]);
 
   // Helper: get pick distribution for a game
+  // Picks may use different team IDs than the schedule (e.g., brackets filled before
+  // field was finalized use seed-position IDs). We collect ALL picks for the slot,
+  // then split them: picks matching the slot's team1 ID go to one side, everything
+  // else goes to the other. Then we map slot teams to the schedule's away/home teams.
   const getGamePickDist = useCallback((game) => {
     const slot = eventToSlot[String(game.id)];
     if (slot === undefined) return null;
     const dist = pickDistribution[slot];
     if (!dist) return null;
 
+    const slotData = tournamentData?.slots?.[slot] || tournamentData?.slots?.[String(slot)];
+    const slotTeam1Id = slotData?.team1?.id ? String(slotData.team1.id) : null;
+    const slotTeam2Id = slotData?.team2?.id ? String(slotData.team2.id) : null;
+
+    // Collect all picks, split into team1 vs team2 buckets
+    let team1Picks = [];
+    let team2Picks = [];
+    for (const [teamId, pickers] of Object.entries(dist)) {
+      if (teamId === slotTeam1Id) {
+        team1Picks = team1Picks.concat(pickers);
+      } else {
+        team2Picks = team2Picks.concat(pickers);
+      }
+    }
+
+    const total = team1Picks.length + team2Picks.length;
+    if (total === 0) return null;
+
+    // Map slot teams to schedule away/home
     const awayId = String(game.awayTeam?.id);
     const homeId = String(game.homeTeam?.id);
-    const awayPicks = dist[awayId] || [];
-    const homePicks = dist[homeId] || [];
-    const total = awayPicks.length + homePicks.length;
-    if (total === 0) return null;
+    const awayIsTeam1 = awayId === slotTeam1Id;
+    const awayPicks = awayIsTeam1 ? team1Picks : team2Picks;
+    const homePicks = awayIsTeam1 ? team2Picks : team1Picks;
 
     return {
       awayId, homeId,
@@ -214,7 +236,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
       homePct: Math.round((homePicks.length / total) * 100),
       total,
     };
-  }, [eventToSlot, pickDistribution]);
+  }, [eventToSlot, pickDistribution, tournamentData]);
   const [sheetOpen, setSheetOpen] = useState(false); // controls entry animation
   const [sheetClosing, setSheetClosing] = useState(false); // controls exit animation
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -477,6 +499,42 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
       setDetailsLoading(false);
     }
   };
+
+  // Poll for live game details when dialog is open and on gamecast/shotchart tab
+  const gamecastPollRef = useRef(null);
+  useEffect(() => {
+    if (!dialogGame) return;
+    const isLive = isGameLive(dialogGame);
+    const needsPoll = isLive && (detailTab === 'gamecast' || detailTab === 'shotchart');
+    if (!needsPoll) {
+      if (gamecastPollRef.current) clearTimeout(gamecastPollRef.current);
+      return;
+    }
+
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const details = await scheduleAPI.getGameDetails(SPORT, dialogGame.id, { live: true });
+        if (!cancelled) {
+          setGameDetails(prev => ({ ...prev, [dialogGame.id]: details }));
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) {
+        // Random interval 6-11 seconds for live games
+        const delay = 6000 + Math.random() * 5000;
+        gamecastPollRef.current = setTimeout(poll, delay);
+      }
+    };
+
+    // Start polling after initial delay
+    gamecastPollRef.current = setTimeout(poll, 6000);
+
+    return () => {
+      cancelled = true;
+      if (gamecastPollRef.current) clearTimeout(gamecastPollRef.current);
+    };
+  }, [dialogGame, detailTab]);
 
   const openTeamInfo = (team, e) => {
     e?.stopPropagation();

@@ -3,6 +3,7 @@
 
 const { fetchWithCache } = require('./espn');
 const { SEED_MATCHUPS, getSlotRound, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
+const { getDraftProspects, normalizeName } = require('./nba-draft');
 const Anthropic = require('@anthropic-ai/sdk');
 const { db } = require('../db/supabase');
 
@@ -15,6 +16,8 @@ const ROSTER_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 const PLAYER_STATS_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 const BPI_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 const AI_REPORT_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours
+const BOXSCORE_FINAL_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours — completed game box scores don't change
+const BOXSCORE_LIVE_CACHE_TTL = 60 * 1000; // 60 seconds for live games
 
 // In-memory cache for AI reports (separate from ESPN fetch cache)
 const aiReportCache = new Map();
@@ -1371,6 +1374,400 @@ async function getFirstGameTime(season) {
   return earliest ? earliest.toISOString() : null;
 }
 
+// ── Prospect Watch ──────────────────────────────────────────────────────────
+
+const SUMMARY_API_BASE = 'https://site.web.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary';
+
+const ROUND_NAMES = {
+  '-1': 'First Four', 0: 'Round of 64', 1: 'Round of 32', 2: 'Sweet 16',
+  3: 'Elite 8', 4: 'Final Four', 5: 'Championship',
+};
+
+// School name aliases for matching Tankathon → ESPN
+const SCHOOL_ALIASES = {
+  'uconn': 'connecticut',
+  'smu': 'southern methodist',
+  'ucf': 'central florida',
+  'unc': 'north carolina',
+  'lsu': 'louisiana state',
+  'vcu': 'virginia commonwealth',
+  'unlv': 'nevada-las vegas',
+  'utep': 'texas-el paso',
+  'ole miss': 'mississippi',
+  'pitt': 'pittsburgh',
+  'miami': 'miami',
+  'usc': 'southern california',
+  'cal': 'california',
+  'byu': 'brigham young',
+  'nc state': 'nc state',
+  'texas a&m': 'texas a&m',
+  'michigan st': 'michigan state',
+  'ohio st': 'ohio state',
+  'iowa st': 'iowa state',
+  'penn st': 'penn state',
+};
+
+// Route-level cache for assembled prospect watch data
+let prospectWatchCache = null;
+let prospectWatchCacheTime = 0;
+const PROSPECT_WATCH_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+/**
+ * Match a Tankathon prospect school name to an ESPN tournament team.
+ * Uses multi-pass matching: exact first, then startsWith on location, then fuzzy.
+ * Returns the matched team object or null.
+ */
+function matchSchoolToTeam(prospectSchool, teams) {
+  if (!prospectSchool) return null;
+  const schoolLower = prospectSchool.toLowerCase().trim();
+  const aliased = SCHOOL_ALIASES[schoolLower] || schoolLower;
+
+  const teamList = Object.values(teams);
+
+  // Pass 1: Exact match on shortName or location
+  for (const team of teamList) {
+    const shortName = (team.shortName || '').toLowerCase();
+    if (shortName === schoolLower || shortName === aliased) return team;
+  }
+
+  // Pass 2: Full name starts with school + space (e.g., "Duke" → "Duke Blue Devils")
+  // Must be followed by a space to prevent "Iowa" matching "Iowa State"
+  for (const team of teamList) {
+    const fullName = (team.name || '').toLowerCase();
+    if (fullName === aliased || fullName === schoolLower) return team;
+    if (fullName.startsWith(aliased + ' ') || fullName.startsWith(schoolLower + ' ')) return team;
+  }
+
+  return null;
+}
+
+/**
+ * Parse player stats from ESPN summary box score.
+ * Returns { stats, headshot, espnId } or null if player not found.
+ */
+function parsePlayerFromBoxscore(boxscore, teamId, prospectNormalizedName) {
+  if (!boxscore?.players) return null;
+
+  // Find the team entry
+  const teamEntry = boxscore.players.find(p => String(p.team?.id) === String(teamId));
+  if (!teamEntry?.statistics?.[0]) return null;
+
+  const statGroup = teamEntry.statistics[0];
+  const labels = (statGroup.labels || []).map(l => l.toUpperCase());
+  const athletes = statGroup.athletes || [];
+
+  for (const entry of athletes) {
+    const athleteName = entry.athlete?.displayName || '';
+    if (normalizeName(athleteName) !== prospectNormalizedName) continue;
+
+    const rawStats = entry.stats || [];
+    const statMap = {};
+    for (let i = 0; i < labels.length; i++) {
+      statMap[labels[i]] = rawStats[i] || '0';
+    }
+
+    return {
+      espnId: String(entry.athlete?.id || ''),
+      headshot: entry.athlete?.headshot?.href || null,
+      starter: entry.starter || false,
+      stats: {
+        min: statMap['MIN'] || '0',
+        pts: parseInt(statMap['PTS']) || 0,
+        reb: parseInt(statMap['REB']) || 0,
+        ast: parseInt(statMap['AST']) || 0,
+        stl: parseInt(statMap['STL']) || 0,
+        blk: parseInt(statMap['BLK']) || 0,
+        to: parseInt(statMap['TO']) || 0,
+        pf: parseInt(statMap['PF']) || 0,
+        fg: statMap['FG'] || '0-0',
+        threePt: statMap['3PT'] || '0-0',
+        ft: statMap['FT'] || '0-0',
+        plusMinus: statMap['+/-'] || '0',
+        oreb: parseInt(statMap['OREB']) || 0,
+        dreb: parseInt(statMap['DREB']) || 0,
+      },
+    };
+  }
+  return null;
+}
+
+/**
+ * Get NBA prospect tournament stats — assembles prospect data with
+ * tournament box scores, season stats, and team status.
+ */
+async function getProspectTournamentStats(season) {
+  // Check route-level cache
+  if (prospectWatchCache && Date.now() - prospectWatchCacheTime < PROSPECT_WATCH_CACHE_TTL) {
+    return prospectWatchCache;
+  }
+
+  const [prospects, bracket] = await Promise.all([
+    getDraftProspects(),
+    getTournamentBracket(season),
+  ]);
+
+  if (!prospects?.length || !bracket?.teams) {
+    return { prospects: [] };
+  }
+
+  const { teams, events: eventMap } = bracket;
+
+  // Step 1: Match prospects to tournament teams
+  const prospectTeamMap = []; // { prospect, team }
+  for (const prospect of prospects.slice(0, 60)) {
+    const team = matchSchoolToTeam(prospect.school, teams);
+    if (team) {
+      prospectTeamMap.push({ prospect, team });
+    }
+  }
+
+  if (!prospectTeamMap.length) {
+    return { prospects: [] };
+  }
+
+  // Step 2: Find tournament games for each team (deduplicate by game ID)
+  const teamGames = {}; // teamId → [gameInfo]
+  for (const game of Object.values(eventMap || {})) {
+    if (!game.espnEventId) continue;
+    const t1 = game.team1?.id;
+    const t2 = game.team2?.id;
+    if (t1) {
+      if (!teamGames[t1]) teamGames[t1] = [];
+      teamGames[t1].push(game);
+    }
+    if (t2) {
+      if (!teamGames[t2]) teamGames[t2] = [];
+      teamGames[t2].push(game);
+    }
+  }
+
+  // Step 3: Collect unique game IDs that need box scores (completed or live)
+  const gamesToFetch = new Map(); // espnEventId → { game, cacheTTL }
+  for (const { team } of prospectTeamMap) {
+    const games = teamGames[team.id] || [];
+    for (const game of games) {
+      if (game.status === 'STATUS_FINAL' || game.status === 'STATUS_IN_PROGRESS') {
+        if (!gamesToFetch.has(game.espnEventId)) {
+          const ttl = game.status === 'STATUS_FINAL' ? BOXSCORE_FINAL_CACHE_TTL : BOXSCORE_LIVE_CACHE_TTL;
+          gamesToFetch.set(game.espnEventId, { game, ttl });
+        }
+      }
+    }
+  }
+
+  // Step 4: Fetch all box scores in parallel
+  const boxscoreEntries = Array.from(gamesToFetch.entries());
+  const boxscoreResults = await Promise.allSettled(
+    boxscoreEntries.map(([eventId, { ttl }]) =>
+      fetchWithCache(`${SUMMARY_API_BASE}?event=${eventId}`, ttl)
+    )
+  );
+
+  const boxscores = {}; // espnEventId → boxscore data
+  for (let i = 0; i < boxscoreEntries.length; i++) {
+    if (boxscoreResults[i].status === 'fulfilled') {
+      boxscores[boxscoreEntries[i][0]] = boxscoreResults[i].value?.boxscore || null;
+    }
+  }
+
+  // Step 5: Extract prospect stats from box scores and collect ESPN IDs
+  const prospectData = [];
+  const espnIdsToFetch = []; // { index, espnId }
+
+  for (const { prospect, team } of prospectTeamMap) {
+    const games = teamGames[team.id] || [];
+    const tournamentGames = [];
+    let espnId = null;
+    let headshot = null;
+    let isPlaying = false;
+    let currentGame = null;
+
+    // Sort games by round
+    const sortedGames = [...games].sort((a, b) => (a.round ?? -1) - (b.round ?? -1));
+
+    for (const game of sortedGames) {
+      const isTeam1 = String(game.team1?.id) === String(team.id);
+      const opponent = isTeam1 ? game.team2 : game.team1;
+      const teamScore = isTeam1 ? game.team1?.score : game.team2?.score;
+      const opponentScore = isTeam1 ? game.team2?.score : game.team1?.score;
+      const isWinner = isTeam1 ? game.team1?.winner : game.team2?.winner;
+
+      if (game.status === 'STATUS_FINAL' || game.status === 'STATUS_IN_PROGRESS') {
+        const boxscore = boxscores[game.espnEventId];
+        let playerStats = null;
+
+        if (boxscore) {
+          const parsed = parsePlayerFromBoxscore(boxscore, team.id, prospect.normalizedName);
+          if (parsed) {
+            playerStats = parsed.stats;
+            if (!espnId && parsed.espnId) espnId = parsed.espnId;
+            if (!headshot && parsed.headshot) headshot = parsed.headshot;
+          }
+        }
+
+        const gameEntry = {
+          gameId: game.espnEventId,
+          round: ROUND_NAMES[game.round] || `Round ${game.round}`,
+          opponent: opponent?.shortName || opponent?.name || 'TBD',
+          opponentSeed: opponent?.seed || null,
+          opponentLogo: opponent?.logo || null,
+          result: game.status === 'STATUS_FINAL' ? (isWinner ? 'W' : 'L') : 'LIVE',
+          teamScore: teamScore ?? null,
+          opponentScore: opponentScore ?? null,
+          stats: playerStats,
+          isLive: game.status === 'STATUS_IN_PROGRESS',
+        };
+
+        tournamentGames.push(gameEntry);
+
+        if (game.status === 'STATUS_IN_PROGRESS') {
+          isPlaying = true;
+          currentGame = {
+            opponent: opponent?.shortName || opponent?.name || 'TBD',
+            opponentSeed: opponent?.seed || null,
+            opponentLogo: opponent?.logo || null,
+            teamScore: teamScore ?? null,
+            opponentScore: opponentScore ?? null,
+            status: game.statusDetail || 'In Progress',
+            prospectStats: playerStats,
+          };
+        }
+      }
+    }
+
+    // Determine team status
+    const hasLoss = sortedGames.some(g => {
+      if (g.status !== 'STATUS_FINAL') return false;
+      const isT1 = String(g.team1?.id) === String(team.id);
+      return isT1 ? !g.team1?.winner : !g.team2?.winner;
+    });
+    const teamStatus = isPlaying ? 'playing_now' : hasLoss ? 'eliminated' : 'alive';
+
+    // Current round = highest round game the team has been in
+    const maxRound = sortedGames.reduce((max, g) => Math.max(max, g.round ?? -1), -1);
+    const teamCurrentRound = maxRound >= 0 ? ROUND_NAMES[maxRound] || null : null;
+
+    // Compute tournament averages (completed games only)
+    const completedGamesWithStats = tournamentGames.filter(g => g.result !== 'LIVE' && g.stats);
+    const tournamentAvgs = { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, min: 0 };
+    if (completedGamesWithStats.length > 0) {
+      for (const g of completedGamesWithStats) {
+        tournamentAvgs.pts += g.stats.pts;
+        tournamentAvgs.reb += g.stats.reb;
+        tournamentAvgs.ast += g.stats.ast;
+        tournamentAvgs.stl += g.stats.stl;
+        tournamentAvgs.blk += g.stats.blk;
+        const mins = parseFloat(g.stats.min) || 0;
+        tournamentAvgs.min += mins;
+      }
+      const n = completedGamesWithStats.length;
+      tournamentAvgs.pts = Math.round((tournamentAvgs.pts / n) * 10) / 10;
+      tournamentAvgs.reb = Math.round((tournamentAvgs.reb / n) * 10) / 10;
+      tournamentAvgs.ast = Math.round((tournamentAvgs.ast / n) * 10) / 10;
+      tournamentAvgs.stl = Math.round((tournamentAvgs.stl / n) * 10) / 10;
+      tournamentAvgs.blk = Math.round((tournamentAvgs.blk / n) * 10) / 10;
+      tournamentAvgs.min = Math.round((tournamentAvgs.min / n) * 10) / 10;
+    }
+
+    const idx = prospectData.length;
+    prospectData.push({
+      rank: prospect.rank,
+      name: prospect.name,
+      position: prospect.position,
+      school: prospect.school,
+      schoolLogo: prospect.logo,
+      headshot,
+      height: prospect.height,
+      weight: prospect.weight,
+      year: prospect.year,
+      espnId,
+      teamId: team.id,
+      teamSeed: team.seed,
+      teamRecord: team.record,
+      teamAbbreviation: team.abbreviation,
+      teamColor: team.color,
+      teamStatus,
+      teamCurrentRound,
+      isPlaying,
+      currentGame,
+      seasonStats: {
+        ppg: prospect.stats?.pts || 0,
+        rpg: prospect.stats?.reb || 0,
+        apg: prospect.stats?.ast || 0,
+        spg: prospect.stats?.stl || 0,
+        bpg: prospect.stats?.blk || 0,
+      },
+      tournamentGames,
+      tournamentAvgs,
+      gamesPlayed: completedGamesWithStats.length,
+      stockDirection: 'neutral',
+    });
+
+    if (espnId) {
+      espnIdsToFetch.push({ index: idx, espnId });
+    }
+  }
+
+  // Step 6: Fetch ESPN season stats for matched prospects (parallel, 6hr cache)
+  if (espnIdsToFetch.length > 0) {
+    const seasonResults = await Promise.allSettled(
+      espnIdsToFetch.map(({ espnId }) =>
+        fetchWithCache(`${ATHLETE_API_BASE}/${espnId}/overview`, PLAYER_STATS_CACHE_TTL)
+      )
+    );
+
+    for (let i = 0; i < espnIdsToFetch.length; i++) {
+      if (seasonResults[i].status !== 'fulfilled') continue;
+      const data = seasonResults[i].value;
+      const statsObj = data?.statistics;
+      if (!statsObj?.names || !statsObj?.splits?.[0]?.stats) continue;
+
+      const names = statsObj.names;
+      const values = statsObj.splits[0].stats;
+      const parsed = {};
+      for (let j = 0; j < names.length; j++) {
+        const name = names[j];
+        const val = values[j];
+        if (name === 'avgPoints') parsed.ppg = parseFloat(val) || 0;
+        else if (name === 'avgRebounds') parsed.rpg = parseFloat(val) || 0;
+        else if (name === 'avgAssists') parsed.apg = parseFloat(val) || 0;
+        else if (name === 'avgMinutes') parsed.mpg = parseFloat(val) || 0;
+        else if (name === 'fieldGoalPct') parsed.fgPct = parseFloat(val) || 0;
+        else if (name === 'threePointFieldGoalPct') parsed.threePct = parseFloat(val) || 0;
+        else if (name === 'freeThrowPct') parsed.ftPct = parseFloat(val) || 0;
+        else if (name === 'avgSteals') parsed.spg = parseFloat(val) || 0;
+        else if (name === 'avgBlocks') parsed.bpg = parseFloat(val) || 0;
+        else if (name === 'gamesPlayed') parsed.gp = parseInt(val) || 0;
+      }
+
+      const idx = espnIdsToFetch[i].index;
+      // Merge ESPN season stats (more accurate than Tankathon)
+      if (Object.keys(parsed).length > 0) {
+        prospectData[idx].seasonStats = { ...prospectData[idx].seasonStats, ...parsed };
+      }
+    }
+  }
+
+  // Step 7: Compute stock direction
+  for (const p of prospectData) {
+    if (p.gamesPlayed > 0) {
+      const seasonPpg = p.seasonStats.ppg || 0;
+      const tourneyPpg = p.tournamentAvgs.pts || 0;
+      const diff = tourneyPpg - seasonPpg;
+      if (diff >= 2) p.stockDirection = 'up';
+      else if (diff <= -2) p.stockDirection = 'down';
+      else p.stockDirection = 'neutral';
+    }
+  }
+
+  const result = { prospects: prospectData };
+  prospectWatchCache = result;
+  prospectWatchCacheTime = Date.now();
+
+  console.log(`[Prospect Watch] Assembled data for ${prospectData.length} prospects in tournament`);
+  return result;
+}
+
 module.exports = {
   getTournamentBracket,
   getTeamBreakdown,
@@ -1384,4 +1781,5 @@ module.exports = {
   generateAllReports,
   getStoredReport,
   getStoredMatchupReport,
+  getProspectTournamentStats,
 };

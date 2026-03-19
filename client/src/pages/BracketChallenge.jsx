@@ -11,6 +11,7 @@ import FinalFourPreviewDialog from '../components/bracket/FinalFourPreviewDialog
 import BracketSetup from '../components/bracket/BracketSetup';
 import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
 import TournamentGames from '../components/bracket/TournamentGames';
+import ProspectWatch from '../components/bracket/ProspectWatch';
 import ChatWidget from '../components/ChatWidget';
 import { getSportBadgeClasses } from '../sports';
 import SportBadge from '../components/SportBadge';
@@ -463,6 +464,12 @@ export default function BracketChallenge() {
       {isTournamentLocked && (
         <TournamentGames tournamentData={tournamentData} season={challenge?.season} leaderboard={leaderboard} />
       )}
+
+      {/* Prospect Watch — NBA draft prospects in the tournament (hidden for now)
+      {isTournamentLocked && challenge?.season && (
+        <ProspectWatch season={challenge.season} />
+      )}
+      */}
 
       {/* Countdown + Prize Pot — side by side on desktop */}
       {(() => {

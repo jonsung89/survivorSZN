@@ -537,6 +537,11 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
     return true;
   });
 
+  // Final tab: show most recently finished games first (reverse chronological)
+  if (gameFilter === 'final') {
+    filtered.reverse();
+  }
+
   // Update scroll arrows when filtered games change
   useEffect(() => {
     const el = scrollRef.current;

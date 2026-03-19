@@ -164,10 +164,9 @@ export default function BracketChallenge() {
     return () => clearInterval(interval);
   }, [isTournamentLocked, challenge?.id]);
 
-  // Fetch NBA prospect tournament data — disabled for now
+  // Fetch NBA prospect tournament data (auto-refresh every 60s when games are live)
   const prospectTimerRef = useRef(null);
   useEffect(() => {
-    if (true) return; // disabled — prospects hidden from game cards
     if (!isTournamentLocked || !challenge?.season) return;
     const fetchProspects = async () => {
       try {

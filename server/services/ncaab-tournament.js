@@ -1708,6 +1708,67 @@ async function getProspectTournamentStats(season) {
     }
   }
 
+  // Step 5b: For prospects without espnId, fetch team rosters to find ESPN athlete IDs
+  const missingEspnIdIndices = prospectData
+    .map((p, i) => (!p.espnId ? i : null))
+    .filter(i => i !== null);
+
+  if (missingEspnIdIndices.length > 0) {
+    // Collect unique teamIds that need roster lookups
+    const teamsToFetch = new Map(); // teamId → [indices]
+    for (const idx of missingEspnIdIndices) {
+      const tid = String(prospectData[idx].teamId);
+      if (!teamsToFetch.has(tid)) teamsToFetch.set(tid, []);
+      teamsToFetch.get(tid).push(idx);
+    }
+
+    const teamEntries = Array.from(teamsToFetch.entries());
+    const rosterResults = await Promise.allSettled(
+      teamEntries.map(([tid]) =>
+        fetchWithCache(`${API_BASE}/teams/${tid}/roster`, ROSTER_CACHE_TTL)
+      )
+    );
+
+    for (let i = 0; i < teamEntries.length; i++) {
+      if (rosterResults[i].status !== 'fulfilled') continue;
+      const rosterData = rosterResults[i].value;
+      const athletes = rosterData?.athletes || [];
+      const indices = teamEntries[i][1];
+
+      for (const idx of indices) {
+        const prospectName = prospectData[idx].name?.toLowerCase().trim();
+        if (!prospectName) continue;
+
+        // Match by name (exact, then fuzzy by last name + first initial)
+        const prospectParts = prospectName.split(/\s+/);
+        const prospectLast = prospectParts[prospectParts.length - 1];
+        const prospectFirst = prospectParts[0] || '';
+        const match = athletes.find(a => {
+          const dn = (a.displayName || '').toLowerCase().trim();
+          const fn = (a.fullName || '').toLowerCase().trim();
+          if (dn === prospectName || fn === prospectName) return true;
+          // Fuzzy: same last name + first name starts with same letter (handles Jr./III/nicknames)
+          const parts = dn.split(/\s+/);
+          const last = parts.filter(p => !['jr.', 'jr', 'ii', 'iii', 'iv'].includes(p)).pop() || '';
+          const first = parts[0] || '';
+          if (last === prospectLast && first[0] === prospectFirst[0]) return true;
+          // Also check if prospect last name matches and roster has suffix stripped
+          const prospectBase = prospectParts.filter(p => !['jr.', 'jr', 'ii', 'iii', 'iv'].includes(p));
+          const rosterBase = parts.filter(p => !['jr.', 'jr', 'ii', 'iii', 'iv'].includes(p));
+          return rosterBase.join(' ') === prospectBase.join(' ');
+        });
+
+        if (match?.id) {
+          const eid = String(match.id);
+          prospectData[idx].espnId = eid;
+          prospectData[idx].headshot = match.headshot?.href ||
+            `https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/${eid}.png`;
+          espnIdsToFetch.push({ index: idx, espnId: eid });
+        }
+      }
+    }
+  }
+
   // Step 6: Fetch ESPN season stats for matched prospects (parallel, 6hr cache)
   if (espnIdsToFetch.length > 0) {
     const seasonResults = await Promise.allSettled(
@@ -1719,6 +1780,14 @@ async function getProspectTournamentStats(season) {
     for (let i = 0; i < espnIdsToFetch.length; i++) {
       if (seasonResults[i].status !== 'fulfilled') continue;
       const data = seasonResults[i].value;
+      const idx = espnIdsToFetch[i].index;
+
+      // Fill in missing headshot using ESPN's predictable headshot URL pattern
+      if (!prospectData[idx].headshot) {
+        const eid = espnIdsToFetch[i].espnId;
+        prospectData[idx].headshot = `https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/${eid}.png`;
+      }
+
       const statsObj = data?.statistics;
       if (!statsObj?.names || !statsObj?.splits?.[0]?.stats) continue;
 
@@ -1740,7 +1809,6 @@ async function getProspectTournamentStats(season) {
         else if (name === 'gamesPlayed') parsed.gp = parseInt(val) || 0;
       }
 
-      const idx = espnIdsToFetch[i].index;
       // Merge ESPN season stats (more accurate than Tankathon)
       if (Object.keys(parsed).length > 0) {
         prospectData[idx].seasonStats = { ...prospectData[idx].seasonStats, ...parsed };

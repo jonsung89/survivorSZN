@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, X, ChevronDown, TrendingUp, Target, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, ChevronDown, TrendingUp, TrendingDown, Minus, Target, Users, Info } from 'lucide-react';
 import { scheduleAPI, trackingAPI } from '../../api';
 import { useTheme } from '../../context/ThemeContext';
 import { useThemedLogo, useThemedColor } from '../../utils/logo';
@@ -14,6 +14,7 @@ import ShotChart from '../ShotChart';
 import TeamInfoDialog from '../TeamInfoDialog';
 import StatRankingDialog from '../StatRankingDialog';
 import MatchupDetailDialog from './MatchupDetailDialog';
+import { ProspectDialog } from './DraftBadge';
 
 const SPORT = 'ncaab';
 
@@ -97,7 +98,7 @@ const ScoreDisplay = ({ score, className }) => {
 const TeamRankBadge = ({ team }) => {
   const r = Number(team?.ranking?.current);
   if (!Number.isFinite(r) || r <= 0 || r >= 99) return null;
-  return <span className="text-sm font-medium text-fg/45">#{r}</span>;
+  return <span className="text-base font-semibold text-fg">#{r}</span>;
 };
 
 const rankPrefix = (team) => {
@@ -154,6 +155,8 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
   const [matchupDialog, setMatchupDialog] = useState(null); // { slot, team1, team2 }
   const [gameFilter, setGameFilter] = useState('all'); // 'all' | 'live' | 'scheduled' | 'final'
   const [pickBreakdownGame, setPickBreakdownGame] = useState(null); // game object for pick breakdown dialog
+  const [prospectDialogData, setProspectDialogData] = useState(null); // { prospects: [], game }
+  const [showDraftBoard, setShowDraftBoard] = useState(false);
 
   // Build espnEventId → slotNumber mapping
   const eventToSlot = useMemo(() => {
@@ -300,6 +303,35 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
     }
     return map;
   }, [prospects]);
+
+  // Team-to-prospects map for scheduled games without tournament game entries
+  const prospectsByTeam = useMemo(() => {
+    if (!prospects?.length) return {};
+    const map = {};
+    for (const p of prospects) {
+      if (!p.teamId) continue;
+      const tid = String(p.teamId);
+      if (!map[tid]) map[tid] = [];
+      map[tid].push(p);
+    }
+    return map;
+  }, [prospects]);
+
+  // Helper to get all prospects for a game
+  const getGameProspects = useCallback((game) => {
+    const awayId = String(game.awayTeam?.id);
+    const homeId = String(game.homeTeam?.id);
+    const gameProspects = prospectsByGame[String(game.id)];
+    let allProspects;
+    if (gameProspects?._all?.length) {
+      allProspects = gameProspects._all;
+    } else {
+      const awayP = (prospectsByTeam[awayId] || []).slice(0, 3);
+      const homeP = (prospectsByTeam[homeId] || []).slice(0, 3);
+      allProspects = [...awayP, ...homeP];
+    }
+    return allProspects;
+  }, [prospectsByGame, prospectsByTeam]);
 
   const [sheetOpen, setSheetOpen] = useState(false); // controls entry animation
   const [sheetClosing, setSheetClosing] = useState(false); // controls exit animation
@@ -650,51 +682,56 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
           openGameDialog(game);
         }}
         className={`
-          flex-shrink-0 glass-card rounded-xl p-3 sm:p-4 w-[280px] sm:w-[340px] cursor-pointer transition-all hover:bg-fg/5 text-left
+          flex-shrink-0 glass-card rounded-xl p-3 sm:p-4 w-[310px] sm:w-[380px] cursor-pointer transition-all hover:bg-fg/5 text-left relative
           ${live ? 'ring-1 ring-red-500/30' : ''}
         `}
       >
+        {getGameProspects(game).length > 0 && (
+          <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
+            <Info className="w-4 h-4 text-fg/30" />
+          </div>
+        )}
         {formatGameNotes(game.notes) && (
-          <div className="text-[11px] sm:text-sm text-fg/50 font-medium mb-1.5 truncate">{formatGameNotes(game.notes)}</div>
+          <div className="text-sm sm:text-base text-fg/50 font-medium mb-1.5 truncate pr-5">{formatGameNotes(game.notes)}</div>
         )}
         <div className="space-y-2 sm:space-y-2.5">
           {/* Away Team */}
           <div className={`flex items-center gap-2 sm:gap-2.5 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
             {game.awayTeam?.logo ? (
-              <img src={tl(game.awayTeam.logo)} alt={game.awayTeam.abbreviation} className="w-6 h-6 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
+              <img src={tl(game.awayTeam.logo)} alt={game.awayTeam.abbreviation} className="w-7 h-7 sm:w-8 sm:h-8 object-contain flex-shrink-0" />
             ) : (
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white font-bold text-[9px] sm:text-[10px] flex-shrink-0" style={{ backgroundColor: game.awayTeam?.color || '#666' }}>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] flex-shrink-0" style={{ backgroundColor: game.awayTeam?.color || '#666' }}>
                 {(game.awayTeam?.abbreviation || '?').slice(0, 3)}
               </div>
             )}
             <TeamRankBadge team={game.awayTeam} />
-            <span className="text-fg font-medium text-sm sm:text-base truncate flex-1">
+            <span className="text-fg font-semibold text-base sm:text-lg truncate flex-1">
               {game.awayTeam?.abbreviation || game.awayTeam?.name || 'TBD'}
             </span>
             {(isPast || live) && (
               <ScoreDisplay
                 score={getScore(game.awayTeam)}
-                className={`font-bold text-sm sm:text-base ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'text-fg/40' : 'text-fg'}`}
+                className={`font-bold text-base sm:text-lg ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'text-fg/40' : 'text-fg'}`}
               />
             )}
           </div>
           {/* Home Team */}
           <div className={`flex items-center gap-2 sm:gap-2.5 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
             {game.homeTeam?.logo ? (
-              <img src={tl(game.homeTeam.logo)} alt={game.homeTeam.abbreviation} className="w-6 h-6 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
+              <img src={tl(game.homeTeam.logo)} alt={game.homeTeam.abbreviation} className="w-7 h-7 sm:w-8 sm:h-8 object-contain flex-shrink-0" />
             ) : (
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white font-bold text-[9px] sm:text-[10px] flex-shrink-0" style={{ backgroundColor: game.homeTeam?.color || '#666' }}>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] flex-shrink-0" style={{ backgroundColor: game.homeTeam?.color || '#666' }}>
                 {(game.homeTeam?.abbreviation || '?').slice(0, 3)}
               </div>
             )}
             <TeamRankBadge team={game.homeTeam} />
-            <span className="text-fg font-medium text-sm sm:text-base truncate flex-1">
+            <span className="text-fg font-semibold text-base sm:text-lg truncate flex-1">
               {game.homeTeam?.abbreviation || game.homeTeam?.name || 'TBD'}
             </span>
             {(isPast || live) && (
               <ScoreDisplay
                 score={getScore(game.homeTeam)}
-                className={`font-bold text-sm sm:text-base ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'text-fg/40' : 'text-fg'}`}
+                className={`font-bold text-base sm:text-lg ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'text-fg/40' : 'text-fg'}`}
               />
             )}
           </div>
@@ -702,14 +739,14 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
         {/* Status row */}
         <div className="mt-2 pt-2 border-t border-fg/10 flex items-center justify-between">
           {live ? (
-            <span className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-white bg-red-600 px-2 py-0.5 rounded-full">
+            <span className="flex items-center gap-1.5 text-sm font-bold text-white bg-red-600 px-2 py-0.5 rounded-full">
               <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
               {game.statusDetail || 'LIVE'}
             </span>
           ) : isPast ? (
-            <span className="text-sm sm:text-base font-medium text-fg/50">Final</span>
+            <span className="text-base sm:text-lg font-semibold text-fg">Final</span>
           ) : (
-            <span className="text-sm sm:text-base text-fg/60">{timeStr}</span>
+            <span className="text-base sm:text-lg text-fg/60">{timeStr}</span>
           )}
           {!live && !isPast && game.broadcast && <BroadcastIcon broadcast={game.broadcast} />}
         </div>
@@ -728,7 +765,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
               }}
             >
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-bold text-fg/60 w-8 text-right">{dist.awayPct}%</span>
+                <span className="text-base font-bold text-fg w-10 text-right">{dist.awayPct}%</span>
                 <div className="flex-1 h-2.5 rounded-full overflow-hidden flex bg-fg/10">
                   {dist.awayPct > 0 && (
                     <div
@@ -752,67 +789,100 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                     />
                   )}
                 </div>
-                <span className="text-sm font-bold text-fg/60 w-8">{dist.homePct}%</span>
+                <span className="text-base font-bold text-fg w-10">{dist.homePct}%</span>
               </div>
               <div className="flex justify-between mt-0.5">
-                <span className="text-[11px] sm:text-sm text-fg/40">{dist.awayPicks.length} pick{dist.awayPicks.length !== 1 ? 's' : ''}</span>
-                <span className="text-[11px] sm:text-sm text-fg/40">{dist.homePicks.length} pick{dist.homePicks.length !== 1 ? 's' : ''}</span>
+                <span className="text-sm sm:text-base text-fg/60">{dist.awayPicks.length} pick{dist.awayPicks.length !== 1 ? 's' : ''}</span>
+                <span className="text-sm sm:text-base text-fg/60">{dist.homePicks.length} pick{dist.homePicks.length !== 1 ? 's' : ''}</span>
               </div>
             </div>
           );
         })()}
-        {/* NBA Prospect Watch — hidden for now */}
+        {/* NBA Prospect Watch */}
         {(() => {
-          return null;
-          const gameProspects = prospectsByGame[String(game.id)];
-          if (!gameProspects?._all?.length) return null;
           const awayId = String(game.awayTeam?.id);
-          const awayProspects = gameProspects._all.filter(p => String(p.teamId) === awayId).slice(0, 3);
-          const homeProspects = gameProspects._all.filter(p => String(p.teamId) !== awayId).slice(0, 3);
+          const homeId = String(game.homeTeam?.id);
+          const gameProspects = prospectsByGame[String(game.id)];
+          let allProspects;
+          if (gameProspects?._all?.length) {
+            allProspects = gameProspects._all;
+          } else {
+            const awayP = (prospectsByTeam[awayId] || []).slice(0, 3);
+            const homeP = (prospectsByTeam[homeId] || []).slice(0, 3);
+            allProspects = [...awayP, ...homeP];
+          }
+          if (!allProspects.length) return null;
+          const awayProspects = allProspects.filter(p => String(p.teamId) === awayId).slice(0, 3);
+          const homeProspects = allProspects.filter(p => String(p.teamId) !== awayId).slice(0, 3);
           if (!awayProspects.length && !homeProspects.length) return null;
           const hasStats = live || isPast;
 
-          const renderProspect = (p, teamColor) => {
+          const getTeamLogo = (teamId) => {
+            const tid = String(teamId);
+            if (String(game.awayTeam?.id) === tid) return game.awayTeam?.logo;
+            if (String(game.homeTeam?.id) === tid) return game.homeTeam?.logo;
+            return null;
+          };
+
+          const renderProspect = (p) => {
             const initials = p.name?.split(' ').map((n, i, a) => i === a.length - 1 ? n : n[0] + '.').join(' ') || p.name;
+            const teamLogo = getTeamLogo(p.teamId) || p.schoolLogo;
             return (
               <div key={p.name} className="flex items-center gap-1.5 min-w-0">
+                {teamLogo ? (
+                  <img src={teamLogo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
+                ) : (
+                  <div className="w-4 h-4 flex-shrink-0" />
+                )}
                 <span
-                  className="text-[11px] sm:text-sm font-bold flex-shrink-0 w-5 text-center rounded"
-                  style={{ color: teamColor }}
+                  className={`text-sm sm:text-base font-bold flex-shrink-0 w-6 text-center ${isDark ? 'text-white' : 'text-black'}`}
                 >
                   #{p.rank}
                 </span>
                 {p.headshot ? (
-                  <img src={p.headshot} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0 bg-fg/10" />
+                  <img src={p.headshot} alt="" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover flex-shrink-0 bg-fg/10" />
                 ) : (
-                  <div className="w-5 h-5 rounded-full flex-shrink-0 bg-fg/10" />
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full flex-shrink-0 bg-fg/10" />
                 )}
-                <span className="text-sm text-fg/80 truncate flex-1 font-medium">{initials}</span>
-                {hasStats && p.gameStats ? (
-                  <span className="text-sm text-fg/60 flex-shrink-0">
-                    {p.gameStats.pts ?? 0}<span className="text-fg/30">p</span>{' '}
-                    {p.gameStats.reb ?? 0}<span className="text-fg/30">r</span>{' '}
-                    {p.gameStats.ast ?? 0}<span className="text-fg/30">a</span>
+                <span className="text-sm sm:text-base text-fg truncate flex-1 font-medium">{initials}</span>
+                {hasStats && p.gameStats && !(p.gameStats.min === '0' || p.gameStats.min === 0) ? (
+                  <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
+                    {p.gameStats.pts ?? 0}<span className="text-fg/60">p</span>{' '}
+                    {p.gameStats.reb ?? 0}<span className="text-fg/60">r</span>{' '}
+                    {p.gameStats.ast ?? 0}<span className="text-fg/60">a</span>
                   </span>
+                ) : hasStats && (isPast || (p.gameStats && (p.gameStats.min === '0' || p.gameStats.min === 0))) ? (
+                  <span className="text-sm sm:text-base font-medium text-fg/60 flex-shrink-0">DNP</span>
                 ) : p.seasonStats?.ppg != null ? (
-                  <span className="text-sm text-fg/40 flex-shrink-0">{p.seasonStats.ppg} ppg</span>
+                  <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
+                    <span className="text-fg/60">avg </span>
+                    {p.seasonStats.ppg}<span className="text-fg/60">p</span>{' '}
+                    {p.seasonStats.rpg ?? 0}<span className="text-fg/60">r</span>{' '}
+                    {p.seasonStats.apg ?? 0}<span className="text-fg/60">a</span>
+                  </span>
                 ) : null}
               </div>
             );
           };
 
           return (
-            <div className="mt-2 pt-2 border-t border-fg/10" onClick={(e) => e.stopPropagation()}>
+            <div className="mt-2 pt-2 border-t border-fg/10 hover:bg-fg/5 -mx-3 sm:-mx-4 px-3 sm:px-4 pb-1 rounded-b-xl transition-colors" onClick={(e) => {
+              e.stopPropagation();
+              // Find full prospect objects from the prospects array
+              const allNames = [...awayProspects, ...homeProspects].map(p => p.name);
+              const fullProspects = prospects.filter(p => allNames.includes(p.name));
+              setProspectDialogData({ prospects: fullProspects, game });
+            }}>
               <div className="flex items-center gap-1.5 mb-1.5">
-                <img src="/logos/nba.png" alt="NBA" className="w-4 h-4 object-contain opacity-50" />
-                <span className="text-[11px] sm:text-sm font-semibold text-fg/40 uppercase tracking-wider">NBA Prospects</span>
+                <img src="/logos/nba.png" alt="NBA" className="w-5 h-5 object-contain" />
+                <span className="text-sm sm:text-base font-semibold text-fg uppercase tracking-wider">NBA Prospects</span>
               </div>
               <div className="space-y-1">
-                {awayProspects.map(p => renderProspect(p, tc(game.awayTeam)))}
+                {awayProspects.map(p => renderProspect(p))}
                 {awayProspects.length > 0 && homeProspects.length > 0 && (
                   <div className="border-t border-fg/5 my-1" />
                 )}
-                {homeProspects.map(p => renderProspect(p, tc(game.homeTeam)))}
+                {homeProspects.map(p => renderProspect(p))}
               </div>
             </div>
           );
@@ -1384,7 +1454,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
               <ChevronLeft className="w-4 h-4 text-fg/60" />
             </button>
           )}
-          <div ref={scrollRef} className="relative z-0 flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+          <div ref={scrollRef} className="relative z-0 flex items-start gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
             {filtered.map(game => renderMiniCard(game))}
           </div>
           {canScrollRight && (
@@ -1522,7 +1592,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                           {game.awayTeam?.logo && <img src={tl(game.awayTeam.logo)} alt="" className="w-5 h-5 object-contain" />}
                           <span className="text-sm font-semibold text-fg">{game.awayTeam?.abbreviation}</span>
                         </div>
-                        <span className="text-sm font-bold text-fg ml-auto">{dist.awayPct}%</span>
+                        <span className="text-sm font-bold text-fg">{dist.awayPct}%</span>
                       </div>
                       <div className="h-4 rounded-full overflow-hidden flex bg-fg/10 mb-1">
                         {dist.awayPct > 0 && (
@@ -1610,6 +1680,289 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
             </div>
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* NBA Prospect Detail Dialog — portaled to body */}
+      {prospectDialogData && createPortal(
+        <div
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setProspectDialogData(null)}
+        >
+          <div
+            className={`${isDark ? 'bg-gray-900' : 'bg-white'} rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-fg/10`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-fg/10 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <img src="/logos/nba.png" alt="NBA" className="w-5 h-5 object-contain" />
+                <span className="text-base font-semibold text-fg">NBA Prospects</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowDraftBoard(true)}
+                  className={`px-2.5 py-1 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-blue-400 hover:bg-blue-400/10' : 'text-blue-600 hover:bg-blue-600/10'}`}
+                >
+                  View All
+                </button>
+                <button onClick={() => setProspectDialogData(null)} className="p-1.5 rounded-lg hover:bg-fg/10 transition-colors">
+                  <X className="w-5 h-5 text-fg/60" />
+                </button>
+              </div>
+            </div>
+            {/* Content */}
+            <div className="p-4 overflow-y-auto flex-1 overscroll-contain space-y-4">
+              {prospectDialogData.prospects.map(prospect => {
+                const {
+                  rank, name, position, school, schoolLogo, headshot, height, weight, year,
+                  teamSeed, teamColor, teamStatus, teamCurrentRound, isPlaying, currentGame,
+                  seasonStats, tournamentGames, tournamentAvgs, gamesPlayed, stockDirection,
+                } = prospect;
+
+                return (
+                  <div key={rank} className={`glass-card rounded-xl overflow-hidden ${teamStatus === 'eliminated' ? 'opacity-60' : ''}`}>
+                    {/* Header */}
+                    <div className="p-4 pb-3">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                          style={{ backgroundColor: teamColor || '#1d428a' }}
+                        >
+                          #{rank}
+                        </div>
+                        <div className="flex-shrink-0 w-12 h-12 rounded-full overflow-hidden bg-fg/5">
+                          <img
+                            src={headshot || schoolLogo || '/logos/nba.png'}
+                            alt={name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.target.src = '/logos/nba.png'; }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-bold text-fg truncate">{name}</h3>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`px-1.5 py-0.5 rounded text-sm font-medium ${isDark ? 'bg-fg/10 text-fg/70' : 'bg-gray-100 text-gray-600'}`}>
+                              {position}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {schoolLogo && <img src={schoolLogo} alt={school} className="w-4 h-4" onError={(e) => { e.target.style.display = 'none'; }} />}
+                              <span className="text-sm text-fg">{school}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            {teamSeed && <span className="text-sm text-fg/70">#{teamSeed} seed</span>}
+                            {teamStatus === 'playing_now' && (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/15 text-red-500 text-sm font-semibold">
+                                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                                LIVE
+                              </span>
+                            )}
+                            {teamStatus === 'eliminated' && (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-fg/10 text-fg/60 text-sm font-medium">Eliminated</span>
+                            )}
+                            {teamStatus !== 'playing_now' && teamStatus !== 'eliminated' && teamCurrentRound && (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-fg/10 text-fg/70 text-sm font-medium">{teamCurrentRound}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0">
+                          {stockDirection === 'up' && (
+                            <div className="flex items-center gap-1 text-emerald-500">
+                              <TrendingUp size={18} />
+                              <span className="text-sm font-semibold">Rising</span>
+                            </div>
+                          )}
+                          {stockDirection === 'down' && (
+                            <div className="flex items-center gap-1 text-red-400">
+                              <TrendingDown size={18} />
+                              <span className="text-sm font-semibold">Falling</span>
+                            </div>
+                          )}
+                          {stockDirection === 'neutral' && gamesPlayed > 0 && (
+                            <div className="flex items-center gap-1 text-fg/60">
+                              <Minus size={18} />
+                              <span className="text-sm font-medium">Steady</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Live Game Bar */}
+                    {currentGame && (
+                      <div className={`mx-4 mb-3 p-3 rounded-lg border ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {currentGame.opponentLogo && <img src={currentGame.opponentLogo} alt="" className="w-5 h-5" />}
+                            <span className="text-sm font-medium text-fg">
+                              vs {currentGame.opponentSeed ? `(${currentGame.opponentSeed}) ` : ''}{currentGame.opponent}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-fg">{currentGame.teamScore} - {currentGame.opponentScore}</span>
+                            <span className="text-sm text-red-500 font-medium">{currentGame.status}</span>
+                          </div>
+                        </div>
+                        {currentGame.prospectStats && (
+                          <div className="flex items-center gap-3 flex-wrap">
+                            {[
+                              { l: 'PTS', v: currentGame.prospectStats.pts, h: true },
+                              { l: 'REB', v: currentGame.prospectStats.reb },
+                              { l: 'AST', v: currentGame.prospectStats.ast },
+                              { l: 'STL', v: currentGame.prospectStats.stl },
+                              { l: 'BLK', v: currentGame.prospectStats.blk },
+                              { l: 'FG', v: currentGame.prospectStats.fg },
+                              { l: '3PT', v: currentGame.prospectStats.threePt },
+                            ].filter(s => s.v && s.v !== '0' && s.v !== '0-0').map(s => (
+                              <span key={s.l} className={`inline-flex items-center gap-1 text-sm ${s.h ? 'font-bold text-fg' : 'text-fg'}`}>
+                                <span className="text-fg/60">{s.l}</span>
+                                <span className={s.h ? 'font-bold' : 'font-medium'}>{s.v}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Physical Info */}
+                    <div className="px-4 pb-2 flex items-center gap-3 text-sm text-fg/70">
+                      {height && <span>{height}</span>}
+                      {weight && <span>{weight} lbs</span>}
+                      {year && <span>{year}</span>}
+                      {seasonStats?.gp && <span>{seasonStats.gp} GP</span>}
+                    </div>
+
+                    {/* Stats Comparison */}
+                    <div className="px-4 pb-3">
+                      {(() => {
+                        const hasTourneyGames = gamesPlayed > 0;
+                        // Compute tourney FG% and 3P% from game logs
+                        let tourneyFgPct = null;
+                        let tourney3Pct = null;
+                        let fgm = 0, fga = 0, tpm = 0, tpa = 0;
+                        if (hasTourneyGames && tournamentGames?.length > 0) {
+                          for (const g of tournamentGames) {
+                            if (g.stats?.fg) {
+                              const [m, a] = g.stats.fg.split('-').map(Number);
+                              if (!isNaN(m) && !isNaN(a)) { fgm += m; fga += a; }
+                            }
+                            if (g.stats?.threePt) {
+                              const [m, a] = g.stats.threePt.split('-').map(Number);
+                              if (!isNaN(m) && !isNaN(a)) { tpm += m; tpa += a; }
+                            }
+                          }
+                          if (fga > 0) tourneyFgPct = (fgm / fga * 100);
+                          if (tpa > 0) tourney3Pct = (tpm / tpa * 100);
+                        }
+                        const statRows = [
+                          { label: 'PPG', season: seasonStats?.ppg, tourney: tournamentAvgs?.pts },
+                          { label: 'RPG', season: seasonStats?.rpg, tourney: tournamentAvgs?.reb },
+                          { label: 'APG', season: seasonStats?.apg, tourney: tournamentAvgs?.ast },
+                          { label: 'STL', season: seasonStats?.spg, tourney: hasTourneyGames ? (tournamentAvgs?.stl ?? 0) : null },
+                          { label: 'BLK', season: seasonStats?.bpg, tourney: hasTourneyGames ? (tournamentAvgs?.blk ?? 0) : null },
+                          ...(seasonStats?.fgPct > 0 ? [{ label: 'FG%', season: seasonStats.fgPct, tourney: tourneyFgPct, pct: true, shots: fga > 0 ? `${fgm}-${fga}` : null }] : []),
+                          ...(seasonStats?.threePct > 0 ? [{ label: '3P%', season: seasonStats.threePct, tourney: tourney3Pct, pct: true, shots: tpa > 0 ? `${tpm}-${tpa}` : null }] : []),
+                          ...(seasonStats?.mpg > 0 ? [{ label: 'MIN', season: seasonStats.mpg, tourney: tournamentAvgs?.min || null }] : []),
+                        ];
+                        const gridCols = hasTourneyGames ? 'grid-cols-[3rem_1fr_1fr]' : 'grid-cols-[3rem_1fr]';
+                        return (
+                          <>
+                            <div className={`grid ${gridCols} mb-1`}>
+                              <span></span>
+                              <span className="text-sm font-semibold text-fg/70 text-right pr-2">Season</span>
+                              {hasTourneyGames && (
+                                <span className="text-sm font-semibold text-fg/70 text-right">
+                                  Tourney ({gamesPlayed})
+                                </span>
+                              )}
+                            </div>
+                            <div className={`rounded-lg overflow-hidden ${isDark ? 'bg-fg/5' : 'bg-gray-50'} px-3`}>
+                              {statRows.map(({ label, season: s, tourney: t, pct, shots }) => {
+                                const hasTourney = t !== null && t !== undefined;
+                                const isBetter = hasTourney && t > s;
+                                const isWorse = hasTourney && t < s;
+                                const formatted = typeof s === 'number' ? (pct ? `${s.toFixed(1)}%` : s.toFixed(1)) : s;
+                                return (
+                                  <div key={label} className={`grid ${gridCols} items-center py-1.5`}>
+                                    <span className="text-sm font-medium text-fg/70">{label}</span>
+                                    <span className="text-sm font-medium text-fg text-right pr-2">{formatted}</span>
+                                    {hasTourneyGames && (
+                                      <span className={`text-sm font-semibold text-right ${
+                                        !hasTourney ? 'text-fg/30' : isBetter ? 'text-emerald-500' : isWorse ? 'text-red-400' : 'text-fg'
+                                      }`}>
+                                        {hasTourney ? (
+                                          <>
+                                            {typeof t === 'number' ? `${t.toFixed(1)}${pct ? '%' : ''}` : t}
+                                            {shots && <span className="text-fg/60 font-normal ml-1">({shots})</span>}
+                                          </>
+                                        ) : '—'}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Game Log */}
+                    {tournamentGames?.length > 0 && (
+                      <div className={`px-4 pb-4 space-y-2 ${isDark ? 'bg-fg/3' : 'bg-gray-50/50'} border-t border-fg/10 pt-3`}>
+                        <span className="text-sm font-semibold text-fg/70">Game Log</span>
+                        {tournamentGames.map((g, i) => (
+                          <div key={i} className={`rounded-lg p-3 ${isDark ? 'bg-fg/5' : 'bg-white'} border border-fg/5`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-fg/70">{g.round}</span>
+                              <div className="flex items-center gap-2">
+                                {g.result === 'W' && <span className="text-sm font-bold text-emerald-500">W</span>}
+                                {g.result === 'L' && <span className="text-sm font-bold text-red-400">L</span>}
+                                {g.result === 'LIVE' && <span className="text-sm font-bold text-red-500">LIVE</span>}
+                                <span className="text-sm font-semibold text-fg">{g.teamScore}-{g.opponentScore}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 mb-2">
+                              {g.opponentLogo && <img src={g.opponentLogo} alt="" className="w-4 h-4" />}
+                              <span className="text-sm text-fg">vs {g.opponentSeed ? `(${g.opponentSeed}) ` : ''}{g.opponent}</span>
+                            </div>
+                            {g.stats ? (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {[
+                                  { l: 'PTS', v: g.stats.pts },
+                                  { l: 'REB', v: g.stats.reb },
+                                  { l: 'AST', v: g.stats.ast },
+                                  { l: 'STL', v: g.stats.stl },
+                                  { l: 'BLK', v: g.stats.blk },
+                                  { l: 'FG', v: g.stats.fg },
+                                  { l: '3PT', v: g.stats.threePt },
+                                  { l: '+/-', v: g.stats.plusMinus },
+                                ].filter(s => s.v && s.v !== '0' && s.v !== '0-0').map(s => (
+                                  <span key={s.l} className="inline-flex items-center gap-1 text-sm text-fg">
+                                    <span className="text-fg/60">{s.l}</span>
+                                    <span className="font-semibold">{s.v}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-fg/60">No stats available</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {showDraftBoard && createPortal(
+        <ProspectDialog rank={null} teamColor={null} onClose={() => setShowDraftBoard(false)} />,
         document.body
       )}
     </div>

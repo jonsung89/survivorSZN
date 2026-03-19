@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, TrendingUp, Users, Target, AlertTriangle, ArrowRight } from 'lucide-react';
-import { nflAPI, scheduleAPI } from '../api';
+import { nflAPI, scheduleAPI, bracketAPI } from '../api';
 import { getSportModule } from '../sports';
 import { useAuth } from '../context/AuthContext';
 import Loading from '../components/Loading';
@@ -11,6 +11,7 @@ import StatRankingDialog from '../components/StatRankingDialog';
 import BoxScore from '../components/BoxScore';
 import { PLAYOFF_ROUNDS, BROADCAST_NETWORKS } from '../sports/nfl/constants';
 import { useThemedLogo, useThemedColor } from '../utils/logo';
+import { useTheme } from '../context/ThemeContext';
 import useLiveScores from '../hooks/useLiveScores';
 import { useScoresSocket } from '../context/ScoresSocketContext';
 import useAnimatedScore from '../hooks/useAnimatedScore';
@@ -149,6 +150,7 @@ const StandingBadge = ({ label, rank }) => {
 
 export default function Schedule() {
   const { user } = useAuth();
+  const { isDark } = useTheme();
   const tl = useThemedLogo();
   const tc = useThemedColor();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -192,12 +194,55 @@ export default function Schedule() {
   const [dailySportSeasons, setDailySportSeasons] = useState({});
   const [showDailySeasonDropdown, setShowDailySeasonDropdown] = useState(false);
 
+  const [prospects, setProspects] = useState([]);
   const [detailTab, setDetailTab] = useState('summary');
   const weekTabsRef = useRef(null);
   const weekButtonRefs = useRef({});
   const seasonDropdownRef = useRef(null);
   const dailySeasonDropdownRef = useRef(null);
   const expandedAtRef = useRef(null); // Timestamp when game card was expanded
+
+  // Fetch NBA prospects for NCAAB games
+  useEffect(() => {
+    if (selectedSport !== 'ncaab') { setProspects([]); return; }
+    const currentYear = new Date().getFullYear();
+    bracketAPI.getProspectWatch(currentYear).then(data => {
+      setProspects(data?.prospects || []);
+    }).catch(() => {});
+  }, [selectedSport]);
+
+  // Map prospects to game IDs (from tournament games) and team IDs (for scheduled games)
+  const prospectsByGame = useMemo(() => {
+    const map = {};
+    // Map by gameId from tournament games and live games
+    for (const p of prospects) {
+      for (const tg of (p.tournamentGames || [])) {
+        if (!tg.gameId) continue;
+        if (!map[tg.gameId]) map[tg.gameId] = { _all: [] };
+        map[tg.gameId]._all.push({ ...p, gameStats: tg.stats, gameResult: tg.result });
+      }
+      if (p.currentGame?.gameId && p.isPlaying) {
+        const gid = String(p.currentGame.gameId);
+        if (!map[gid]) map[gid] = { _all: [] };
+        if (!map[gid]._all.some(x => x.name === p.name)) {
+          map[gid]._all.push({ ...p, gameStats: p.currentGame.prospectStats, gameResult: 'LIVE' });
+        }
+      }
+    }
+    return map;
+  }, [prospects]);
+
+  // Build a team-to-prospects map for scheduled games without tournament game entries
+  const prospectsByTeam = useMemo(() => {
+    const map = {};
+    for (const p of prospects) {
+      if (!p.teamId) continue;
+      const tid = String(p.teamId);
+      if (!map[tid]) map[tid] = [];
+      map[tid].push(p);
+    }
+    return map;
+  }, [prospects]);
 
   // Live score updates for daily sports (NBA, NCAAB, etc.)
   const selectedSportTab = SPORT_TABS.find(s => s.id === selectedSport);
@@ -2139,6 +2184,98 @@ export default function Schedule() {
     return <span className="text-fg/50 font-semibold">#{r} </span>;
   };
 
+  // Render NBA prospect section for a game card
+  const renderProspectSection = (game) => {
+    if (selectedSport !== 'ncaab') return null;
+    const isPast = isGamePast(game);
+    const live = isGameLive(game);
+    const hasStats = live || isPast;
+    const awayId = String(game.awayTeam?.id);
+    const homeId = String(game.homeTeam?.id);
+
+    // Try game-specific prospects first, fall back to team-based for scheduled games
+    let allProspects;
+    const gameProspects = prospectsByGame[String(game.id)];
+    if (gameProspects?._all?.length) {
+      allProspects = gameProspects._all;
+    } else {
+      // For scheduled games, match prospects by team ID
+      const awayP = (prospectsByTeam[awayId] || []).slice(0, 3);
+      const homeP = (prospectsByTeam[homeId] || []).slice(0, 3);
+      allProspects = [...awayP, ...homeP];
+    }
+    if (!allProspects.length) return null;
+
+    const awayProspects = allProspects.filter(p => String(p.teamId) === awayId).slice(0, 3);
+    const homeProspects = allProspects.filter(p => String(p.teamId) !== awayId).slice(0, 3);
+    if (!awayProspects.length && !homeProspects.length) return null;
+
+    const getTeamLogo = (teamId) => {
+      const tid = String(teamId);
+      if (String(game.awayTeam?.id) === tid) return game.awayTeam?.logo;
+      if (String(game.homeTeam?.id) === tid) return game.homeTeam?.logo;
+      return null;
+    };
+
+    const renderProspect = (p) => {
+      const initials = p.name?.split(' ').map((n, i, a) => i === a.length - 1 ? n : n[0] + '.').join(' ') || p.name;
+      const teamLogo = getTeamLogo(p.teamId) || p.schoolLogo;
+      const isDnp = hasStats && (
+        !p.gameStats || p.gameStats.min === '0' || p.gameStats.min === 0
+      );
+      return (
+        <div key={p.name} className="flex items-center gap-1.5 min-w-0">
+          {teamLogo ? (
+            <img src={teamLogo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
+          ) : (
+            <div className="w-4 h-4 flex-shrink-0" />
+          )}
+          <span className={`text-sm sm:text-base font-bold flex-shrink-0 w-6 text-center ${isDark ? 'text-white' : 'text-black'}`}>
+            #{p.rank}
+          </span>
+          {p.headshot ? (
+            <img src={p.headshot} alt="" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover flex-shrink-0 bg-fg/10" />
+          ) : (
+            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full flex-shrink-0 bg-fg/10" />
+          )}
+          <span className="text-sm sm:text-base text-fg truncate flex-1 font-medium">{initials}</span>
+          {hasStats && p.gameStats && !(p.gameStats.min === '0' || p.gameStats.min === 0) ? (
+            <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
+              {p.gameStats.pts ?? 0}<span className="text-fg/60">p</span>{' '}
+              {p.gameStats.reb ?? 0}<span className="text-fg/60">r</span>{' '}
+              {p.gameStats.ast ?? 0}<span className="text-fg/60">a</span>
+            </span>
+          ) : isDnp && isPast ? (
+            <span className="text-sm sm:text-base font-medium text-fg/60 flex-shrink-0">DNP</span>
+          ) : p.seasonStats?.ppg != null ? (
+            <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
+              <span className="text-fg/60">avg </span>
+              {p.seasonStats.ppg}<span className="text-fg/60">p</span>{' '}
+              {p.seasonStats.rpg ?? 0}<span className="text-fg/60">r</span>{' '}
+              {p.seasonStats.apg ?? 0}<span className="text-fg/60">a</span>
+            </span>
+          ) : null}
+        </div>
+      );
+    };
+
+    return (
+      <div className="mt-2 pt-2 border-t border-fg/10" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <img src="/logos/nba.png" alt="NBA" className="w-5 h-5 object-contain" />
+          <span className="text-sm sm:text-base font-semibold text-fg uppercase tracking-wider">NBA Prospects</span>
+        </div>
+        <div className="space-y-1">
+          {awayProspects.map(p => renderProspect(p))}
+          {awayProspects.length > 0 && homeProspects.length > 0 && (
+            <div className="border-t border-fg/5 my-1" />
+          )}
+          {homeProspects.map(p => renderProspect(p))}
+        </div>
+      </div>
+    );
+  };
+
   // Render a single game card
   const renderGameCard = (game, index) => {
     const isPast = isGamePast(game);
@@ -2290,6 +2427,8 @@ export default function Schedule() {
             </div>
           </div>
           
+          {renderProspectSection(game)}
+
           {/* Expanded Content - Mobile */}
           {isExpanded && (
             (isPast || isLive) ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)
@@ -2421,6 +2560,8 @@ export default function Schedule() {
             </div>
           </div>
           
+          {renderProspectSection(game)}
+
           {/* Expanded Content - Desktop */}
           {isExpanded && (
             (isPast || isLive) ? renderCompletedGameDetails(game) : renderUpcomingGameDetails(game)

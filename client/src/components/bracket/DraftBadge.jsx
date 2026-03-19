@@ -154,7 +154,7 @@ function ProspectRow({ prospect, isHighlighted, highlightRef, isDark, teamColor 
   );
 }
 
-function ProspectDialog({ rank, teamColor, onClose }) {
+export function ProspectDialog({ rank, teamColor, onClose }) {
   const { isDark } = useTheme();
   const [prospects, setProspects] = useState([]);
   const [loading, setLoading] = useState(true);

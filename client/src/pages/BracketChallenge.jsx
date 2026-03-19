@@ -10,6 +10,7 @@ import BracketLeaderboard from '../components/bracket/BracketLeaderboard';
 import FinalFourPreviewDialog from '../components/bracket/FinalFourPreviewDialog';
 import BracketSetup from '../components/bracket/BracketSetup';
 import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
+import TournamentGames from '../components/bracket/TournamentGames';
 import ChatWidget from '../components/ChatWidget';
 import { getSportBadgeClasses } from '../sports';
 import SportBadge from '../components/SportBadge';
@@ -433,14 +434,9 @@ export default function BracketChallenge() {
         </div>
       </div>
 
-      {/* Tournament Locked Banner (standalone, not in grid) */}
+      {/* Tournament Games (replaces locked banner when tournament has started) */}
       {isTournamentLocked && isOpen && (
-        <div className="glass-card rounded-xl p-4 sm:p-5 mb-5 animate-in border border-fg/10" style={{ animationDelay: '25ms' }}>
-          <div className="flex items-center gap-2 justify-center">
-            <Lock className="w-4 h-4 text-fg/60" />
-            <p className="text-fg/70 text-sm font-medium">Brackets are locked — the tournament has started</p>
-          </div>
-        </div>
+        <TournamentGames tournamentData={tournamentData} season={challenge?.season} />
       )}
 
       {/* Countdown + Prize Pot — side by side on desktop */}

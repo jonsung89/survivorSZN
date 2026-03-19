@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Trophy } from 'lucide-react';
+import { Trophy, Pencil, Check } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
+import { getThemedLogo } from '../../utils/logo';
 import { getChildSlots } from '../../utils/bracketSlots';
 
 export default function TiebreakerInput({ type, value, scores, onChange, disabled, picks, tournamentData }) {
   if (type !== 'total_score') return null;
+
+  const { isDark } = useTheme();
 
   // Get the two championship teams from picks (slot 63's children are slots 61, 62)
   const children = getChildSlots(63); // [61, 62]
@@ -18,6 +22,7 @@ export default function TiebreakerInput({ type, value, scores, onChange, disable
   const [score1, setScore1] = useState('');
   const [score2, setScore2] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     if (initialized) return;
@@ -33,114 +38,141 @@ export default function TiebreakerInput({ type, value, scores, onChange, disable
     }
   }, [value, scores]);
 
-  const handleScoreChange = (which, val) => {
-    const numVal = val === '' ? '' : val;
-    let s1 = which === 1 ? numVal : score1;
-    let s2 = which === 2 ? numVal : score2;
-
-    if (which === 1) setScore1(s1);
-    else setScore2(s2);
-
-    const n1 = parseInt(s1) || 0;
-    const n2 = parseInt(s2) || 0;
+  const handleSave = () => {
+    const n1 = parseInt(score1) || 0;
+    const n2 = parseInt(score2) || 0;
     if (n1 > 0 && n2 > 0) {
       onChange(n1 + n2, { score1: n1, score2: n2 });
-    } else {
-      onChange(null, null);
     }
+    setEditing(false);
+  };
+
+  const handleScoreChange = (which, val) => {
+    if (which === 1) setScore1(val);
+    else setScore2(val);
   };
 
   const hasTeams = team1 && team2;
   const total = (parseInt(score1) || 0) + (parseInt(score2) || 0);
-  const showTotal = parseInt(score1) > 0 && parseInt(score2) > 0;
+  const hasValidTotal = parseInt(score1) > 0 && parseInt(score2) > 0;
 
   return (
-    <div className="bg-gradient-to-b from-amber-400/[0.08] to-amber-400/[0.03] border border-amber-400/20 rounded-xl overflow-hidden">
+    <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-fg/10 bg-fg/[0.04]' : 'border-gray-200 bg-gray-50'}`}>
       {/* Header */}
-      <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+      <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Trophy className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-xs font-semibold text-amber-400/80 uppercase tracking-wider">Championship Tiebreaker</span>
+          <Trophy className="w-4 h-4 text-amber-500" />
+          <span className={`text-sm font-bold uppercase tracking-wider ${isDark ? 'text-fg/70' : 'text-gray-600'}`}>
+            Championship Tiebreaker
+          </span>
         </div>
-        {showTotal && (
-          <span className="text-xs text-fg/50">
-            Total: <span className="font-mono font-semibold text-amber-400">{total}</span>
+        {hasValidTotal && !editing && (
+          <span className={`text-base font-mono font-bold ${isDark ? 'text-fg/80' : 'text-gray-700'}`}>
+            Total: {total}
           </span>
         )}
       </div>
 
-      {/* Scoreboard */}
+      {/* Content */}
       <div className="px-4 pb-4">
         {hasTeams ? (
-          <div className="flex flex-col gap-2">
-            {/* Team 1 */}
-            <div className="flex-1 flex items-center gap-3 bg-fg/[0.06] rounded-lg px-3 py-2.5 border border-fg/10">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                {team1.logo ? (
-                  <img src={team1.logo} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-fg/10 flex-shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <span className="text-sm font-semibold text-fg truncate block">
-                    {team1.shortName || team1.abbreviation}
-                  </span>
-                  {String(winnerId) === String(team1Id) && (
-                    <span className="text-[9px] font-bold text-amber-400">WINNER</span>
-                  )}
-                </div>
-              </div>
-              <input
-                type="number"
-                min="0"
-                max="200"
-                value={score1}
-                onChange={e => handleScoreChange(1, e.target.value)}
-                placeholder="0"
-                disabled={disabled}
-                aria-label={`Predicted score for ${team1.shortName || team1.abbreviation || team1.name}`}
-                className="w-14 bg-surface border border-fg/10 rounded-md px-1 py-2 text-center text-xl font-mono font-bold text-fg placeholder:text-fg/15 focus:outline-none focus:border-amber-400/40 focus:ring-1 focus:ring-amber-400/20 disabled:opacity-40"
-              />
+          <>
+            {/* Teams display */}
+            <div className="flex items-center justify-center gap-4 py-3">
+              <TeamBadge team={team1} isWinner={String(winnerId) === String(team1Id)} isDark={isDark} />
+              <span className={`text-base font-semibold ${isDark ? 'text-fg/30' : 'text-gray-400'}`}>vs</span>
+              <TeamBadge team={team2} isWinner={String(winnerId) === String(team2Id)} isDark={isDark} />
             </div>
 
-
-
-            {/* Team 2 */}
-            <div className="flex-1 flex items-center gap-3 bg-fg/[0.06] rounded-lg px-3 py-2.5 border border-fg/10">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                {team2.logo ? (
-                  <img src={team2.logo} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-fg/10 flex-shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <span className="text-sm font-semibold text-fg truncate block">
-                    {team2.shortName || team2.abbreviation}
-                  </span>
-                  {String(winnerId) === String(team2Id) && (
-                    <span className="text-[9px] font-bold text-amber-400">WINNER</span>
-                  )}
+            {/* Score editing */}
+            {editing ? (
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2">
+                  <ScoreRow team={team1} value={score1} onChange={val => handleScoreChange(1, val)} disabled={disabled} isDark={isDark} />
+                  <ScoreRow team={team2} value={score2} onChange={val => handleScoreChange(2, val)} disabled={disabled} isDark={isDark} />
                 </div>
+                <button
+                  onClick={handleSave}
+                  disabled={!parseInt(score1) || !parseInt(score2)}
+                  className={`w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
+                    parseInt(score1) && parseInt(score2)
+                      ? isDark ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-violet-600 hover:bg-violet-500 text-white'
+                      : 'bg-fg/10 text-fg/30 cursor-not-allowed'
+                  }`}
+                >
+                  <Check className="w-4 h-4" />
+                  Save Total Score
+                </button>
               </div>
-              <input
-                type="number"
-                min="0"
-                max="200"
-                value={score2}
-                onChange={e => handleScoreChange(2, e.target.value)}
-                placeholder="0"
+            ) : (
+              <button
+                onClick={() => !disabled && setEditing(true)}
                 disabled={disabled}
-                aria-label={`Predicted score for ${team2.shortName || team2.abbreviation || team2.name}`}
-                className="w-14 bg-surface border border-fg/10 rounded-md px-1 py-2 text-center text-xl font-mono font-bold text-fg placeholder:text-fg/15 focus:outline-none focus:border-amber-400/40 focus:ring-1 focus:ring-amber-400/20 disabled:opacity-40"
-              />
-            </div>
-          </div>
+                className={`w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
+                  disabled
+                    ? 'opacity-40 cursor-not-allowed'
+                    : hasValidTotal
+                      ? isDark ? 'bg-fg/[0.06] hover:bg-fg/10 text-fg/60' : 'bg-white hover:bg-gray-100 text-gray-500 border border-gray-200'
+                      : isDark ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-violet-600 hover:bg-violet-500 text-white'
+                }`}
+              >
+                <Pencil className="w-4 h-4" />
+                {hasValidTotal ? 'Edit Total Score' : 'Set Total Score Prediction'}
+              </button>
+            )}
+          </>
         ) : (
-          <p className="text-xs text-fg/30 text-center py-3 italic">
+          <p className={`text-sm text-center py-4 italic ${isDark ? 'text-fg/30' : 'text-gray-400'}`}>
             Complete your Final Four picks to predict the championship score
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+function TeamBadge({ team, isWinner, isDark }) {
+  if (!team) return null;
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      {team.logo ? (
+        <img src={getThemedLogo(team.logo, isDark)} alt="" className="w-10 h-10 object-contain" />
+      ) : (
+        <div className="w-10 h-10 rounded-full bg-fg/10" />
+      )}
+      <span className={`text-sm font-semibold ${isDark ? 'text-fg' : 'text-gray-800'}`}>
+        {team.shortName || team.abbreviation}
+      </span>
+      <span className={`text-sm font-bold ${isWinner ? (isDark ? 'text-amber-400' : 'text-amber-600') : 'invisible'}`}>WINNER</span>
+    </div>
+  );
+}
+
+function ScoreRow({ team, value, onChange, disabled, isDark }) {
+  return (
+    <div className={`flex items-center gap-3 rounded-lg px-3 py-2.5 ${isDark ? 'bg-fg/[0.06] border border-fg/10' : 'bg-white border border-gray-200'}`}>
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        {team.logo ? (
+          <img src={getThemedLogo(team.logo, isDark)} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-fg/10 flex-shrink-0" />
+        )}
+        <span className="text-base font-semibold text-fg truncate">
+          {team.shortName || team.abbreviation}
+        </span>
+      </div>
+      <input
+        type="number"
+        min="0"
+        max="200"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="0"
+        disabled={disabled}
+        className={`w-16 bg-surface border rounded-md px-2 py-2 text-center text-xl font-mono font-bold text-fg placeholder:text-fg/15 focus:outline-none focus:ring-2 disabled:opacity-40 ${
+          isDark ? 'border-fg/10 focus:ring-violet-500/30' : 'border-gray-200 focus:ring-violet-500/30'
+        }`}
+      />
     </div>
   );
 }

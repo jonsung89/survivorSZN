@@ -16,6 +16,7 @@ export default function BracketView({
   picks,
   results,
   liveSlotData = {},
+  eliminatedTeamIds = [],
   onPick,
   onMatchupClick,
   isReadOnly,
@@ -362,6 +363,7 @@ export default function BracketView({
             team2={teamsFor(semi.slot).team2}
             pickedTeamId={pickedFor(semi.slot)}
             result={resultFor(semi.slot)}
+            eliminatedTeamIds={eliminatedTeamIds}
             onPick={(teamId) => onPick?.(semi.slot, teamId)}
             onDetailClick={() => onMatchupClick?.(semi.slot)}
             isReadOnly={isReadOnly}
@@ -475,6 +477,7 @@ export default function BracketView({
             results={results}
             tournamentData={tournamentData}
             liveSlotData={liveSlotData}
+            eliminatedTeamIds={eliminatedTeamIds}
             onPick={onPick}
             onMatchupClick={onMatchupClick}
             isReadOnly={isReadOnly}
@@ -502,6 +505,7 @@ export default function BracketView({
                       team2={teamsFor(champSlot).team2}
                       pickedTeamId={pickedFor(champSlot)}
                       result={resultFor(champSlot)}
+                      eliminatedTeamIds={eliminatedTeamIds}
                       onPick={(teamId) => onPick?.(champSlot, teamId)}
                       onDetailClick={() => onMatchupClick?.(champSlot)}
                       isReadOnly={isReadOnly}
@@ -556,6 +560,7 @@ export default function BracketView({
               results={results}
               tournamentData={tournamentData}
               liveSlotData={liveSlotData}
+              eliminatedTeamIds={eliminatedTeamIds}
               onPick={onPick}
               onMatchupClick={onMatchupClick}
               isReadOnly={isReadOnly}
@@ -577,6 +582,7 @@ export default function BracketView({
                     team2={teamsFor(champSlot).team2}
                     pickedTeamId={pickedFor(champSlot)}
                     result={resultFor(champSlot)}
+                    eliminatedTeamIds={eliminatedTeamIds}
                     onPick={(teamId) => onPick?.(champSlot, teamId)}
                     onDetailClick={() => onMatchupClick?.(champSlot)}
                     isReadOnly={isReadOnly}
@@ -613,6 +619,7 @@ export default function BracketView({
               results={results}
               tournamentData={tournamentData}
               liveSlotData={liveSlotData}
+              eliminatedTeamIds={eliminatedTeamIds}
               onPick={onPick}
               onMatchupClick={onMatchupClick}
               isReadOnly={isReadOnly}
@@ -630,6 +637,7 @@ export default function BracketView({
               results={results}
               tournamentData={tournamentData}
               liveSlotData={liveSlotData}
+              eliminatedTeamIds={eliminatedTeamIds}
               onPick={onPick}
               onMatchupClick={onMatchupClick}
               isReadOnly={isReadOnly}
@@ -647,6 +655,7 @@ export default function BracketView({
               results={results}
               tournamentData={tournamentData}
               liveSlotData={liveSlotData}
+              eliminatedTeamIds={eliminatedTeamIds}
               onPick={onPick}
               onMatchupClick={onMatchupClick}
               isReadOnly={isReadOnly}
@@ -812,6 +821,7 @@ export default function BracketView({
           results={results}
           tournamentData={tournamentData}
           liveSlotData={liveSlotData}
+          eliminatedTeamIds={eliminatedTeamIds}
           onPick={onPick}
           onMatchupClick={onMatchupClick}
           isReadOnly={isReadOnly}
@@ -948,7 +958,7 @@ export default function BracketView({
               >
                 {/* Row 1 */}
                 <div id={`mobile-full-region-${structure.regions.indexOf(topLeft)}`}>
-                  <BracketRegion region={topLeft} picks={picks} results={results} tournamentData={tournamentData} liveSlotData={liveSlotData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" showRoundHeaders cellWidth={mCellW} largeHeaders />
+                  <BracketRegion region={topLeft} picks={picks} results={results} tournamentData={tournamentData} liveSlotData={liveSlotData} eliminatedTeamIds={eliminatedTeamIds} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" showRoundHeaders cellWidth={mCellW} largeHeaders />
                 </div>
                 {renderSemifinalCell(leftSemi, undefined, true)}
                 <div className="row-span-2 flex flex-col flex-shrink-0" style={mCenterStyle}>
@@ -980,14 +990,14 @@ export default function BracketView({
                 </div>
                 {renderSemifinalCell(rightSemi, undefined, true)}
                 <div id={`mobile-full-region-${structure.regions.indexOf(topRight)}`}>
-                  <BracketRegion region={topRight} picks={picks} results={results} tournamentData={tournamentData} liveSlotData={liveSlotData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" showRoundHeaders cellWidth={mCellW} largeHeaders />
+                  <BracketRegion region={topRight} picks={picks} results={results} tournamentData={tournamentData} liveSlotData={liveSlotData} eliminatedTeamIds={eliminatedTeamIds} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" showRoundHeaders cellWidth={mCellW} largeHeaders />
                 </div>
                 {/* Row 2 — cols 2-4 already occupied by row-span-2 items above */}
                 <div id={`mobile-full-region-${structure.regions.indexOf(bottomLeft)}`}>
-                  <BracketRegion region={bottomLeft} picks={picks} results={results} tournamentData={tournamentData} liveSlotData={liveSlotData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" cellWidth={mCellW} />
+                  <BracketRegion region={bottomLeft} picks={picks} results={results} tournamentData={tournamentData} liveSlotData={liveSlotData} eliminatedTeamIds={eliminatedTeamIds} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="left" cellWidth={mCellW} />
                 </div>
                 <div id={`mobile-full-region-${structure.regions.indexOf(bottomRight)}`}>
-                  <BracketRegion region={bottomRight} picks={picks} results={results} tournamentData={tournamentData} liveSlotData={liveSlotData} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" cellWidth={mCellW} />
+                  <BracketRegion region={bottomRight} picks={picks} results={results} tournamentData={tournamentData} liveSlotData={liveSlotData} eliminatedTeamIds={eliminatedTeamIds} onPick={onPick} onMatchupClick={onMatchupClick} isReadOnly={isReadOnly} side="right" cellWidth={mCellW} />
                 </div>
               </div>
             </div>

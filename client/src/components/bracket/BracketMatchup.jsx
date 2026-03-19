@@ -25,6 +25,7 @@ export default function BracketMatchup({
   pickedTeamId,
   result,
   slotData,
+  eliminatedTeamIds = [],
   onPick,
   onDetailClick,
   isReadOnly,
@@ -65,6 +66,10 @@ export default function BracketMatchup({
     const isWrong = isDecided && isSelected && String(winningTeamId) !== String(team.id);
     const isActualWinner = isDecided && String(winningTeamId) === String(team.id);
     const isEliminated = isDecided && !isActualWinner;
+    // Team is globally eliminated from the tournament (lost in an earlier round)
+    const isTeamGloballyEliminated = eliminatedTeamIds.includes(String(team.id));
+    // Busted: user picked this team for this slot but the team has already been eliminated in an earlier round
+    const isBusted = !isDecided && isSelected && isTeamGloballyEliminated;
 
     // On desktop: selected = strong team color, not selected (when other team is picked) = faded
     const isOtherPicked = hasPick && !isSelected;
@@ -111,17 +116,18 @@ export default function BracketMatchup({
     const rowStyle = {};
 
     if (isCorrect) {
-      // Correct: keep team color, add green left border
+      // Correct: keep team color
       if (team.color) {
         rowStyle.backgroundColor = hexToRgba(team.color, trueAlpha);
       } else {
         rowStyle.backgroundColor = isDark ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.15)';
       }
-      rowStyle.borderLeft = '3.5px solid rgb(16, 185, 129)';
     } else if (isWrong) {
-      // Wrong: muted/grayed bg, add red left border
+      // Wrong: muted/grayed bg
       rowStyle.backgroundColor = isDark ? 'rgba(100, 100, 100, 0.35)' : 'rgba(140, 140, 140, 0.20)';
-      rowStyle.borderLeft = '3.5px solid rgb(239, 68, 68)';
+    } else if (isBusted) {
+      // Busted: team eliminated in earlier round — gray out like wrong pick
+      rowStyle.backgroundColor = isDark ? 'rgba(100, 100, 100, 0.35)' : 'rgba(140, 140, 140, 0.20)';
     } else if (isOtherPicked && !isDecided) {
       // Gray out the non-selected team
       rowStyle.backgroundColor = isLightMode ? 'rgba(150, 150, 150, 0.25)' : 'rgba(100, 100, 100, 0.30)';
@@ -131,13 +137,13 @@ export default function BracketMatchup({
     }
 
     // Use white/dark-bg logo when on team color bg; use normal logo when grayed out
-    const isGrayedOut = (isOtherPicked && !isDecided) || isWrong;
+    const isGrayedOut = (isOtherPicked && !isDecided) || isWrong || isBusted;
     const teamLogo = isGrayedOut ? team.logo : getDarkBgLogo(team.logo);
 
     // Text color: white on team color, muted on gray
     // First Four placeholder teams have no real team color — use fg text in light mode
     const isFirstFourPlaceholder = team.isFirstFour;
-    const textColorClass = isWrong
+    const textColorClass = isWrong || isBusted
       ? (isDark ? 'text-white/50' : 'text-fg/50')
       : isGrayedOut ? 'text-fg/40' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg' : 'text-white';
 
@@ -178,7 +184,7 @@ export default function BracketMatchup({
         )}
 
         {/* Team name + record */}
-        <span className={`text-sm font-semibold flex-1 truncate relative z-[2] ${isWrong ? `line-through ${isDark ? 'text-white/40' : 'text-fg/40'}` : isEliminated ? 'line-through text-white/40' : textColorClass}`}>
+        <span className={`text-sm font-semibold flex-1 truncate relative z-[2] ${(isWrong || isBusted) ? `line-through ${isDark ? 'text-white/40' : 'text-fg/40'}` : isEliminated ? 'line-through text-white/40' : textColorClass}`}>
           {compact
             ? (team.abbreviation || team.shortName || team.name)
             : (team.shortName || team.name || team.abbreviation)}
@@ -189,29 +195,32 @@ export default function BracketMatchup({
           </span>
         )}
 
-        {/* Status icons — filled circle badges for correct/wrong, placed BEFORE score so scores align */}
-        {isCorrect && (
-          <span className="flex-shrink-0 relative z-[2] w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
-            <Check className="w-3 h-3 text-white" strokeWidth={3} aria-hidden="true" />
-          </span>
-        )}
-        {isWrong && (
-          <span className="flex-shrink-0 relative z-[2] w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm">
-            <X className="w-3 h-3 text-white" strokeWidth={3} aria-hidden="true" />
-          </span>
-        )}
-        {isSelected && !isDecided && !isLive && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
+        {/* Pre-pick check (before game decided) */}
+        {isSelected && !isDecided && !isLive && !isBusted && <Check className="w-3.5 h-3.5 text-white/80 flex-shrink-0 relative z-[2]" aria-hidden="true" />}
 
         {/* Score (live/final) — same size for both teams so they align vertically */}
         {(isLive || isDecided) && team.score !== null && team.score !== undefined && (
           <span className={`text-sm font-mono flex-shrink-0 relative z-[2] min-w-[24px] text-right ${
             isActualWinner
-              ? `font-bold ${isWrong ? (isDark ? 'text-white/70' : 'text-fg/70') : 'text-white'}`
-              : `font-medium ${isWrong ? (isDark ? 'text-white/35' : 'text-fg/35') : (isCorrect ? 'text-white/50' : 'text-white/50')}`
+              ? `font-bold ${(isWrong || isBusted) ? (isDark ? 'text-white/70' : 'text-fg/70') : 'text-white'}`
+              : `font-medium ${(isWrong || isBusted) ? (isDark ? 'text-white/35' : 'text-fg/35') : (isCorrect ? 'text-white/50' : 'text-white/50')}`
           }`}>
             {team.score}
           </span>
         )}
+
+        {/* Status icon slot — always w-5 for vertical alignment */}
+        {isCorrect ? (
+          <span className="flex-shrink-0 relative z-[2] w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+            <Check className="w-3 h-3 text-white" strokeWidth={3} aria-hidden="true" />
+          </span>
+        ) : (isWrong || isBusted) ? (
+          <span className="flex-shrink-0 relative z-[2] w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm">
+            <X className="w-3 h-3 text-white" strokeWidth={3} aria-hidden="true" />
+          </span>
+        ) : isDecided ? (
+          <span className="w-5 h-5 flex-shrink-0" />
+        ) : null}
       </div>
     );
   };

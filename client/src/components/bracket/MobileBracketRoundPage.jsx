@@ -13,6 +13,7 @@ export default function MobileBracketRoundPage({
   results,
   tournamentData,
   liveSlotData = {},
+  eliminatedTeamIds = [],
   onPick,
   onMatchupClick,
   isReadOnly,
@@ -78,6 +79,7 @@ export default function MobileBracketRoundPage({
             pickedTeamId={pickedTeam}
             result={result}
             slotData={slotDataFor(slot)}
+            eliminatedTeamIds={eliminatedTeamIds}
             onPick={(teamId) => onPick?.(slot, teamId)}
             onDetailClick={() => onMatchupClick?.(slot)}
             isReadOnly={isReadOnly}

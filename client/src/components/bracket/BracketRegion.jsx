@@ -29,6 +29,7 @@ export default function BracketRegion({
   results,
   tournamentData,
   liveSlotData = {},
+  eliminatedTeamIds = [],
   onPick,
   onMatchupClick,
   isReadOnly,
@@ -120,6 +121,7 @@ export default function BracketRegion({
                 pickedTeamId={pickedTeam}
                 result={result}
                 slotData={slotDataFor(slot)}
+                eliminatedTeamIds={eliminatedTeamIds}
                 onPick={(teamId) => onPick?.(slot, teamId)}
                 onDetailClick={() => onMatchupClick?.(slot)}
                 isReadOnly={isReadOnly}

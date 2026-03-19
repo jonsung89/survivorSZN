@@ -53,29 +53,20 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, leagueI
     return tournamentData.teams[entry.championTeamId] || null;
   };
 
-  // Column count for mobile: #, Player, R64, Total = 4
-  const mobileColCount = 4;
+  const colCount = 5; // #, Player, current round, Total, Poss.
 
   return (
-    <div className="overflow-x-auto">
+    <div>
       <table className="w-full text-sm sm:text-base">
         <thead>
           <tr className="border-b border-fg/10">
             <th className="text-left py-3 px-2 text-fg/60 text-sm font-medium w-10">#</th>
             <th className="text-left py-3 px-2 text-fg/60 text-sm font-medium">Player</th>
-            <th className="text-left py-3 px-2 text-fg/60 text-sm font-medium hidden sm:table-cell">Bracket</th>
-            {ROUND_LABELS.map(label => (
-              <th key={label} className="text-center py-3 px-1 text-fg/60 text-sm font-medium hidden md:table-cell w-14">
-                {label}
-              </th>
-            ))}
-            <th className="text-center py-3 px-2 text-fg/60 text-sm font-medium w-16 hidden md:table-cell">Total</th>
-            <th className="text-center py-3 px-2 text-fg/60 text-sm font-medium w-16 hidden sm:table-cell">Poss.</th>
-            {/* Mobile: show current round label + Total */}
-            <th className="text-center py-3 px-1 text-fg/60 text-sm font-medium md:hidden w-12">
+            <th className="text-center py-3 px-1 text-fg/60 text-sm font-medium w-12">
               {ROUND_LABELS[currentRoundIdx]}
             </th>
-            <th className="text-center py-3 px-2 text-fg/60 text-sm font-medium md:hidden w-14">Total</th>
+            <th className="text-center py-3 px-2 text-fg/60 text-sm font-medium w-14">Total</th>
+            <th className="text-center py-3 px-1 text-fg/60 text-sm font-medium w-14">Poss.</th>
           </tr>
         </thead>
         <tbody>
@@ -109,11 +100,11 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, leagueI
 
                   {/* Player */}
                   <td className="py-3 px-2" onClick={() => handleRowClick(entry)}>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`font-medium ${isMe ? (isDark ? 'text-violet-400' : 'text-violet-600') : 'text-fg'}`}>
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      <span className={`font-medium truncate ${isMe ? (isDark ? 'text-violet-400' : 'text-violet-600') : 'text-fg'}`}>
                         {entry.displayName || 'Anonymous'}
                       </span>
-                      {isMe && <span className="text-sm" style={{ color: isDark ? 'rgba(167,139,250,0.6)' : 'rgba(109,40,217,0.5)' }}>(you)</span>}
+                      {isMe && <span className="text-sm flex-shrink-0" style={{ color: isDark ? 'rgba(167,139,250,0.6)' : 'rgba(109,40,217,0.5)' }}>(you)</span>}
                       {/* Champion logo or eye icon */}
                       {(tournamentStarted || isMe) && (
                         champTeam?.logo ? (
@@ -125,7 +116,7 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, leagueI
                             <img
                               src={getThemedLogo(champTeam.logo, isDark)}
                               alt={champTeam.name}
-                              className="w-7 h-7 object-contain"
+                              className="w-5 h-5 object-contain"
                             />
                           </button>
                         ) : (
@@ -141,34 +132,8 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, leagueI
                     </div>
                   </td>
 
-                  {/* Bracket name — desktop/tablet */}
-                  <td className="py-3 px-2 text-fg/70 hidden sm:table-cell" onClick={() => handleRowClick(entry)}>
-                    {entry.bracketName}
-                  </td>
-
-                  {/* Round scores — desktop */}
-                  {ROUND_LABELS.map((label, idx) => (
-                    <td key={label} className="text-center py-3 px-1 hidden md:table-cell" onClick={() => handleRowClick(entry)}>
-                      <span className={`font-mono ${
-                        (entry.roundScores?.[idx] || 0) > 0 ? 'text-fg/80' : 'text-fg/40'
-                      }`}>
-                        {entry.roundScores?.[idx] || 0}
-                      </span>
-                    </td>
-                  ))}
-
-                  {/* Total — desktop */}
-                  <td className="text-center py-3 px-2 hidden md:table-cell" onClick={() => handleRowClick(entry)}>
-                    <span className="font-mono font-bold text-fg">{entry.totalScore}</span>
-                  </td>
-
-                  {/* Possible — tablet+ */}
-                  <td className="text-center py-3 px-2 hidden sm:table-cell" onClick={() => handleRowClick(entry)}>
-                    <span className="font-mono text-fg/60">{entry.potentialPoints}</span>
-                  </td>
-
-                  {/* Mobile: current round score */}
-                  <td className="text-center py-3 px-1 md:hidden" onClick={() => handleRowClick(entry)}>
+                  {/* Current round score */}
+                  <td className="text-center py-3 px-1" onClick={() => handleRowClick(entry)}>
                     <span className={`font-mono ${
                       (entry.roundScores?.[currentRoundIdx] || 0) > 0 ? 'text-fg/80' : 'text-fg/40'
                     }`}>
@@ -176,8 +141,8 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, leagueI
                     </span>
                   </td>
 
-                  {/* Mobile: total with expand toggle */}
-                  <td className="text-center py-3 px-2 md:hidden">
+                  {/* Total with expand toggle */}
+                  <td className="text-center py-3 px-2">
                     <button
                       onClick={(e) => toggleExpand(e, entry.bracketId)}
                       className="inline-flex items-center gap-0.5 font-mono font-bold text-fg"
@@ -186,26 +151,31 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, leagueI
                       <ChevronDown className={`w-3.5 h-3.5 text-fg/40 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </button>
                   </td>
+
+                  {/* Possible points */}
+                  <td className="text-center py-3 px-1" onClick={() => handleRowClick(entry)}>
+                    <span className="font-mono text-fg/50">{entry.potentialPoints}</span>
+                  </td>
                 </tr>
 
-                {/* Mobile expanded breakdown row — spans full width */}
+                {/* Expanded breakdown row */}
                 {isExpanded && (
-                  <tr className="md:hidden border-b border-fg/5">
-                    <td colSpan={mobileColCount} className="px-4 pb-3 pt-1">
-                      <div className="bg-fg/[0.04] rounded-lg px-3 py-2 space-y-1.5">
+                  <tr className="border-b border-fg/5">
+                    <td colSpan={colCount} className="px-4 pb-3 pt-1">
+                      <div className="bg-fg/[0.04] rounded-lg px-3.5 py-2.5 space-y-2">
                         {ROUND_LABELS.map((label, idx) => (
                           <div key={label} className="flex justify-between">
-                            <span className="text-fg/60 text-sm">{label}</span>
-                            <span className={`font-mono text-sm ${
-                              (entry.roundScores?.[idx] || 0) > 0 ? 'text-fg/80 font-medium' : 'text-fg/40'
+                            <span className="text-fg/60 text-base">{label}</span>
+                            <span className={`font-mono text-base ${
+                              (entry.roundScores?.[idx] || 0) > 0 ? 'text-fg/80 font-semibold' : 'text-fg/40'
                             }`}>
                               {entry.roundScores?.[idx] || 0}
                             </span>
                           </div>
                         ))}
-                        <div className="flex justify-between border-t border-fg/10 pt-1.5 mt-1.5">
-                          <span className="text-fg/60 text-sm font-medium">Possible</span>
-                          <span className="font-mono text-sm text-fg/60">{entry.potentialPoints}</span>
+                        <div className="flex justify-between border-t border-fg/10 pt-2 mt-2">
+                          <span className="text-fg/60 text-base font-medium">Possible</span>
+                          <span className="font-mono text-base font-medium text-fg/60">{entry.potentialPoints}</span>
                         </div>
                       </div>
                     </td>

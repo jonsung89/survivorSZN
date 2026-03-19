@@ -89,6 +89,17 @@ export default function BracketFill() {
     return merged;
   }, [results, liveSlotData]);
 
+  // Collect eliminated team IDs from decided results
+  const eliminatedTeamIds = useMemo(() => {
+    const ids = [];
+    for (const r of Object.values(mergedResults)) {
+      if (r.status === 'final' && (r.losing_team_id || r.losingTeamId)) {
+        ids.push(String(r.losing_team_id || r.losingTeamId));
+      }
+    }
+    return ids;
+  }, [mergedResults]);
+
   const isOwner = bracket?.user_id === user?.id;
   const isReadOnly = (tournamentStarted || challenge?.status !== 'open') || !isOwner;
   const pickCount = countPicks(picks);
@@ -424,6 +435,7 @@ export default function BracketFill() {
           picks={picks}
           results={mergedResults}
           liveSlotData={liveSlotData}
+          eliminatedTeamIds={eliminatedTeamIds}
           onPick={handlePick}
           onMatchupClick={handleMatchupClick}
           isReadOnly={isReadOnly}

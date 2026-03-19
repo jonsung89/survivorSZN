@@ -59,6 +59,7 @@ export default function BracketChallenge() {
   const [savingPayment, setSavingPayment] = useState(false);
   const [actionLog, setActionLog] = useState([]);
   const [showActionLog, setShowActionLog] = useState(false);
+  const [prospects, setProspects] = useState([]);
 
   const isCommissioner = league?.commissionerId === user?.id || league?.commissioner_id === user?.id;
   const isTournamentLocked = tournamentStartTime && new Date() >= new Date(tournamentStartTime);

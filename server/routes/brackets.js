@@ -1188,24 +1188,47 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
       };
     });
 
-    // Re-rank with tiebreakers
+    // Determine the current round (highest round with any decided games)
+    let currentRound = 0;
+    for (const r of results) {
+      if (r.status === 'final') {
+        const rb = ROUND_BOUNDARIES.find(rb => r.slot_number >= rb.start && r.slot_number <= rb.end);
+        if (rb) {
+          const roundIdx = ROUND_BOUNDARIES.indexOf(rb);
+          if (roundIdx > currentRound) currentRound = roundIdx;
+        }
+      }
+    }
+
+    // Sort: total points → potential points → correct picks → current round points → tiebreaker
     leaderboard.sort((a, b) => {
       if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-      // Tiebreaker: closer to actual championship total score
+      if (b.potentialPoints !== a.potentialPoints) return b.potentialPoints - a.potentialPoints;
+      if (b.correctPicks !== a.correctPicks) return b.correctPicks - a.correctPicks;
+      const aRoundPts = a.roundScores?.[currentRound] || 0;
+      const bRoundPts = b.roundScores?.[currentRound] || 0;
+      if (bRoundPts !== aRoundPts) return bRoundPts - aRoundPts;
+      // Final tiebreaker: closer to actual championship total score
       if (challenge.tiebreaker_type === 'total_score') {
-        // For now, just sort by tiebreaker_value (will be compared to actual when championship is done)
         return (a.tiebreakerValue || 999) - (b.tiebreakerValue || 999);
       }
       return 0;
     });
-    // Competition ranking: tied scores get the same rank, next rank skips (1, 2, 2, 4)
+    // Competition ranking: tied entries get the same rank, next rank skips (1, 2, 2, 4)
     leaderboard.forEach((entry, idx) => {
       if (idx === 0) {
         entry.rank = 1;
-      } else if (entry.totalScore === leaderboard[idx - 1].totalScore) {
-        entry.rank = leaderboard[idx - 1].rank; // Same rank for ties
       } else {
-        entry.rank = idx + 1; // Skip ranks (competition ranking: 1, 2, 2, 4)
+        const prev = leaderboard[idx - 1];
+        const isTied = entry.totalScore === prev.totalScore &&
+          entry.potentialPoints === prev.potentialPoints &&
+          entry.correctPicks === prev.correctPicks &&
+          (entry.roundScores?.[currentRound] || 0) === (prev.roundScores?.[currentRound] || 0);
+        if (isTied) {
+          entry.rank = prev.rank; // Same rank for ties
+        } else {
+          entry.rank = idx + 1; // Skip ranks (competition ranking: 1, 2, 2, 4)
+        }
       }
     });
 

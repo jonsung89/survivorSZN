@@ -84,7 +84,17 @@ if (process.env.NODE_ENV === 'production') {
     console.error('Warning: client/dist/index.html not found. Run the client build first.');
   }
 
-  app.use(express.static(distPath));
+  // Hashed assets (JS/CSS) can be cached long-term; index.html must not be cached
+  // so browsers always fetch the latest version pointing to new asset hashes
+  app.use(express.static(distPath, {
+    maxAge: '1y',
+    immutable: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      }
+    },
+  }));
 
   if (indexHtml) {
     // Dynamic OG tags for invite links
@@ -113,20 +123,24 @@ if (process.env.NODE_ENV === 'production') {
             .replace(/<meta name="twitter:title"[^>]*>/, `<meta name="twitter:title" content="${escHtml(title)}" />`)
             .replace(/<meta name="twitter:description"[^>]*>/, `<meta name="twitter:description" content="${escHtml(description)}" />`);
 
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
           return res.send(html);
         }
       } catch (err) {
         console.error('OG tag injection error:', err);
       }
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.send(indexHtml);
     });
 
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.send(indexHtml);
     });
   } else {
     // Fallback: serve static files without OG injection
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

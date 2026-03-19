@@ -167,37 +167,57 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
     return map;
   }, [tournamentData]);
 
-  // Build pick distribution for each slot: { slotNumber: { teamId: [{ displayName, bracketName }], ... } }
+  // Build pick distribution for each slot, normalized to slot team IDs.
+  // Picks may use stale team IDs (from before the field was finalized), so we
+  // resolve each pick to the current slot team1/team2 by matching seeds.
   const pickDistribution = useMemo(() => {
     if (!leaderboard?.length || !tournamentData?.slots) return {};
+    const teams = tournamentData.teams || {};
     const dist = {};
     for (const [slotNum, slotData] of Object.entries(tournamentData.slots)) {
       const slot = parseInt(slotNum);
-      const teamPicks = {};
-      // Get the two team IDs for this slot
       const team1Id = slotData.team1?.id ? String(slotData.team1.id) : null;
       const team2Id = slotData.team2?.id ? String(slotData.team2.id) : null;
-      if (team1Id) teamPicks[team1Id] = [];
-      if (team2Id) teamPicks[team2Id] = [];
+      const team1Seed = slotData.team1?.seed;
+      const team2Seed = slotData.team2?.seed;
+      const team1Pickers = [];
+      const team2Pickers = [];
 
       for (const entry of leaderboard) {
         const pick = entry.picks?.[slot] || entry.picks?.[String(slot)];
-        if (pick) {
-          const pickStr = String(pick);
-          if (!teamPicks[pickStr]) teamPicks[pickStr] = [];
-          teamPicks[pickStr].push({ displayName: entry.displayName, bracketName: entry.bracketName });
+        if (!pick) continue;
+        const pickStr = String(pick);
+        const picker = { displayName: entry.displayName, bracketName: entry.bracketName };
+
+        // Direct ID match
+        if (pickStr === team1Id) {
+          team1Pickers.push(picker);
+        } else if (pickStr === team2Id) {
+          team2Pickers.push(picker);
+        } else {
+          // Stale ID — resolve by matching the picked team's seed to slot team seeds
+          const pickedTeam = teams[pickStr];
+          if (pickedTeam?.seed && team1Seed && pickedTeam.seed === team1Seed) {
+            team1Pickers.push(picker);
+          } else if (pickedTeam?.seed && team2Seed && pickedTeam.seed === team2Seed) {
+            team2Pickers.push(picker);
+          } else {
+            // Last resort: assign to team2 (lower seed / underdog)
+            team2Pickers.push(picker);
+          }
         }
       }
-      dist[slot] = teamPicks;
+
+      if (team1Id || team2Id) {
+        dist[slot] = {};
+        if (team1Id) dist[slot][team1Id] = team1Pickers;
+        if (team2Id) dist[slot][team2Id] = team2Pickers;
+      }
     }
     return dist;
   }, [leaderboard, tournamentData]);
 
-  // Helper: get pick distribution for a game
-  // Picks may use different team IDs than the schedule (e.g., brackets filled before
-  // field was finalized use seed-position IDs). We collect ALL picks for the slot,
-  // then split them: picks matching the slot's team1 ID go to one side, everything
-  // else goes to the other. Then we map slot teams to the schedule's away/home teams.
+  // Helper: get pick distribution for a game, mapping slot teams to schedule away/home
   const getGamePickDist = useCallback((game) => {
     const slot = eventToSlot[String(game.id)];
     if (slot === undefined) return null;
@@ -206,26 +226,20 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
 
     const slotData = tournamentData?.slots?.[slot] || tournamentData?.slots?.[String(slot)];
     const slotTeam1Id = slotData?.team1?.id ? String(slotData.team1.id) : null;
-    const slotTeam2Id = slotData?.team2?.id ? String(slotData.team2.id) : null;
 
-    // Collect all picks, split into team1 vs team2 buckets
-    let team1Picks = [];
-    let team2Picks = [];
-    for (const [teamId, pickers] of Object.entries(dist)) {
-      if (teamId === slotTeam1Id) {
-        team1Picks = team1Picks.concat(pickers);
-      } else {
-        team2Picks = team2Picks.concat(pickers);
-      }
-    }
+    const team1Picks = (slotTeam1Id && dist[slotTeam1Id]) || [];
+    const team2Picks = Object.entries(dist)
+      .filter(([id]) => id !== slotTeam1Id)
+      .flatMap(([, pickers]) => pickers);
 
     const total = team1Picks.length + team2Picks.length;
     if (total === 0) return null;
 
-    // Map slot teams to schedule away/home
+    // Map slot teams to schedule away/home by matching IDs or seeds
     const awayId = String(game.awayTeam?.id);
     const homeId = String(game.homeTeam?.id);
-    const awayIsTeam1 = awayId === slotTeam1Id;
+    const awayIsTeam1 = awayId === slotTeam1Id ||
+      (slotData?.team1?.seed && game.awayTeam?.seed === slotData.team1.seed);
     const awayPicks = awayIsTeam1 ? team1Picks : team2Picks;
     const homePicks = awayIsTeam1 ? team2Picks : team1Picks;
 

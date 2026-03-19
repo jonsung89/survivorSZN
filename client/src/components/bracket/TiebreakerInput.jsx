@@ -85,7 +85,7 @@ export default function TiebreakerInput({ type, value, scores, onChange, disable
             </div>
 
             {/* Score editing */}
-            {editing ? (
+            {editing && !disabled ? (
               <div className="space-y-3">
                 <div className="flex flex-col gap-2">
                   <ScoreRow team={team1} value={score1} onChange={val => handleScoreChange(1, val)} disabled={disabled} isDark={isDark} />
@@ -104,22 +104,19 @@ export default function TiebreakerInput({ type, value, scores, onChange, disable
                   Save Total Score
                 </button>
               </div>
-            ) : (
+            ) : !disabled ? (
               <button
-                onClick={() => !disabled && setEditing(true)}
-                disabled={disabled}
+                onClick={() => setEditing(true)}
                 className={`w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
-                  disabled
-                    ? 'opacity-40 cursor-not-allowed'
-                    : hasValidTotal
-                      ? isDark ? 'bg-fg/[0.06] hover:bg-fg/10 text-fg/60' : 'bg-white hover:bg-gray-100 text-gray-500 border border-gray-200'
-                      : isDark ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-violet-600 hover:bg-violet-500 text-white'
+                  hasValidTotal
+                    ? isDark ? 'bg-fg/[0.06] hover:bg-fg/10 text-fg/60' : 'bg-white hover:bg-gray-100 text-gray-500 border border-gray-200'
+                    : isDark ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-violet-600 hover:bg-violet-500 text-white'
                 }`}
               >
                 <Pencil className="w-4 h-4" />
                 {hasValidTotal ? 'Edit Total Score' : 'Set Total Score Prediction'}
               </button>
-            )}
+            ) : null}
           </>
         ) : (
           <p className={`text-sm text-center py-4 italic ${isDark ? 'text-fg/30' : 'text-gray-400'}`}>

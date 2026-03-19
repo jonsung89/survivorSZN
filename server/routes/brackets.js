@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
 const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport } = require('../services/ncaab-tournament');
+const { getDraftProspects, enrichPlayersWithDraftRank } = require('../services/nba-draft');
 const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, getNextSlot, getRegionForSlot, getChildSlots, countPicks, DEFAULT_REGIONS } = require('../utils/bracket-slots');
 
 // Total games in the bracket (derived from round boundaries)
@@ -505,6 +506,17 @@ router.post('/:bracketId/reset', authMiddleware, async (req, res) => {
   }
 });
 
+// Get NBA draft prospect rankings
+router.get('/draft-prospects', async (req, res) => {
+  try {
+    const prospects = await getDraftProspects();
+    res.json({ prospects });
+  } catch (error) {
+    console.error('Error fetching draft prospects:', error);
+    res.status(500).json({ error: 'Failed to fetch draft prospects' });
+  }
+});
+
 // Get a single bracket with results
 router.get('/:bracketId', authMiddleware, async (req, res) => {
   try {
@@ -597,6 +609,11 @@ router.get('/tournament/:season/team/:teamId', async (req, res) => {
       if (tournamentTeam?.seed) {
         breakdown.seed = tournamentTeam.seed;
       }
+    }
+
+    // Enrich key players with NBA draft rankings
+    if (breakdown.keyPlayers?.length > 0) {
+      await enrichPlayersWithDraftRank(breakdown.keyPlayers);
     }
 
     res.json(breakdown);

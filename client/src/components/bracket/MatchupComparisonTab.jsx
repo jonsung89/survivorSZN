@@ -3,6 +3,7 @@ import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { bracketAPI } from '../../api';
 import { useTheme } from '../../context/ThemeContext';
 import ReactMarkdown from 'react-markdown';
+import DraftBadge from './DraftBadge';
 
 function getThemeLogo(logoUrl, isDark) {
   if (!logoUrl) return logoUrl;
@@ -232,13 +233,16 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
                   <div className="flex items-center justify-center gap-4 md:gap-6 mb-3">
                     {/* Player 1 */}
                     <div className="flex flex-col items-center gap-1 flex-1">
-                      {p1?.headshot ? (
-                        <img src={p1.headshot} alt="" className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2" style={{ borderColor: t1Color }} />
-                      ) : (
-                        <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-fg/10 flex items-center justify-center text-xl font-bold text-fg/30">
-                          {p1?.name?.[0] || '?'}
-                        </div>
-                      )}
+                      <div className="relative">
+                        {p1?.headshot ? (
+                          <img src={p1.headshot} alt="" className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2" style={{ borderColor: t1Color }} />
+                        ) : (
+                          <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-fg/10 flex items-center justify-center text-xl font-bold text-fg/30">
+                            {p1?.name?.[0] || '?'}
+                          </div>
+                        )}
+                        <DraftBadge rank={p1?.draftRank} teamColor={t1Color} />
+                      </div>
                       <span className="text-sm font-semibold text-fg text-center truncate max-w-full">
                         {p1?.jersey && <span className="text-fg/60 mr-1">#{p1.jersey}</span>}{p1?.name || '—'}{p1?.position && <span className="text-fg/60 ml-1">· {p1.position}</span>}
                       </span>
@@ -248,13 +252,16 @@ export default function MatchupComparisonTab({ team1Data, team2Data, team1Info, 
 
                     {/* Player 2 */}
                     <div className="flex flex-col items-center gap-1 flex-1">
-                      {p2?.headshot ? (
-                        <img src={p2.headshot} alt="" className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2" style={{ borderColor: t2Color }} />
-                      ) : (
-                        <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-fg/10 flex items-center justify-center text-xl font-bold text-fg/30">
-                          {p2?.name?.[0] || '?'}
-                        </div>
-                      )}
+                      <div className="relative">
+                        {p2?.headshot ? (
+                          <img src={p2.headshot} alt="" className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2" style={{ borderColor: t2Color }} />
+                        ) : (
+                          <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-fg/10 flex items-center justify-center text-xl font-bold text-fg/30">
+                            {p2?.name?.[0] || '?'}
+                          </div>
+                        )}
+                        <DraftBadge rank={p2?.draftRank} teamColor={t2Color} />
+                      </div>
                       <span className="text-sm font-semibold text-fg text-center truncate max-w-full">
                         {p2?.jersey && <span className="text-fg/60 mr-1">#{p2.jersey}</span>}{p2?.name || '—'}{p2?.position && <span className="text-fg/60 ml-1">· {p2.position}</span>}
                       </span>

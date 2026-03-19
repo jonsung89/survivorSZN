@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil, Lock, RotateCcw, History, Copy, ExternalLink } from 'lucide-react';
+import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil, Lock, RotateCcw, History, Copy, ExternalLink, ChevronDown } from 'lucide-react';
 import { bracketAPI, leagueAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
 import BracketLeaderboard from '../components/bracket/BracketLeaderboard';
+import FinalFourPreviewDialog from '../components/bracket/FinalFourPreviewDialog';
 import BracketSetup from '../components/bracket/BracketSetup';
 import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
 import ChatWidget from '../components/ChatWidget';
@@ -14,7 +15,8 @@ import { getSportBadgeClasses } from '../sports';
 import SportBadge from '../components/SportBadge';
 import CommishBadge from '../components/CommishBadge';
 import Avatar from '../components/Avatar';
-import { SCORING_PRESETS, ROUND_BOUNDARIES, countPicks } from '../utils/bracketSlots';
+import { SCORING_PRESETS, ROUND_BOUNDARIES, countPicks, calculateBracketScore, calculatePotentialPoints } from '../utils/bracketSlots';
+import { getThemedLogo } from '../utils/logo';
 
 const TOTAL_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
 
@@ -45,6 +47,9 @@ export default function BracketChallenge() {
   const [tournamentStarted, setTournamentStarted] = useState(false);
   const [tournamentData, setTournamentData] = useState(null);
   const [eliminatedTeamIds, setEliminatedTeamIds] = useState([]);
+  const [bracketResults, setBracketResults] = useState({});
+  const [myBracketPreview, setMyBracketPreview] = useState(null);
+  const [expandedBracketId, setExpandedBracketId] = useState(null);
   const [lockCountdown, setLockCountdown] = useState(null);
   const [editingPayment, setEditingPayment] = useState(false);
   const [showPaymentStatus, setShowPaymentStatus] = useState(false);
@@ -222,6 +227,7 @@ export default function BracketChallenge() {
           setLeaderboard(lb.leaderboard || []);
           setTournamentStarted(lb.tournamentStarted || false);
           setEliminatedTeamIds(lb.eliminatedTeamIds || []);
+          setBracketResults(lb.results || {});
         } catch { /* leaderboard is optional */ }
       }
 
@@ -681,7 +687,7 @@ export default function BracketChallenge() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`px-4 py-2 text-sm md:text-base font-medium transition-colors border-b-2 -mb-px ${
               activeTab === tab
                 ? 'border-violet-500 text-fg'
                 : 'border-transparent text-fg/50 hover:text-fg/70'
@@ -701,35 +707,68 @@ export default function BracketChallenge() {
           {myBrackets.map(bracket => {
             const pickCount = countPicks(bracket.picks || {});
             const progress = Math.round((pickCount / TOTAL_GAMES) * 100);
+            const picks = bracket.picks || {};
+            const championTeamId = picks[63] || picks['63'];
+            const champTeam = championTeamId && tournamentData?.teams ? tournamentData.teams[championTeamId] : null;
+            const scoringSystem = challenge?.scoring_system || SCORING_PRESETS.standard.points;
+            const showScores = bracket.is_submitted && tournamentStarted;
+            const scoreData = showScores
+              ? calculateBracketScore(picks, bracketResults, scoringSystem)
+              : null;
+            const potential = showScores
+              ? calculatePotentialPoints(picks, bracketResults, scoringSystem)
+              : null;
+
+            // Build leaderboard-style entry for Final Four preview
+            const previewEntry = {
+              bracketId: bracket.id,
+              userId: user?.id,
+              displayName: user?.displayName || 'You',
+              championTeamId,
+              finalFourPicks: (() => {
+                const fp = {};
+                for (let s = 57; s <= 63; s++) { if (picks[s] || picks[String(s)]) fp[s] = picks[s] || picks[String(s)]; }
+                return fp;
+              })(),
+              tiebreakerValue: bracket.tiebreaker_value,
+              tiebreakerScores: bracket.tiebreaker_scores,
+            };
 
             return (
               <div
                 key={bracket.id}
-                onClick={() => navigate(`/league/${leagueId}/bracket/${bracket.id}`)}
-                className={`glass-card rounded-xl p-4 cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 border-l-[3px] ${
+                className={`glass-card rounded-xl p-4 transition-all duration-200 border-l-[3px] ${
                   bracket.is_submitted ? 'border-l-emerald-500/60' : 'border-l-violet-500/60'
                 }`}
               >
+                {/* Row 1: Name + logo + status + actions */}
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-fg">{bracket.name || `Bracket ${bracket.bracket_number}`}</h3>
-                    <div className="flex items-center gap-3 mt-1.5 text-sm text-fg/50">
-                      {bracket.is_submitted ? (
-                        <span className="inline-flex items-center gap-1.5 text-emerald-500 font-medium">
-                          <Check className="w-4 h-4" /> Submitted
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-orange-500 font-medium">
-                          <Clock className="w-4 h-4" /> {pickCount}/{TOTAL_GAMES} picks
-                        </span>
-                      )}
-                      {bracket.is_submitted && (
-                        <span className="font-mono font-medium text-fg/70">{bracket.total_score} pts</span>
-                      )}
-                    </div>
+                  <div
+                    className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer"
+                    onClick={() => {
+                      if (champTeam && (tournamentStarted || bracket.is_submitted)) {
+                        setMyBracketPreview(previewEntry);
+                      } else {
+                        navigate(`/league/${leagueId}/bracket/${bracket.id}`);
+                      }
+                    }}
+                  >
+                    <h3 className="font-medium text-fg truncate text-base md:text-lg">{bracket.name || `Bracket ${bracket.bracket_number}`}</h3>
+                    {champTeam?.logo && (tournamentStarted || bracket.is_submitted) && (
+                      <img src={getThemedLogo(champTeam.logo, isDark)} alt="" className="w-5 h-5 md:w-6 md:h-6 object-contain flex-shrink-0" />
+                    )}
+                    {bracket.is_submitted ? (
+                      <span className={`inline-flex items-center gap-1 text-sm md:text-base font-medium flex-shrink-0 ${isDark ? 'text-fg/40' : 'text-gray-400'}`}>
+                        <Lock className="w-3 h-3 md:w-3.5 md:h-3.5" /> Submitted
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-sm md:text-base text-orange-500 font-medium flex-shrink-0">
+                        <Clock className="w-3.5 h-3.5 md:w-4 md:h-4" /> {pickCount}/{TOTAL_GAMES}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {!isTournamentLocked && isOpen && pickCount > 0 && (
                       <button
                         onClick={(e) => handleResetBracket(bracket.id, e)}
@@ -739,8 +778,11 @@ export default function BracketChallenge() {
                         <RotateCcw className="w-4 h-4" />
                       </button>
                     )}
-                    {!bracket.is_submitted && (
-                      <div className="w-12 h-12 relative">
+                    {!bracket.is_submitted ? (
+                      <div
+                        className="w-12 h-12 relative cursor-pointer"
+                        onClick={() => navigate(`/league/${leagueId}/bracket/${bracket.id}`)}
+                      >
                         <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
                           <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
                           <circle
@@ -755,12 +797,66 @@ export default function BracketChallenge() {
                           {progress}%
                         </span>
                       </div>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/league/${leagueId}/bracket/${bracket.id}`)}
+                        className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-sm md:text-base font-medium transition-colors ${isDark ? 'bg-fg/10 text-fg/60 hover:bg-fg/15' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      >
+                        View
+                      </button>
                     )}
                   </div>
                 </div>
+
+                {/* Row 2: Score display (submitted brackets only) */}
+                {scoreData && (
+                  <div className="mt-2.5">
+                    <button
+                      onClick={() => setExpandedBracketId(prev => prev === bracket.id ? null : bracket.id)}
+                      className="flex items-center gap-3 w-full text-left text-sm md:text-base"
+                    >
+                      <span className="font-semibold text-fg">{scoreData.totalScore} pts</span>
+                      <span className={`${isDark ? 'text-fg/60' : 'text-gray-500'}`}>{potential} poss.</span>
+                      <span className={`${isDark ? 'text-fg/60' : 'text-gray-500'}`}>{scoreData.correctPicks}/{scoreData.totalDecided} correct</span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-fg/40 ml-auto transition-transform ${expandedBracketId === bracket.id ? 'rotate-180' : ''}`} />
+                    </button>
+                    {expandedBracketId === bracket.id && (
+                      <div className="bg-fg/[0.04] rounded-lg px-3.5 py-2.5 mt-2 space-y-2">
+                        {['R64', 'R32', 'S16', 'E8', 'F4', 'CHAMP'].map((label, idx) => (
+                          <div key={label} className="flex justify-between">
+                            <span className="text-fg/60 text-base">{label}</span>
+                            <span className={`font-mono text-base ${(scoreData.roundScores?.[idx] || 0) > 0 ? 'text-fg/80 font-semibold' : 'text-fg/40'}`}>
+                              {scoreData.roundScores?.[idx] || 0}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between border-t border-fg/10 pt-2 mt-2">
+                          <span className="text-fg/60 text-base font-medium">Possible</span>
+                          <span className="font-mono text-base font-medium text-fg/60">{potential}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
+
+          {/* Final Four Preview for My Brackets */}
+          {myBracketPreview && (
+            <FinalFourPreviewDialog
+              entry={myBracketPreview}
+              tournamentData={tournamentData}
+              eliminatedTeamIds={eliminatedTeamIds}
+              currentUserId={user?.id}
+              leagueId={leagueId}
+              onBracketClick={(bracketId) => {
+                setMyBracketPreview(null);
+                navigate(`/league/${leagueId}/bracket/${bracketId}`);
+              }}
+              onClose={() => setMyBracketPreview(null)}
+            />
+          )}
 
           {/* Pre-Selection Show Banner */}
           {fieldAnnounced === false && (

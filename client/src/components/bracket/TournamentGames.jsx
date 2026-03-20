@@ -687,17 +687,17 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
           openGameDialog(game);
         }}
         className={`
-          flex-shrink-0 glass-card rounded-xl p-3 sm:p-4 w-[310px] sm:w-[380px] cursor-pointer transition-all hover:bg-fg/5 text-left relative
+          flex-shrink-0 glass-card rounded-xl p-3 sm:px-4 sm:pt-3 sm:pb-4 w-[310px] sm:w-[380px] cursor-pointer transition-all hover:bg-fg/5 text-left relative
           ${live ? 'ring-1 ring-red-500/30' : ''}
         `}
       >
         {getGameProspects(game).length > 0 && (
           <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
-            <Info className="w-4 h-4 text-fg/30" />
+            <Info className="w-4 h-4 text-fg/50" />
           </div>
         )}
         {formatGameNotes(game.notes) && (
-          <div className="text-sm sm:text-base text-fg/50 font-medium mb-1.5 truncate pr-5">{formatGameNotes(game.notes)}</div>
+          <div className="text-sm sm:text-md text-fg/60 font-medium mb-2 truncate pr-5">{formatGameNotes(game.notes)}</div>
         )}
         <div className="space-y-2 sm:space-y-2.5">
           {/* Away Team */}
@@ -749,9 +749,9 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
               {game.statusDetail || 'LIVE'}
             </span>
           ) : isPast ? (
-            <span className="text-base sm:text-lg font-semibold text-fg">Final</span>
+            <span className="text-base sm:text-md font-semibold text-fg/80">Final</span>
           ) : (
-            <span className="text-base sm:text-lg text-fg/60">{timeStr}</span>
+            <span className="text-base sm:text-md text-fg/80">{timeStr}</span>
           )}
           {!live && !isPast && game.broadcast && <BroadcastIcon broadcast={game.broadcast} />}
         </div>
@@ -839,12 +839,12 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
             return (
               <div key={p.name} className="flex items-center gap-1.5 min-w-0">
                 {teamLogo ? (
-                  <img src={teamLogo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
+                  <img src={teamLogo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
                 ) : (
                   <div className="w-4 h-4 flex-shrink-0" />
                 )}
                 <span
-                  className={`text-sm sm:text-base font-bold flex-shrink-0 w-6 text-center ${isDark ? 'text-white' : 'text-black'}`}
+                  className={`text-sm sm:text-base font-medium flex-shrink-0 w-6 text-center ${isDark ? 'text-white' : 'text-black'}`}
                 >
                   #{p.rank}
                 </span>
@@ -857,21 +857,21 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                 {(() => {
                   const gs = p.gameStats || p.currentGame?.prospectStats;
                   if (hasStats && gs && !(gs.min === '0' || gs.min === 0)) return (
-                    <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
-                      {gs.pts ?? 0}<span className="text-fg/60">p</span>{' '}
-                      {gs.reb ?? 0}<span className="text-fg/60">r</span>{' '}
-                      {gs.ast ?? 0}<span className="text-fg/60">a</span>
+                    <span className="text-sm sm:text-base font-medium text-fg/90 flex-shrink-0">
+                      {gs.pts ?? 0}<span className="text-fg/50">p</span>{' '}
+                      {gs.reb ?? 0}<span className="text-fg/50">r</span>{' '}
+                      {gs.ast ?? 0}<span className="text-fg/50">a</span>
                     </span>
                   );
                   if (hasStats && (isPast || (gs && (gs.min === '0' || gs.min === 0)))) return (
-                    <span className="text-sm sm:text-base font-medium text-fg/60 flex-shrink-0">DNP</span>
+                    <span className="text-sm sm:text-base font-medium text-fg/90 flex-shrink-0">DNP</span>
                   );
                   if (p.seasonStats?.ppg != null) return (
-                    <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
-                      <span className="text-fg/60">avg </span>
-                      {p.seasonStats.ppg}<span className="text-fg/60">p</span>{' '}
-                      {p.seasonStats.rpg ?? 0}<span className="text-fg/60">r</span>{' '}
-                      {p.seasonStats.apg ?? 0}<span className="text-fg/60">a</span>
+                    <span className="text-sm sm:text-base font-medium text-fg/90 flex-shrink-0">
+                      <span className="font-normal text-sm text-fg/50">avg - </span>
+                      {p.seasonStats.ppg}<span className="text-fg/50">p</span>{' '}
+                      {p.seasonStats.rpg ?? 0}<span className="text-fg/50">r</span>{' '}
+                      {p.seasonStats.apg ?? 0}<span className="text-fg/50">a</span>
                     </span>
                   );
                   return null;
@@ -1500,7 +1500,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
           {/* Desktop scroll arrows */}
           {canScrollLeft && (
             <button
-              className="hidden sm:flex absolute -left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-canvas shadow-md border border-fg/10 hover:bg-fg/5 transition-colors"
+              className="hidden sm:flex absolute -left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-canvas shadow-md border border-fg/10 hover:bg-fg/6 transition-colors"
               onClick={() => scrollRef.current?.scrollBy({ left: -260, behavior: 'smooth' })}
             >
               <ChevronLeft className="w-4 h-4 text-fg/60" />
@@ -1511,7 +1511,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
           </div>
           {canScrollRight && (
             <button
-              className="hidden sm:flex absolute -right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-canvas shadow-md border border-fg/10 hover:bg-fg/5 transition-colors"
+              className="hidden sm:flex absolute -right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-canvas shadow-md border border-fg/10 hover:bg-fg/6 transition-colors"
               onClick={() => scrollRef.current?.scrollBy({ left: 260, behavior: 'smooth' })}
             >
               <ChevronRight className="w-4 h-4 text-fg/60" />

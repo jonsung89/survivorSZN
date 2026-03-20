@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Trophy, XCircle, Users } from 'lucide-react';
 import { leagueAPI, trackingAPI } from '../api';
+import { useSocket } from '../context/SocketContext';
 import SportBadge from './SportBadge';
 import CommishBadge from './CommishBadge';
 import Avatar from './Avatar';
@@ -17,6 +18,7 @@ const formatMoney = (amount) => {
 };
 
 export default function LeagueMembersDialog({ leagueId, leagueName, defaultTab, onClose }) {
+  const { onlineUsers } = useSocket();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(defaultTab || 'winners');
@@ -164,6 +166,7 @@ export default function LeagueMembersDialog({ leagueId, leagueName, defaultTab, 
                         name={m.displayName || '?'}
                         imageUrl={m.profileImageUrl}
                         size="sm"
+                        isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === m.userId)}
                       />
 
                       {/* Status icon */}

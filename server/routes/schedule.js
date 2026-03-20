@@ -92,6 +92,45 @@ router.get('/:sport/game/:gameId', async (req, res) => {
   }
 });
 
+// GET /api/schedule/:sport/games/plays?ids=id1,id2,id3
+// Returns play-by-play + game context for multiple games in one request (live feed)
+router.get('/:sport/games/plays', async (req, res) => {
+  try {
+    const idsParam = req.query.ids;
+    if (!idsParam) {
+      return res.status(400).json({ error: 'Missing ids query parameter' });
+    }
+    const gameIds = idsParam.split(',').filter(Boolean).slice(0, 16); // max 16
+    if (gameIds.length === 0) {
+      return res.json({ success: true, games: {} });
+    }
+
+    const results = await Promise.allSettled(
+      gameIds.map(id => req.provider.getGameDetails(id, { cacheTtl: 6000 }))
+    );
+
+    const games = {};
+    gameIds.forEach((id, i) => {
+      if (results[i].status === 'fulfilled' && results[i].value) {
+        const d = results[i].value;
+        games[id] = {
+          plays: d.plays || [],
+          scoringPlays: d.scoringPlays || [],
+          playerStats: d.playerStats || null,
+          teamStats: d.teamStats || null,
+          leaders: d.leaders || [],
+          linescores: d.linescores || null,
+        };
+      }
+    });
+
+    res.json({ success: true, games });
+  } catch (error) {
+    console.error(`Error getting batch plays for ${req.params.sport}:`, error.message);
+    res.status(500).json({ error: 'Failed to get batch plays' });
+  }
+});
+
 // GET /api/schedule/:sport/team/:teamId/info
 // Returns comprehensive team info (stats, news, schedule)
 router.get('/:sport/team/:teamId/info', async (req, res) => {

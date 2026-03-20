@@ -4,6 +4,7 @@ import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calend
 import { bracketAPI, leagueAPI, trackingAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useSocket } from '../context/SocketContext';
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
 import BracketLeaderboard from '../components/bracket/BracketLeaderboard';
@@ -29,6 +30,7 @@ export default function BracketChallenge() {
   const { user } = useAuth();
   const { isDark } = useTheme();
   const { showToast } = useToast();
+  const { onlineUsers } = useSocket();
 
   const [league, setLeague] = useState(null);
   const [challenge, setChallenge] = useState(null);
@@ -1072,6 +1074,7 @@ export default function BracketChallenge() {
                     name={member.displayName || '?'}
                     imageUrl={member.profileImageUrl}
                     size="md"
+                    isOnline={(onlineUsers[leagueId] || []).some(u => u.userId === member.userId)}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">

@@ -260,6 +260,11 @@ export const scheduleAPI = {
     return res.json();
   },
 
+  getBatchPlays: async (sport, gameIds) => {
+    const res = await fetch(`${API_URL}/schedule/${sport}/games/plays?ids=${gameIds.join(',')}`);
+    return res.json();
+  },
+
   getTeams: async (sport) => {
     const res = await fetch(`${API_URL}/schedule/${sport}/teams`);
     return res.json();

@@ -14,6 +14,8 @@ import ShotChart from '../ShotChart';
 import TeamInfoDialog from '../TeamInfoDialog';
 import StatRankingDialog from '../StatRankingDialog';
 import MatchupDetailDialog from './MatchupDetailDialog';
+import LiveGameFeed from './LiveGameFeed';
+import useLiveGameFeed from '../../hooks/useLiveGameFeed';
 import { ProspectDialog } from './DraftBadge';
 
 const SPORT = 'ncaab';
@@ -447,6 +449,17 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
   // Live scores
   const liveData = useLiveScores(SPORT, selectedDate, dailySchedule);
   const liveGames = liveData.games;
+
+  // Live game feed
+  const hasLiveGames = liveGames.some(g =>
+    g.status === 'STATUS_IN_PROGRESS' || g.status === 'STATUS_HALFTIME' ||
+    g.status === 'STATUS_END_PERIOD' || g.status === 'STATUS_FIRST_HALF' ||
+    g.status === 'STATUS_SECOND_HALF' || g.status === 'in_progress'
+  );
+  const { feedItems, isPolling: isFeedPolling } = useLiveGameFeed(SPORT, liveGames, {
+    prospects,
+    enabled: hasLiveGames,
+  });
 
   // Fetch games for selected date
   useEffect(() => {
@@ -1524,6 +1537,19 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
             </button>
           )}
         </div>
+      )}
+
+      {/* Live Game Feed */}
+      {hasLiveGames && feedItems.length > 0 && (
+        <LiveGameFeed
+          feedItems={feedItems}
+          isPolling={isFeedPolling}
+          maxHeight="420px"
+          onGameClick={(gameId) => {
+            const game = liveGames.find(g => String(g.id) === String(gameId));
+            if (game) openGameDialog(game);
+          }}
+        />
       )}
 
       {/* Game Detail Dialog — portaled to body, bottom sheet on mobile */}

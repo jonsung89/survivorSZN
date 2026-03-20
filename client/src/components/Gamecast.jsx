@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import BasketballCourt, { espnToSvg, espnToSvgFar } from './BasketballCourt';
 import { usePlayerGameStats, getPlayLabel } from '../hooks/usePlayerGameStats';
+import { parseClockToSeconds } from '../utils/clockUtils';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -102,26 +103,6 @@ function isSecondHalf(periodNumber, courtType) {
   return periodNumber >= 3; // NBA: Q3+ is second half
 }
 
-/**
- * parseClockToSeconds — converts a game clock display string to total seconds remaining.
- * E.g. "10:34" → 634, "0:45" → 45, "5:00" → 300.
- * Returns null if the format is unrecognized.
- */
-function parseClockToSeconds(displayValue) {
-  if (!displayValue) return null;
-  const parts = displayValue.split(':');
-  if (parts.length === 2) {
-    const mins = parseInt(parts[0], 10);
-    const secs = parseInt(parts[1], 10);
-    if (isNaN(mins) || isNaN(secs)) return null;
-    return mins * 60 + secs;
-  }
-  if (parts.length === 1) {
-    const val = parseFloat(parts[0]);
-    return isNaN(val) ? null : val;
-  }
-  return null;
-}
 
 /**
  * getMinDisplayTime — returns the minimum time (ms) a play should stay on screen

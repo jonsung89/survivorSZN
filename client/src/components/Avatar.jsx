@@ -94,7 +94,7 @@ export default function Avatar({
         )}
       </Component>
       {isOnline && (
-        <span className={`absolute ${onlineDotSizes[size]} bg-emerald-500 rounded-full border-2 border-slate-900`} />
+        <span className={`absolute ${onlineDotSizes[size]} bg-emerald-500 rounded-full border-2 border-canvas`} />
       )}
     </div>
   );

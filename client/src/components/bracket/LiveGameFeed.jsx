@@ -183,7 +183,7 @@ function PlayItem({ item, isDark, tl, onGameClick }) {
 
   return (
     <div
-      className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.03]'}`}
+      className={`flex items-center gap-3 px-3 sm:gap-5 sm:px-5 py-2.5 cursor-pointer transition-colors ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.03]'}`}
       style={{ borderLeft: `3px solid ${teamColor}` }}
       onClick={() => onGameClick?.(gameId)}
     >
@@ -272,7 +272,7 @@ function CommentaryItem({ item, isDark, tl, onGameClick }) {
 
   return (
     <div
-      className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+      className={`flex items-center gap-3 px-3 sm:gap-5 sm:px-5 py-2.5 cursor-pointer transition-colors ${
         isHighPriority
           ? (isDark ? 'bg-amber-500/[0.06]' : 'bg-amber-50/60')
           : (isDark ? 'bg-white/[0.02]' : 'bg-gray-50/50')

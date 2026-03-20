@@ -585,6 +585,13 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
     return () => { el.removeEventListener('scroll', updateScrollArrows); observer.disconnect(); };
   }, [filtered.length, updateScrollArrows]);
 
+  // Keep dialog game in sync with live score updates
+  const currentDialogGame = useMemo(() => {
+    if (!dialogGame) return null;
+    const liveVersion = liveGames.find(g => g.id === dialogGame.id);
+    return liveVersion || dialogGame;
+  }, [dialogGame, liveGames]);
+
   // Open game dialog + fetch details
   const openGameDialog = async (game) => {
     trackingAPI.event('tournament_game_dialog_open', {
@@ -606,13 +613,12 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
     }
   };
 
-  // Poll for live game details when dialog is open and on gamecast/shotchart tab
+  // Poll for live game details when dialog is open
   const gamecastPollRef = useRef(null);
   useEffect(() => {
-    if (!dialogGame) return;
-    const isLive = isGameLive(dialogGame);
-    const needsPoll = isLive && (detailTab === 'gamecast' || detailTab === 'shotchart');
-    if (!needsPoll) {
+    if (!currentDialogGame) return;
+    const isLive = isGameLive(currentDialogGame);
+    if (!isLive) {
       if (gamecastPollRef.current) clearTimeout(gamecastPollRef.current);
       return;
     }
@@ -621,9 +627,9 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
     const poll = async () => {
       if (cancelled) return;
       try {
-        const details = await scheduleAPI.getGameDetails(SPORT, dialogGame.id, { live: true });
+        const details = await scheduleAPI.getGameDetails(SPORT, currentDialogGame.id, { live: true });
         if (!cancelled) {
-          setGameDetails(prev => ({ ...prev, [dialogGame.id]: details }));
+          setGameDetails(prev => ({ ...prev, [currentDialogGame.id]: details }));
         }
       } catch { /* ignore */ }
       if (!cancelled) {
@@ -640,7 +646,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
       cancelled = true;
       if (gamecastPollRef.current) clearTimeout(gamecastPollRef.current);
     };
-  }, [dialogGame, detailTab]);
+  }, [currentDialogGame, detailTab]);
 
   const openTeamInfo = (team, e) => {
     e?.stopPropagation();
@@ -1446,7 +1452,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
           {selectedDate !== getLocalDateStr() && (
             <button
               onClick={() => setSelectedDate(getLocalDateStr())}
-              className="ml-2 text-xs text-fg/40 hover:text-fg/60 transition-colors"
+              className="ml-2 text-base text-fg/40 hover:text-fg/60 transition-colors"
             >
               Today
             </button>
@@ -1567,7 +1573,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
             </div>
             {/* Dialog Content */}
             <div ref={contentRef} className="p-4 overflow-y-auto flex-1 overscroll-contain">
-              {renderDialogGameCard(dialogGame)}
+              {renderDialogGameCard(currentDialogGame)}
             </div>
           </div>
         </div>,

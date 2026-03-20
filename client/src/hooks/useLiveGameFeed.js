@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { scheduleAPI } from '../api';
 import { createGameState, analyzeNewPlays, getPlayerStatLine } from '../utils/commentaryEngine';
+import { parseClockToSeconds } from '../utils/clockUtils';
 
 const LIVE_STATUSES = new Set([
   'STATUS_IN_PROGRESS', 'STATUS_HALFTIME', 'STATUS_END_PERIOD',
@@ -80,8 +81,9 @@ export default function useLiveGameFeed(sport, games, options = {}) {
       const plays = gameData.plays || [];
       if (plays.length === 0) continue;
 
-      // Get or create game state
-      if (!gameStatesRef.current.has(gameId)) {
+      // Get or create game state — track if this is the first poll for this game
+      const isFirstPoll = !gameStatesRef.current.has(gameId);
+      if (isFirstPoll) {
         gameStatesRef.current.set(gameId, createGameState(gameId));
       }
       const gameState = gameStatesRef.current.get(gameId);
@@ -89,7 +91,7 @@ export default function useLiveGameFeed(sport, games, options = {}) {
       const homeTeam = game.homeTeam;
       const awayTeam = game.awayTeam;
 
-      // Run commentary engine on new plays
+      // Run commentary engine on new plays (always run to build state)
       const commentaryItems = analyzeNewPlays(plays, gameState, {
         homeTeam,
         awayTeam,
@@ -104,31 +106,43 @@ export default function useLiveGameFeed(sport, games, options = {}) {
       const latestPeriod = lastPlay?.period;
       const latestClock = lastPlay?.clock;
 
-      // Add commentary items to feed
-      for (const c of commentaryItems) {
-        const item = {
-          id: `commentary-${gameId}-${c.kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          type: 'commentary',
-          gameId,
-          wallclock: new Date().toISOString(),
-          timestamp: Date.now(),
-          homeTeam,
-          awayTeam,
-          // Use play-level score/clock from the commentary engine (when the event happened),
-          // falling back to latest if not available
-          homeScore: c.playHomeScore ?? latestHomeScore,
-          awayScore: c.playAwayScore ?? latestAwayScore,
-          period: c.playPeriod ?? latestPeriod,
-          clock: c.playClock ?? latestClock,
-          commentary: c,
-        };
-        newItems.push(item);
+      // On first poll, skip commentary — it would flood the feed with old events.
+      // Commentary engine still ran above to build game state for future polls.
+      if (!isFirstPoll) {
+        for (const c of commentaryItems) {
+          const item = {
+            id: `commentary-${gameId}-${c.kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'commentary',
+            gameId,
+            wallclock: new Date().toISOString(),
+            timestamp: Date.now(),
+            homeTeam,
+            awayTeam,
+            // Use play-level score/clock from the commentary engine (when the event happened),
+            // falling back to latest if not available
+            homeScore: c.playHomeScore ?? latestHomeScore,
+            awayScore: c.playAwayScore ?? latestAwayScore,
+            period: c.playPeriod ?? latestPeriod,
+            clock: c.playClock ?? latestClock,
+            commentary: c,
+          };
+          newItems.push(item);
+        }
+      }
+
+      // On first poll, mark ALL play IDs as seen so they don't appear on later polls
+      if (isFirstPoll) {
+        for (const play of plays) {
+          seenPlayIdsRef.current.add(play.id);
+        }
       }
 
       // Add new play items (only scoring plays + key plays for the feed)
-      for (let i = 0; i < plays.length; i++) {
-        const play = plays[i];
-        if (seenPlayIdsRef.current.has(play.id)) continue;
+      // On first poll, only show the most recent plays (not the entire game history)
+      const playsToProcess = isFirstPoll ? plays.slice(-15) : plays;
+      for (let i = 0; i < playsToProcess.length; i++) {
+        const play = playsToProcess[i];
+        if (!isFirstPoll && seenPlayIdsRef.current.has(play.id)) continue;
         seenPlayIdsRef.current.add(play.id);
 
         // Filter: only include scoring plays, blocks, steals, turnovers in feed
@@ -168,8 +182,19 @@ export default function useLiveGameFeed(sport, games, options = {}) {
     if (newItems.length > 0) {
       setFeedItems(prev => {
         const combined = [...newItems, ...prev];
-        // Sort by timestamp descending (newest first)
-        combined.sort((a, b) => b.timestamp - a.timestamp);
+        // Sort by game time descending (latest game action first)
+        // Higher period = later, lower clock seconds remaining = later
+        combined.sort((a, b) => {
+          const aPeriod = a.period?.number || a.period || 1;
+          const bPeriod = b.period?.number || b.period || 1;
+          if (aPeriod !== bPeriod) return bPeriod - aPeriod;
+          const aClock = parseClockToSeconds(a.clock?.displayValue || a.clock) ?? 1200;
+          const bClock = parseClockToSeconds(b.clock?.displayValue || b.clock) ?? 1200;
+          // Lower clock = later in the period (closer to end)
+          if (aClock !== bClock) return aClock - bClock;
+          // Tie-break by timestamp (wall clock)
+          return b.timestamp - a.timestamp;
+        });
         return combined.slice(0, MAX_FEED_ITEMS);
       });
     }

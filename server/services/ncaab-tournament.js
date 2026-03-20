@@ -1623,6 +1623,7 @@ async function getProspectTournamentStats(season) {
         if (game.status === 'STATUS_IN_PROGRESS') {
           isPlaying = true;
           currentGame = {
+            gameId: game.espnEventId,
             opponent: opponent?.shortName || opponent?.name || 'TBD',
             opponentSeed: opponent?.seed || null,
             opponentLogo: opponent?.logo || null,

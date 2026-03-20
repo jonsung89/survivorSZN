@@ -845,22 +845,28 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                   <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full flex-shrink-0 bg-fg/10" />
                 )}
                 <span className="text-sm sm:text-base text-fg truncate flex-1 font-medium">{initials}</span>
-                {hasStats && p.gameStats && !(p.gameStats.min === '0' || p.gameStats.min === 0) ? (
-                  <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
-                    {p.gameStats.pts ?? 0}<span className="text-fg/60">p</span>{' '}
-                    {p.gameStats.reb ?? 0}<span className="text-fg/60">r</span>{' '}
-                    {p.gameStats.ast ?? 0}<span className="text-fg/60">a</span>
-                  </span>
-                ) : hasStats && (isPast || (p.gameStats && (p.gameStats.min === '0' || p.gameStats.min === 0))) ? (
-                  <span className="text-sm sm:text-base font-medium text-fg/60 flex-shrink-0">DNP</span>
-                ) : p.seasonStats?.ppg != null ? (
-                  <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
-                    <span className="text-fg/60">avg </span>
-                    {p.seasonStats.ppg}<span className="text-fg/60">p</span>{' '}
-                    {p.seasonStats.rpg ?? 0}<span className="text-fg/60">r</span>{' '}
-                    {p.seasonStats.apg ?? 0}<span className="text-fg/60">a</span>
-                  </span>
-                ) : null}
+                {(() => {
+                  const gs = p.gameStats || p.currentGame?.prospectStats;
+                  if (hasStats && gs && !(gs.min === '0' || gs.min === 0)) return (
+                    <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
+                      {gs.pts ?? 0}<span className="text-fg/60">p</span>{' '}
+                      {gs.reb ?? 0}<span className="text-fg/60">r</span>{' '}
+                      {gs.ast ?? 0}<span className="text-fg/60">a</span>
+                    </span>
+                  );
+                  if (hasStats && (isPast || (gs && (gs.min === '0' || gs.min === 0)))) return (
+                    <span className="text-sm sm:text-base font-medium text-fg/60 flex-shrink-0">DNP</span>
+                  );
+                  if (p.seasonStats?.ppg != null) return (
+                    <span className="text-sm sm:text-base font-medium text-fg flex-shrink-0">
+                      <span className="text-fg/60">avg </span>
+                      {p.seasonStats.ppg}<span className="text-fg/60">p</span>{' '}
+                      {p.seasonStats.rpg ?? 0}<span className="text-fg/60">r</span>{' '}
+                      {p.seasonStats.apg ?? 0}<span className="text-fg/60">a</span>
+                    </span>
+                  );
+                  return null;
+                })()}
               </div>
             );
           };

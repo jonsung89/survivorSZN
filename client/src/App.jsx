@@ -35,6 +35,8 @@ import AdminAnalytics from './pages/admin/AdminAnalytics';
 import AdminUserVisits from './pages/admin/AdminUserVisits';
 import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 import AdminProspects from './pages/admin/AdminProspects';
+import AdminTournaments from './pages/admin/AdminTournaments';
+import AdminAPIReference from './pages/admin/AdminAPIReference';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import CookieConsentBanner from './components/CookieConsentBanner';
@@ -226,6 +228,7 @@ function AppRoutes() {
         {/* Sports & Challenges - NCAAB (March Madness) */}
         <Route path="ncaab/reports" element={<AdminReports />} />
         <Route path="ncaab/matchups" element={<AdminMatchups />} />
+        <Route path="ncaab/tournaments" element={<AdminTournaments />} />
         <Route path="ncaab/bracket-test" element={<AdminBracketTest />} />
         <Route path="ncaab/prospects" element={<AdminProspects />} />
         {/* Legacy redirects */}
@@ -237,6 +240,7 @@ function AppRoutes() {
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="analytics/user-visits" element={<AdminUserVisits />} />
         <Route path="announcements" element={<AdminAnnouncements />} />
+        <Route path="api-reference" element={<AdminAPIReference />} />
       </Route>
 
       {/* Redirect root to dashboard (logged in) or schedule (public) */}

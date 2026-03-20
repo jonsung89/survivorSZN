@@ -3,7 +3,7 @@ import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Trophy, FileText, ArrowLeft, Shield, Sun, Moon,
   FlaskConical, Swords, ChevronDown, ChevronRight, MessageSquare, BarChart3,
-  Megaphone, Eye, Target
+  Megaphone, Eye, Target, Database, Globe
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -20,6 +20,7 @@ const SPORT_SECTIONS = [
     items: [
       { to: '/admin/ncaab/reports', label: 'Scouting Reports', icon: FileText },
       { to: '/admin/ncaab/matchups', label: 'Matchup Reports', icon: Swords },
+      { to: '/admin/ncaab/tournaments', label: 'Tournament Data', icon: Database },
       { to: '/admin/ncaab/bracket-test', label: 'Bracket Testing', icon: FlaskConical },
       { to: '/admin/ncaab/prospects', label: 'NBA Prospects', icon: Target },
     ],
@@ -41,6 +42,7 @@ const TOOL_NAV = [
     ],
   },
   { to: '/admin/announcements', icon: Megaphone, label: 'Announcements' },
+  { to: '/admin/api-reference', icon: Globe, label: 'API Reference' },
 ];
 
 export default function AdminLayout() {

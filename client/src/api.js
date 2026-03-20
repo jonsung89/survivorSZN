@@ -729,6 +729,63 @@ export const adminAPI = {
     });
     return res.json();
   },
+  // Tournament data management
+  getTournaments: async () => {
+    const res = await authFetch('/admin/tournaments');
+    return res.json();
+  },
+  getTournament: async (id) => {
+    const res = await authFetch(`/admin/tournaments/${id}`);
+    return res.json();
+  },
+  updateTournament: async (id, body) => {
+    const res = await authFetch(`/admin/tournaments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  },
+  syncTournament: async (id) => {
+    const res = await authFetch(`/admin/tournaments/${id}/sync`, { method: 'POST' });
+    return res.json();
+  },
+  getTournamentTeams: async (id, params = {}) => {
+    const res = await authFetch(`/admin/tournaments/${id}/teams?${new URLSearchParams(params)}`);
+    return res.json();
+  },
+  updateTournamentTeam: async (id, teamId, body) => {
+    const res = await authFetch(`/admin/tournaments/${id}/teams/${teamId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  },
+  getTournamentGames: async (id, params = {}) => {
+    const res = await authFetch(`/admin/tournaments/${id}/games?${new URLSearchParams(params)}`);
+    return res.json();
+  },
+  updateTournamentGame: async (id, gameId, body) => {
+    const res = await authFetch(`/admin/tournaments/${id}/games/${gameId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  },
+  setTournamentGameResult: async (id, gameId, body) => {
+    const res = await authFetch(`/admin/tournaments/${id}/games/${gameId}/result`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  },
+  recalculateTournament: async (id) => {
+    const res = await authFetch(`/admin/tournaments/${id}/recalculate`, { method: 'POST' });
+    return res.json();
+  },
+  refreshGameFromESPN: async (id, gameId) => {
+    const res = await authFetch(`/admin/tournaments/${id}/games/${gameId}/refresh`, { method: 'POST' });
+    return res.json();
+  },
 };
 
 // Analytics API (public-facing)

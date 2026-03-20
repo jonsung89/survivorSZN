@@ -1837,6 +1837,340 @@ async function getProspectTournamentStats(season) {
   return result;
 }
 
+/**
+ * Sync tournament data from ESPN into normalized database tables.
+ * Creates/updates tournaments, tournament_teams, and tournament_games rows.
+ * Region ordering is frozen on first successful sync — subsequent syncs preserve it.
+ */
+async function syncTournamentFromESPN(season) {
+  const bracketData = await getTournamentBracket(season);
+  if (!bracketData.available || !bracketData.regions?.length) {
+    console.log(`[TournamentSync] No ESPN data available for season ${season}`);
+    return null;
+  }
+
+  // Upsert tournament row — freeze regions on first insert, preserve existing on conflict
+  const tourney = await db.getOne(
+    `INSERT INTO tournaments (season, regions, status, first_game_time, created_at)
+     VALUES ($1, $2, 'bracket_set', $3, NOW())
+     ON CONFLICT (season) DO UPDATE SET updated_at = NOW()
+     RETURNING *`,
+    [season, JSON.stringify(bracketData.regions), null]
+  );
+  const tournamentId = tourney.id;
+  // Use the DB-stored regions (frozen from first insert), not the fresh ESPN order
+  const canonicalRegions = tourney.regions;
+
+  // If ESPN returned different region ordering than what's stored, remap slots
+  const freshRegions = bracketData.regions;
+  const needsRemap = JSON.stringify(freshRegions) !== JSON.stringify(canonicalRegions);
+  let slotRemap = null;
+  if (needsRemap) {
+    slotRemap = {};
+    for (let round = 0; round <= 3; round++) {
+      const rb = ROUND_BOUNDARIES[round];
+      for (let i = 0; i < 4; i++) {
+        const freshIdx = freshRegions.indexOf(canonicalRegions[i]);
+        if (freshIdx < 0) continue;
+        for (let j = 0; j < rb.gamesPerRegion; j++) {
+          slotRemap[rb.start + freshIdx * rb.gamesPerRegion + j] = rb.start + i * rb.gamesPerRegion + j;
+        }
+      }
+    }
+  }
+
+  // Upsert teams
+  for (const [teamId, team] of Object.entries(bracketData.teams)) {
+    // Determine region_index from slot position
+    let regionIdx = 0;
+    for (const [slotKey, slot] of Object.entries(bracketData.slots)) {
+      const s = parseInt(slotKey);
+      if (s >= 1 && s <= 32) {
+        if (String(slot.team1?.id) === String(teamId) || String(slot.team2?.id) === String(teamId)) {
+          const rawIdx = Math.floor((s - 1) / 8);
+          // If remapping, convert from fresh region index to canonical
+          if (needsRemap) {
+            const freshRegionName = freshRegions[rawIdx];
+            regionIdx = canonicalRegions.indexOf(freshRegionName);
+            if (regionIdx < 0) regionIdx = rawIdx;
+          } else {
+            regionIdx = rawIdx;
+          }
+          break;
+        }
+      }
+    }
+    await db.query(
+      `INSERT INTO tournament_teams (tournament_id, espn_team_id, name, abbreviation, short_name, logo, color, seed, region_index, record, is_first_four)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (tournament_id, espn_team_id) DO UPDATE SET
+         name = EXCLUDED.name, abbreviation = EXCLUDED.abbreviation, short_name = EXCLUDED.short_name,
+         logo = EXCLUDED.logo, color = EXCLUDED.color, record = EXCLUDED.record, updated_at = NOW()`,
+      [tournamentId, String(teamId), team.name || '', team.abbreviation || '', team.shortName || '', team.logo || '', team.color || '', team.seed || 0, regionIdx, team.record || '', team.isFirstFour || false]
+    );
+  }
+
+  // Upsert games from slots
+  for (const [slotKey, slot] of Object.entries(bracketData.slots)) {
+    let slotNum = parseInt(slotKey);
+    if (isNaN(slotNum)) continue;
+
+    // Remap slot number if region ordering differs
+    if (slotRemap && slotNum >= 1 && slotNum <= 60 && slotRemap[slotNum] !== undefined) {
+      slotNum = slotRemap[slotNum];
+    }
+
+    const round = slotNum <= 32 ? 0 : slotNum <= 48 ? 1 : slotNum <= 56 ? 2 : slotNum <= 60 ? 3 : slotNum <= 62 ? 4 : 5;
+    let regionIdx = null;
+    if (round <= 3) {
+      const rb = ROUND_BOUNDARIES[round];
+      regionIdx = Math.floor((slotNum - rb.start) / rb.gamesPerRegion);
+    }
+
+    const gameStatus = slot.status === 'STATUS_FINAL' ? 'final' : slot.status === 'STATUS_IN_PROGRESS' ? 'in_progress' : slot.status === 'STATUS_SCHEDULED' ? 'scheduled' : 'pending';
+    const team1Id = slot.team1?.id && !slot.team1?.isFirstFour ? String(slot.team1.id) : null;
+    const team2Id = slot.team2?.id && !slot.team2?.isFirstFour ? String(slot.team2.id) : null;
+    const winnerId = gameStatus === 'final' ? (slot.team1?.winner ? team1Id : team2Id) : null;
+    const loserId = gameStatus === 'final' ? (slot.team1?.winner ? team2Id : team1Id) : null;
+    const t1Score = slot.team1?.score != null ? slot.team1.score : null;
+    const t2Score = slot.team2?.score != null ? slot.team2.score : null;
+
+    await db.query(
+      `INSERT INTO tournament_games (tournament_id, slot_number, round, region_index, espn_event_id, team1_espn_id, team2_espn_id, status, winning_team_espn_id, losing_team_espn_id, team1_score, team2_score, start_time, venue, broadcast, status_detail)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       ON CONFLICT (tournament_id, slot_number) WHERE slot_number IS NOT NULL DO UPDATE SET
+         team1_espn_id = COALESCE(EXCLUDED.team1_espn_id, tournament_games.team1_espn_id),
+         team2_espn_id = COALESCE(EXCLUDED.team2_espn_id, tournament_games.team2_espn_id),
+         espn_event_id = COALESCE(EXCLUDED.espn_event_id, tournament_games.espn_event_id),
+         status = EXCLUDED.status, status_detail = EXCLUDED.status_detail,
+         winning_team_espn_id = COALESCE(EXCLUDED.winning_team_espn_id, tournament_games.winning_team_espn_id),
+         losing_team_espn_id = COALESCE(EXCLUDED.losing_team_espn_id, tournament_games.losing_team_espn_id),
+         team1_score = COALESCE(EXCLUDED.team1_score, tournament_games.team1_score),
+         team2_score = COALESCE(EXCLUDED.team2_score, tournament_games.team2_score),
+         start_time = COALESCE(EXCLUDED.start_time, tournament_games.start_time),
+         venue = COALESCE(EXCLUDED.venue, tournament_games.venue),
+         broadcast = COALESCE(EXCLUDED.broadcast, tournament_games.broadcast),
+         completed_at = CASE WHEN EXCLUDED.status = 'final' AND tournament_games.completed_at IS NULL THEN NOW() ELSE tournament_games.completed_at END,
+         updated_at = NOW()`,
+      [tournamentId, slotNum, round, regionIdx, slot.espnEventId || null, team1Id, team2Id, gameStatus, winnerId, loserId, t1Score, t2Score, slot.startDate || null, slot.venue || null, slot.broadcast || null, slot.statusDetail || null]
+    );
+  }
+
+  // Upsert First Four games
+  let ffIndex = 0;
+  for (const [eventId, event] of Object.entries(bracketData.events || {})) {
+    if (event.round !== -1) continue;
+    const regionIdx = canonicalRegions.indexOf(event.region);
+    const gameStatus = event.status === 'STATUS_FINAL' ? 'final' : event.status === 'STATUS_IN_PROGRESS' ? 'in_progress' : 'pending';
+    const winnerId = gameStatus === 'final' ? (event.team1?.winner ? String(event.team1.id) : String(event.team2.id)) : null;
+    const loserId = gameStatus === 'final' ? (event.team1?.winner ? String(event.team2.id) : String(event.team1.id)) : null;
+
+    await db.query(
+      `INSERT INTO tournament_games (tournament_id, first_four_index, round, region_index, espn_event_id, team1_espn_id, team2_espn_id, status, winning_team_espn_id, losing_team_espn_id, team1_score, team2_score, start_time, venue, broadcast)
+       VALUES ($1, $2, -1, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       ON CONFLICT (tournament_id, first_four_index) WHERE first_four_index IS NOT NULL DO UPDATE SET
+         status = EXCLUDED.status,
+         winning_team_espn_id = COALESCE(EXCLUDED.winning_team_espn_id, tournament_games.winning_team_espn_id),
+         losing_team_espn_id = COALESCE(EXCLUDED.losing_team_espn_id, tournament_games.losing_team_espn_id),
+         team1_score = COALESCE(EXCLUDED.team1_score, tournament_games.team1_score),
+         team2_score = COALESCE(EXCLUDED.team2_score, tournament_games.team2_score),
+         updated_at = NOW()`,
+      [tournamentId, ffIndex, regionIdx >= 0 ? regionIdx : null, eventId,
+       event.team1?.id ? String(event.team1.id) : null, event.team2?.id ? String(event.team2.id) : null,
+       gameStatus, winnerId, loserId,
+       event.team1?.score, event.team2?.score,
+       event.startDate || null, event.venue || null, event.broadcast || null]
+    );
+    ffIndex++;
+  }
+
+  // Update tournament status based on game states
+  const gameStats = await db.getOne(
+    `SELECT
+       COUNT(*) FILTER (WHERE status = 'final') as completed,
+       COUNT(*) FILTER (WHERE status = 'in_progress') as live,
+       COUNT(*) as total
+     FROM tournament_games WHERE tournament_id = $1`,
+    [tournamentId]
+  );
+  let status = 'bracket_set';
+  if (parseInt(gameStats.completed) >= 67) status = 'completed';
+  else if (parseInt(gameStats.completed) > 0 || parseInt(gameStats.live) > 0) status = 'in_progress';
+  await db.query('UPDATE tournaments SET status = $1, updated_at = NOW() WHERE id = $2', [status, tournamentId]);
+
+  console.log(`[TournamentSync] Season ${season}: ${gameStats.completed}/${gameStats.total} games complete, status=${status}`);
+  return { ...tourney, status };
+}
+
+/**
+ * Refresh a single game from ESPN using its espn_event_id.
+ * Fetches the ESPN scoreboard event and overwrites the game's scores/status/winner.
+ * Also dual-writes to bracket_results if the game has a slot_number.
+ */
+async function refreshGameFromESPN(tournamentId, gameId) {
+  const game = await db.getOne(
+    'SELECT * FROM tournament_games WHERE tournament_id = $1 AND id = $2',
+    [tournamentId, gameId]
+  );
+  if (!game) throw new Error('Game not found');
+  if (!game.espn_event_id) throw new Error('Game has no ESPN event ID — cannot refresh');
+
+  // Fetch the event summary from ESPN
+  const url = `${API_BASE}/summary?event=${game.espn_event_id}`;
+  const data = await fetchWithCache(url, TOURNAMENT_CACHE_TTL);
+
+  const competition = data?.header?.competitions?.[0];
+  if (!competition) throw new Error('No competition data returned from ESPN');
+
+  const competitors = competition.competitors || [];
+  if (competitors.length < 2) throw new Error('ESPN returned fewer than 2 competitors');
+
+  const comp1 = competitors[0];
+  const comp2 = competitors[1];
+  const statusType = competition.status?.type?.name || data?.header?.season?.type?.name;
+  const gameStatus = statusType === 'STATUS_FINAL' ? 'final'
+    : statusType === 'STATUS_IN_PROGRESS' ? 'in_progress'
+    : 'pending';
+
+  const team1EspnId = String(comp1.id);
+  const team2EspnId = String(comp2.id);
+  const team1Score = comp1.score != null ? parseInt(comp1.score) : null;
+  const team2Score = comp2.score != null ? parseInt(comp2.score) : null;
+  const winnerId = gameStatus === 'final' ? (comp1.winner ? team1EspnId : team2EspnId) : null;
+  const loserId = gameStatus === 'final' ? (comp1.winner ? team2EspnId : team1EspnId) : null;
+
+  // Extract venue and broadcast from gameInfo if available
+  const gameInfo = data?.gameInfo;
+  const venue = gameInfo?.venue?.fullName || game.venue;
+  const broadcast = competition.broadcasts?.[0]?.media?.shortName || game.broadcast;
+  const startTime = competition.date || game.start_time;
+  const statusDetail = competition.status?.type?.detail || null;
+
+  const updated = await db.getOne(
+    `UPDATE tournament_games SET
+      team1_espn_id = $1, team2_espn_id = $2,
+      team1_score = $3, team2_score = $4,
+      winning_team_espn_id = $5, losing_team_espn_id = $6,
+      status = $7, status_detail = $8,
+      venue = $9, broadcast = $10, start_time = $11,
+      completed_at = CASE WHEN $7 = 'final' AND completed_at IS NULL THEN NOW() ELSE completed_at END,
+      updated_at = NOW()
+     WHERE tournament_id = $12 AND id = $13 RETURNING *`,
+    [team1EspnId, team2EspnId, team1Score, team2Score, winnerId, loserId,
+     gameStatus, statusDetail, venue, broadcast, startTime, tournamentId, gameId]
+  );
+
+  // Dual-write to bracket_results if this is a bracket game (has slot_number)
+  if (updated.slot_number && gameStatus === 'final' && winnerId) {
+    const challenges = await db.getAll('SELECT id FROM bracket_challenges WHERE tournament_id = $1', [tournamentId]);
+    for (const c of challenges) {
+      const wScore = comp1.winner ? team1Score : team2Score;
+      const lScore = comp1.winner ? team2Score : team1Score;
+      await db.run(`
+        INSERT INTO bracket_results (challenge_id, slot_number, espn_event_id, winning_team_id, losing_team_id, winning_score, losing_score, round, status, completed_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'final', NOW())
+        ON CONFLICT (challenge_id, slot_number) DO UPDATE SET
+          winning_team_id = EXCLUDED.winning_team_id, losing_team_id = EXCLUDED.losing_team_id,
+          winning_score = EXCLUDED.winning_score, losing_score = EXCLUDED.losing_score,
+          status = 'final', completed_at = COALESCE(bracket_results.completed_at, NOW())
+      `, [c.id, updated.slot_number, updated.espn_event_id, winnerId, loserId, wScore, lScore, updated.round]);
+    }
+  }
+
+  // If game went final, mark the losing team as eliminated
+  if (gameStatus === 'final' && loserId) {
+    await db.run(
+      'UPDATE tournament_teams SET eliminated = true, updated_at = NOW() WHERE tournament_id = $1 AND espn_team_id = $2',
+      [tournamentId, loserId]
+    );
+    // Ensure winner is NOT eliminated (in case a previous bad result marked them)
+    await db.run(
+      'UPDATE tournament_teams SET eliminated = false, updated_at = NOW() WHERE tournament_id = $1 AND espn_team_id = $2',
+      [tournamentId, winnerId]
+    );
+  }
+
+  console.log(`[TournamentSync] Refreshed game ${gameId} (ESPN ${game.espn_event_id}): ${gameStatus} ${team1Score}-${team2Score}`);
+  return updated;
+}
+
+/**
+ * Build the tournament_data JSON shape from normalized tables.
+ * Returns the same format that the client expects, so no client changes needed.
+ */
+async function buildTournamentDataFromDB(tournamentId) {
+  const tournament = await db.getOne('SELECT * FROM tournaments WHERE id = $1', [tournamentId]);
+  if (!tournament) return null;
+
+  const teams = await db.getAll('SELECT * FROM tournament_teams WHERE tournament_id = $1', [tournamentId]);
+  const games = await db.getAll('SELECT * FROM tournament_games WHERE tournament_id = $1', [tournamentId]);
+
+  const teamsMap = {};
+  for (const t of teams) {
+    teamsMap[t.espn_team_id] = {
+      id: t.espn_team_id,
+      name: t.name,
+      abbreviation: t.abbreviation || '',
+      shortName: t.short_name || '',
+      logo: t.logo || '',
+      color: t.color || '',
+      seed: t.seed,
+      record: t.record || '',
+      isFirstFour: t.is_first_four || false,
+    };
+  }
+
+  const slots = {};
+  const events = {};
+  for (const g of games) {
+    const team1 = g.team1_espn_id ? teamsMap[g.team1_espn_id] : null;
+    const team2 = g.team2_espn_id ? teamsMap[g.team2_espn_id] : null;
+
+    // Add scores and winner flags from game data
+    const team1WithScore = team1 ? { ...team1, score: g.team1_score, winner: g.winning_team_espn_id === g.team1_espn_id } : null;
+    const team2WithScore = team2 ? { ...team2, score: g.team2_score, winner: g.winning_team_espn_id === g.team2_espn_id } : null;
+
+    const espnStatus = g.status === 'final' ? 'STATUS_FINAL' : g.status === 'in_progress' ? 'STATUS_IN_PROGRESS' : 'STATUS_SCHEDULED';
+
+    if (g.slot_number) {
+      slots[g.slot_number] = {
+        team1: team1WithScore,
+        team2: team2WithScore,
+        espnEventId: g.espn_event_id,
+        status: espnStatus,
+        statusDetail: g.status_detail || '',
+        startDate: g.start_time,
+        venue: g.venue || '',
+        broadcast: g.broadcast || '',
+      };
+    }
+
+    if (g.espn_event_id) {
+      const regionName = g.region_index != null && tournament.regions[g.region_index] ? tournament.regions[g.region_index] : null;
+      events[g.espn_event_id] = {
+        espnEventId: g.espn_event_id,
+        region: regionName,
+        round: g.round,
+        team1: team1WithScore,
+        team2: team2WithScore,
+        status: espnStatus,
+        statusDetail: g.status_detail || '',
+        startDate: g.start_time,
+        venue: g.venue || '',
+        broadcast: g.broadcast || '',
+      };
+    }
+  }
+
+  return {
+    teams: teamsMap,
+    slots,
+    regions: tournament.regions,
+    events,
+    available: true,
+  };
+}
+
 module.exports = {
   getTournamentBracket,
   getTeamBreakdown,
@@ -1851,4 +2185,7 @@ module.exports = {
   getStoredReport,
   getStoredMatchupReport,
   getProspectTournamentStats,
+  syncTournamentFromESPN,
+  buildTournamentDataFromDB,
+  refreshGameFromESPN,
 };

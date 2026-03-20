@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { adminMiddleware } = require('../middleware/admin');
-const { generateAllReports, getStoredReport, getTournamentBracket } = require('../services/ncaab-tournament');
+const { generateAllReports, getStoredReport, getTournamentBracket, syncTournamentFromESPN, buildTournamentDataFromDB, refreshGameFromESPN } = require('../services/ncaab-tournament');
 const { getDraftProspects, clearProspectCache, getCacheInfo, enrichProspectsWithESPN, getProspectsFromDB, getProspectsLastUpdated, saveProspectsToDB, getDraftYears, getCurrentDraftYear, fetchStagedProspects } = require('../services/nba-draft');
 const { getSlotRound, calculateBracketScore, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
 const { getOnlineUserCount, getOnlineUserIds } = require('../socket/handlers');
@@ -2033,8 +2033,8 @@ router.get('/stats/user-visits', async (req, res) => {
       session_stats AS (
         SELECT
           visitor_key,
-          MIN(user_id) AS user_id,
-          MIN(anon_id) AS anon_id,
+          (array_agg(user_id) FILTER (WHERE user_id IS NOT NULL))[1] AS user_id,
+          (array_agg(anon_id) FILTER (WHERE anon_id IS NOT NULL))[1] AS anon_id,
           session_num,
           MIN(created_at) AS session_start,
           MAX(created_at) AS session_end,
@@ -2046,8 +2046,8 @@ router.get('/stats/user-visits', async (req, res) => {
       visitor_summary AS (
         SELECT
           ss.visitor_key,
-          MIN(ss.user_id) AS user_id,
-          MIN(ss.anon_id) AS anon_id,
+          (array_agg(ss.user_id) FILTER (WHERE ss.user_id IS NOT NULL))[1] AS user_id,
+          (array_agg(ss.anon_id) FILTER (WHERE ss.anon_id IS NOT NULL))[1] AS anon_id,
           COUNT(DISTINCT ss.session_num) AS visit_count,
           SUM(ss.page_views) AS total_page_views,
           AVG(ss.duration_seconds) AS avg_session_seconds,
@@ -2221,6 +2221,293 @@ router.post('/prospects/confirm', async (req, res) => {
   } catch (error) {
     console.error('Prospects confirm error:', error);
     res.status(500).json({ error: 'Failed to save prospects' });
+  }
+});
+
+// ─── Tournament Management (Centralized Data) ──────────────────────────────
+
+// List all tournaments
+router.get('/tournaments', async (req, res) => {
+  try {
+    const tournaments = await db.getAll(`
+      SELECT t.*,
+        (SELECT COUNT(*) FROM tournament_teams WHERE tournament_id = t.id) as team_count,
+        (SELECT COUNT(*) FROM tournament_games WHERE tournament_id = t.id) as game_count,
+        (SELECT COUNT(*) FROM tournament_games WHERE tournament_id = t.id AND status = 'final') as completed_games,
+        (SELECT COUNT(*) FROM bracket_challenges WHERE tournament_id = t.id) as challenge_count
+      FROM tournaments t ORDER BY t.season DESC
+    `);
+    res.json({ tournaments });
+  } catch (error) {
+    console.error('Error listing tournaments:', error);
+    res.status(500).json({ error: 'Failed to list tournaments' });
+  }
+});
+
+// Get tournament detail with teams and games
+router.get('/tournaments/:id', async (req, res) => {
+  try {
+    const tournament = await db.getOne('SELECT * FROM tournaments WHERE id = $1', [req.params.id]);
+    if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+
+    const teams = await db.getAll(
+      'SELECT * FROM tournament_teams WHERE tournament_id = $1 ORDER BY region_index, seed',
+      [tournament.id]
+    );
+    const games = await db.getAll(
+      'SELECT * FROM tournament_games WHERE tournament_id = $1 ORDER BY round, slot_number',
+      [tournament.id]
+    );
+    const challenges = await db.getAll(
+      `SELECT bc.id, bc.league_id, bc.season, bc.status, bc.scoring_preset, l.name as league_name,
+              (SELECT COUNT(*) FROM brackets WHERE challenge_id = bc.id) as bracket_count
+       FROM bracket_challenges bc JOIN leagues l ON bc.league_id = l.id
+       WHERE bc.tournament_id = $1`,
+      [tournament.id]
+    );
+
+    res.json({ tournament, teams, games, challenges });
+  } catch (error) {
+    console.error('Error fetching tournament:', error);
+    res.status(500).json({ error: 'Failed to fetch tournament' });
+  }
+});
+
+// Update tournament metadata
+router.put('/tournaments/:id', async (req, res) => {
+  try {
+    const { name, status, regions, metadata } = req.body;
+    const updates = [];
+    const params = [];
+    let idx = 1;
+
+    if (name !== undefined) { updates.push(`name = $${idx++}`); params.push(name); }
+    if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
+    if (regions !== undefined) { updates.push(`regions = $${idx++}`); params.push(JSON.stringify(regions)); }
+    if (metadata !== undefined) { updates.push(`metadata = $${idx++}`); params.push(JSON.stringify(metadata)); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+    updates.push(`updated_at = NOW()`);
+    params.push(req.params.id);
+
+    const result = await db.getOne(
+      `UPDATE tournaments SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
+      params
+    );
+    res.json({ tournament: result });
+  } catch (error) {
+    console.error('Error updating tournament:', error);
+    res.status(500).json({ error: 'Failed to update tournament' });
+  }
+});
+
+// Trigger ESPN sync for a tournament
+router.post('/tournaments/:id/sync', async (req, res) => {
+  try {
+    const tournament = await db.getOne('SELECT * FROM tournaments WHERE id = $1', [req.params.id]);
+    if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+
+    const result = await syncTournamentFromESPN(tournament.season);
+    res.json({ success: true, tournament: result });
+  } catch (error) {
+    console.error('Error syncing tournament:', error);
+    res.status(500).json({ error: 'Failed to sync tournament' });
+  }
+});
+
+// List tournament teams
+router.get('/tournaments/:id/teams', async (req, res) => {
+  try {
+    const { region, seed, eliminated } = req.query;
+    let query = 'SELECT * FROM tournament_teams WHERE tournament_id = $1';
+    const params = [req.params.id];
+    let idx = 2;
+
+    if (region !== undefined) { query += ` AND region_index = $${idx++}`; params.push(parseInt(region)); }
+    if (seed !== undefined) { query += ` AND seed = $${idx++}`; params.push(parseInt(seed)); }
+    if (eliminated !== undefined) { query += ` AND eliminated = $${idx++}`; params.push(eliminated === 'true'); }
+
+    query += ' ORDER BY region_index, seed';
+    const teams = await db.getAll(query, params);
+    res.json({ teams });
+  } catch (error) {
+    console.error('Error fetching tournament teams:', error);
+    res.status(500).json({ error: 'Failed to fetch teams' });
+  }
+});
+
+// Update tournament team
+router.put('/tournaments/:id/teams/:teamId', async (req, res) => {
+  try {
+    const { name, abbreviation, short_name, logo, color, seed, region_index, record, eliminated } = req.body;
+    const updates = [];
+    const params = [];
+    let idx = 1;
+
+    if (name !== undefined) { updates.push(`name = $${idx++}`); params.push(name); }
+    if (abbreviation !== undefined) { updates.push(`abbreviation = $${idx++}`); params.push(abbreviation); }
+    if (short_name !== undefined) { updates.push(`short_name = $${idx++}`); params.push(short_name); }
+    if (logo !== undefined) { updates.push(`logo = $${idx++}`); params.push(logo); }
+    if (color !== undefined) { updates.push(`color = $${idx++}`); params.push(color); }
+    if (seed !== undefined) { updates.push(`seed = $${idx++}`); params.push(seed); }
+    if (region_index !== undefined) { updates.push(`region_index = $${idx++}`); params.push(region_index); }
+    if (record !== undefined) { updates.push(`record = $${idx++}`); params.push(record); }
+    if (eliminated !== undefined) { updates.push(`eliminated = $${idx++}`); params.push(eliminated); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    updates.push(`updated_at = NOW()`);
+
+    params.push(req.params.id, req.params.teamId);
+    const result = await db.getOne(
+      `UPDATE tournament_teams SET ${updates.join(', ')} WHERE tournament_id = $${idx} AND id = $${idx + 1} RETURNING *`,
+      params
+    );
+    if (!result) return res.status(404).json({ error: 'Team not found' });
+    res.json({ team: result });
+  } catch (error) {
+    console.error('Error updating team:', error);
+    res.status(500).json({ error: 'Failed to update team' });
+  }
+});
+
+// List tournament games
+router.get('/tournaments/:id/games', async (req, res) => {
+  try {
+    const { round, status, region } = req.query;
+    let query = 'SELECT * FROM tournament_games WHERE tournament_id = $1';
+    const params = [req.params.id];
+    let idx = 2;
+
+    if (round !== undefined) { query += ` AND round = $${idx++}`; params.push(parseInt(round)); }
+    if (status !== undefined) { query += ` AND status = $${idx++}`; params.push(status); }
+    if (region !== undefined) { query += ` AND region_index = $${idx++}`; params.push(parseInt(region)); }
+
+    query += ' ORDER BY round, slot_number, first_four_index';
+    const games = await db.getAll(query, params);
+    res.json({ games });
+  } catch (error) {
+    console.error('Error fetching tournament games:', error);
+    res.status(500).json({ error: 'Failed to fetch games' });
+  }
+});
+
+// Update tournament game
+router.put('/tournaments/:id/games/:gameId', async (req, res) => {
+  try {
+    const { team1_espn_id, team2_espn_id, status, start_time, venue, broadcast, status_detail } = req.body;
+    const updates = [];
+    const params = [];
+    let idx = 1;
+
+    if (team1_espn_id !== undefined) { updates.push(`team1_espn_id = $${idx++}`); params.push(team1_espn_id); }
+    if (team2_espn_id !== undefined) { updates.push(`team2_espn_id = $${idx++}`); params.push(team2_espn_id); }
+    if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
+    if (start_time !== undefined) { updates.push(`start_time = $${idx++}`); params.push(start_time); }
+    if (venue !== undefined) { updates.push(`venue = $${idx++}`); params.push(venue); }
+    if (broadcast !== undefined) { updates.push(`broadcast = $${idx++}`); params.push(broadcast); }
+    if (status_detail !== undefined) { updates.push(`status_detail = $${idx++}`); params.push(status_detail); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    updates.push(`updated_at = NOW()`);
+
+    params.push(req.params.id, req.params.gameId);
+    const result = await db.getOne(
+      `UPDATE tournament_games SET ${updates.join(', ')} WHERE tournament_id = $${idx} AND id = $${idx + 1} RETURNING *`,
+      params
+    );
+    if (!result) return res.status(404).json({ error: 'Game not found' });
+    res.json({ game: result });
+  } catch (error) {
+    console.error('Error updating game:', error);
+    res.status(500).json({ error: 'Failed to update game' });
+  }
+});
+
+// Record/override game result manually
+router.post('/tournaments/:id/games/:gameId/result', async (req, res) => {
+  try {
+    const { winningTeamId, losingTeamId, winningScore, losingScore } = req.body;
+    if (!winningTeamId) return res.status(400).json({ error: 'winningTeamId is required' });
+
+    const game = await db.getOne(
+      `UPDATE tournament_games SET
+        winning_team_espn_id = $1, losing_team_espn_id = $2,
+        team1_score = $3, team2_score = $4,
+        status = 'final', completed_at = COALESCE(completed_at, NOW()), updated_at = NOW()
+       WHERE tournament_id = $5 AND id = $6 RETURNING *`,
+      [winningTeamId, losingTeamId || null, winningScore || null, losingScore || null, req.params.id, req.params.gameId]
+    );
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+
+    // Also dual-write to bracket_results for all challenges using this tournament
+    if (game.slot_number) {
+      const challenges = await db.getAll('SELECT id FROM bracket_challenges WHERE tournament_id = $1', [req.params.id]);
+      for (const c of challenges) {
+        await db.run(`
+          INSERT INTO bracket_results (challenge_id, slot_number, espn_event_id, winning_team_id, losing_team_id, winning_score, losing_score, round, status, completed_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'final', NOW())
+          ON CONFLICT (challenge_id, slot_number) DO UPDATE SET
+            winning_team_id = EXCLUDED.winning_team_id, losing_team_id = EXCLUDED.losing_team_id,
+            winning_score = EXCLUDED.winning_score, losing_score = EXCLUDED.losing_score,
+            status = 'final', completed_at = COALESCE(bracket_results.completed_at, NOW())
+        `, [c.id, game.slot_number, game.espn_event_id, winningTeamId, losingTeamId || null, winningScore || null, losingScore || null, game.round]);
+      }
+    }
+
+    res.json({ success: true, game });
+  } catch (error) {
+    console.error('Error recording game result:', error);
+    res.status(500).json({ error: 'Failed to record result' });
+  }
+});
+
+// Refresh a single game from ESPN
+router.post('/tournaments/:id/games/:gameId/refresh', async (req, res) => {
+  try {
+    const game = await refreshGameFromESPN(req.params.id, req.params.gameId);
+    res.json({ success: true, game });
+  } catch (error) {
+    console.error('Error refreshing game from ESPN:', error);
+    res.status(500).json({ error: error.message || 'Failed to refresh game' });
+  }
+});
+
+// Recalculate all bracket scores for a tournament
+router.post('/tournaments/:id/recalculate', async (req, res) => {
+  try {
+    const tournamentId = req.params.id;
+    // Get results from tournament_games
+    const games = await db.getAll(
+      `SELECT slot_number, winning_team_espn_id as winning_team_id, status
+       FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
+      [tournamentId]
+    );
+    const resultsMap = {};
+    for (const g of games) {
+      if (g.status === 'final' && g.winning_team_id) {
+        resultsMap[g.slot_number] = g;
+      }
+    }
+
+    // Recalculate for all challenges referencing this tournament
+    const challenges = await db.getAll('SELECT * FROM bracket_challenges WHERE tournament_id = $1', [tournamentId]);
+    let totalRecalculated = 0;
+
+    for (const challenge of challenges) {
+      const scoringSystem = challenge.scoring_system || [1, 2, 4, 8, 16, 32];
+      const brackets = await db.getAll('SELECT id, picks FROM brackets WHERE challenge_id = $1 AND is_submitted = true', [challenge.id]);
+      for (const bracket of brackets) {
+        const { totalScore } = calculateBracketScore(bracket.picks || {}, resultsMap, scoringSystem);
+        await db.run('UPDATE brackets SET total_score = $1, updated_at = NOW() WHERE id = $2', [totalScore, bracket.id]);
+        totalRecalculated++;
+      }
+    }
+
+    res.json({ success: true, recalculated: totalRecalculated, challenges: challenges.length });
+  } catch (error) {
+    console.error('Error recalculating scores:', error);
+    res.status(500).json({ error: 'Failed to recalculate scores' });
   }
 });
 

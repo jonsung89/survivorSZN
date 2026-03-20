@@ -168,6 +168,78 @@ async function initDb() {
       )
     `);
 
+    // Centralized tournament data — single source of truth per season
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tournaments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        season INTEGER NOT NULL UNIQUE,
+        name TEXT NOT NULL DEFAULT 'NCAA Tournament',
+        status TEXT NOT NULL DEFAULT 'pending',
+        regions JSONB NOT NULL DEFAULT '[]',
+        first_game_time TIMESTAMPTZ,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tournament_teams (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        espn_team_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        abbreviation TEXT,
+        short_name TEXT,
+        logo TEXT,
+        color TEXT,
+        seed INTEGER NOT NULL,
+        region_index INTEGER NOT NULL,
+        record TEXT,
+        is_first_four BOOLEAN DEFAULT FALSE,
+        eliminated BOOLEAN DEFAULT FALSE,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(tournament_id, espn_team_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tournament_games (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        slot_number INTEGER,
+        first_four_index INTEGER,
+        round INTEGER NOT NULL,
+        region_index INTEGER,
+        espn_event_id TEXT,
+        team1_espn_id TEXT,
+        team2_espn_id TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        winning_team_espn_id TEXT,
+        losing_team_espn_id TEXT,
+        team1_score INTEGER,
+        team2_score INTEGER,
+        start_time TIMESTAMPTZ,
+        venue TEXT,
+        broadcast TEXT,
+        status_detail TEXT,
+        completed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    // Add unique constraints safely (may already exist)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_games_slot ON tournament_games(tournament_id, slot_number) WHERE slot_number IS NOT NULL`);
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_games_ff ON tournament_games(tournament_id, first_four_index) WHERE first_four_index IS NOT NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tournament_games_tournament ON tournament_games(tournament_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tournament_games_espn_event ON tournament_games(tournament_id, espn_event_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tournament_teams_tournament ON tournament_teams(tournament_id)`);
+
+    // Add tournament_id FK to bracket_challenges (nullable during migration)
+    await client.query(`ALTER TABLE bracket_challenges ADD COLUMN IF NOT EXISTS tournament_id UUID REFERENCES tournaments(id)`);
+
     // Pre-generated AI scouting reports (persisted across restarts)
     await client.query(`
       CREATE TABLE IF NOT EXISTS scouting_reports (
@@ -374,6 +446,128 @@ async function initDb() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_draft_prospects_sport_year ON draft_prospects(sport, draft_year)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_draft_prospects_name ON draft_prospects(normalized_name)`);
+
+    // Migrate existing bracket_challenges tournament_data into new normalized tables
+    const unmigrated = await client.query(
+      `SELECT bc.id, bc.season, bc.tournament_data, bc.tournament_id
+       FROM bracket_challenges bc
+       WHERE bc.tournament_data IS NOT NULL AND bc.tournament_id IS NULL`
+    );
+    if (unmigrated.rows.length > 0) {
+      console.log(`[Migration] Migrating ${unmigrated.rows.length} bracket challenges to normalized tournament tables...`);
+      // Group by season — all challenges in the same season share one tournament
+      const bySeason = {};
+      for (const row of unmigrated.rows) {
+        if (!bySeason[row.season]) bySeason[row.season] = [];
+        bySeason[row.season].push(row);
+      }
+
+      for (const [season, challenges] of Object.entries(bySeason)) {
+        // Pick the challenge with the most complete tournament_data as source
+        const source = challenges.reduce((best, c) => {
+          const teams = Object.keys(c.tournament_data?.teams || {}).length;
+          const bestTeams = Object.keys(best.tournament_data?.teams || {}).length;
+          return teams > bestTeams ? c : best;
+        }, challenges[0]);
+        const td = source.tournament_data;
+        if (!td?.regions || !td?.teams || !td?.slots) continue;
+
+        // Upsert tournament row
+        const tourney = await client.query(
+          `INSERT INTO tournaments (season, regions, status, created_at)
+           VALUES ($1, $2, 'in_progress', NOW())
+           ON CONFLICT (season) DO UPDATE SET regions = EXCLUDED.regions
+           RETURNING id`,
+          [parseInt(season), JSON.stringify(td.regions)]
+        );
+        const tournamentId = tourney.rows[0].id;
+
+        // Insert teams
+        for (const [teamId, team] of Object.entries(td.teams)) {
+          // Determine region_index from slot position
+          let regionIdx = 0;
+          for (const [slotKey, slot] of Object.entries(td.slots)) {
+            const s = parseInt(slotKey);
+            if (s >= 1 && s <= 32) {
+              if (String(slot.team1?.id) === String(teamId) || String(slot.team2?.id) === String(teamId)) {
+                regionIdx = Math.floor((s - 1) / 8);
+                break;
+              }
+            }
+          }
+          await client.query(
+            `INSERT INTO tournament_teams (tournament_id, espn_team_id, name, abbreviation, short_name, logo, color, seed, region_index, record, is_first_four)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             ON CONFLICT (tournament_id, espn_team_id) DO NOTHING`,
+            [tournamentId, String(teamId), team.name || '', team.abbreviation || '', team.shortName || '', team.logo || '', team.color || '', team.seed || 0, regionIdx, team.record || '', team.isFirstFour || false]
+          );
+        }
+
+        // Insert games from slots
+        for (const [slotKey, slot] of Object.entries(td.slots)) {
+          const slotNum = parseInt(slotKey);
+          if (isNaN(slotNum)) continue;
+          const round = slotNum <= 32 ? 0 : slotNum <= 48 ? 1 : slotNum <= 56 ? 2 : slotNum <= 60 ? 3 : slotNum <= 62 ? 4 : 5;
+          let regionIdx = null;
+          if (round <= 3) {
+            const rb = round === 0 ? { start: 1, gpr: 8 } : round === 1 ? { start: 33, gpr: 4 } : round === 2 ? { start: 49, gpr: 2 } : { start: 57, gpr: 1 };
+            regionIdx = Math.floor((slotNum - rb.start) / rb.gpr);
+          }
+
+          // Check bracket_results for this challenge/slot to get winner data
+          const result = await client.query(
+            `SELECT winning_team_id, losing_team_id, winning_score, losing_score, status, completed_at
+             FROM bracket_results WHERE challenge_id = $1 AND slot_number = $2`,
+            [source.id, slotNum]
+          );
+          const br = result.rows[0];
+
+          await client.query(
+            `INSERT INTO tournament_games (tournament_id, slot_number, round, region_index, espn_event_id, team1_espn_id, team2_espn_id, status, winning_team_espn_id, losing_team_espn_id, team1_score, team2_score, start_time, venue, broadcast, completed_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+             ON CONFLICT (tournament_id, slot_number) WHERE slot_number IS NOT NULL DO UPDATE SET
+               team1_espn_id = EXCLUDED.team1_espn_id, team2_espn_id = EXCLUDED.team2_espn_id,
+               espn_event_id = EXCLUDED.espn_event_id, status = EXCLUDED.status,
+               winning_team_espn_id = EXCLUDED.winning_team_espn_id, losing_team_espn_id = EXCLUDED.losing_team_espn_id,
+               team1_score = EXCLUDED.team1_score, team2_score = EXCLUDED.team2_score`,
+            [tournamentId, slotNum, round, regionIdx, slot.espnEventId || null,
+             slot.team1?.id ? String(slot.team1.id) : null, slot.team2?.id ? String(slot.team2.id) : null,
+             br?.status || (slot.status === 'STATUS_FINAL' ? 'final' : slot.status === 'STATUS_IN_PROGRESS' ? 'in_progress' : 'pending'),
+             br?.winning_team_id || null, br?.losing_team_id || null,
+             br ? br.winning_score : null, br ? br.losing_score : null,
+             slot.startDate || null, slot.venue || null, slot.broadcast || null,
+             br?.completed_at || null]
+          );
+        }
+
+        // Insert First Four games from events
+        let ffIndex = 0;
+        for (const [eventId, event] of Object.entries(td.events || {})) {
+          if (event.round === -1) {
+            const regionIdx = td.regions.indexOf(event.region);
+            await client.query(
+              `INSERT INTO tournament_games (tournament_id, first_four_index, round, region_index, espn_event_id, team1_espn_id, team2_espn_id, status, start_time, venue, broadcast)
+               VALUES ($1, $2, -1, $3, $4, $5, $6, $7, $8, $9, $10)
+               ON CONFLICT (tournament_id, first_four_index) WHERE first_four_index IS NOT NULL DO NOTHING`,
+              [tournamentId, ffIndex, regionIdx >= 0 ? regionIdx : null, eventId,
+               event.team1?.id ? String(event.team1.id) : null, event.team2?.id ? String(event.team2.id) : null,
+               event.status === 'STATUS_FINAL' ? 'final' : event.status === 'STATUS_IN_PROGRESS' ? 'in_progress' : 'pending',
+               event.startDate || null, event.venue || null, event.broadcast || null]
+            );
+            ffIndex++;
+          }
+        }
+
+        // Link all challenges for this season to the tournament
+        for (const c of challenges) {
+          await client.query(
+            'UPDATE bracket_challenges SET tournament_id = $1 WHERE id = $2',
+            [tournamentId, c.id]
+          );
+        }
+        console.log(`[Migration] Season ${season}: created tournament ${tournamentId} with ${Object.keys(td.teams).length} teams, ${Object.keys(td.slots).length} games`);
+      }
+    }
 
     console.log('✅ Supabase database initialized successfully');
   } catch (error) {

@@ -2,12 +2,79 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport, getProspectTournamentStats } = require('../services/ncaab-tournament');
+const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport, getProspectTournamentStats, syncTournamentFromESPN, buildTournamentDataFromDB } = require('../services/ncaab-tournament');
 const { getDraftProspects, enrichPlayersWithDraftRank, getProspectsFromDB, getCurrentDraftYear } = require('../services/nba-draft');
 const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, getNextSlot, getRegionForSlot, getChildSlots, countPicks, DEFAULT_REGIONS } = require('../utils/bracket-slots');
 
 // Total games in the bracket (derived from round boundaries)
 const TOTAL_BRACKET_GAMES = ROUND_BOUNDARIES[ROUND_BOUNDARIES.length - 1].end;
+
+// Auto-refresh tournament data if stale or if First Four play-in games have resolved
+async function autoRefreshTournamentData(challenge) {
+  const storedTeams = Object.keys(challenge.tournament_data?.teams || {}).length;
+  const storedSlots = challenge.tournament_data?.slots || {};
+  const filledR64 = Object.keys(storedSlots)
+    .filter(k => parseInt(k) <= 32 && storedSlots[k]?.team1 && storedSlots[k]?.team2).length;
+
+  // Check for unresolved First Four placeholders in R64 slots
+  const firstFourSlots = Object.keys(storedSlots)
+    .filter(k => parseInt(k) <= 32)
+    .filter(k => storedSlots[k]?.team1?.isFirstFour || storedSlots[k]?.team2?.isFirstFour);
+  const hasUnresolvedFirstFour = firstFourSlots.length > 0;
+
+  if (hasUnresolvedFirstFour) {
+    // Only patch First Four placeholder teams — do NOT replace entire tournament structure
+    // (full replacement can reorder regions and break slot assignments)
+    try {
+      const freshData = await getTournamentBracket(challenge.season);
+      const td = challenge.tournament_data;
+      let patched = 0;
+
+      for (const slotKey of firstFourSlots) {
+        const slot = td.slots[slotKey];
+        for (const pos of ['team1', 'team2']) {
+          if (!slot[pos]?.isFirstFour) continue;
+          const ffEventId = slot[pos].firstFourEventId;
+          // Find the resolved game in fresh data by its ESPN event ID
+          const ffGame = ffEventId ? freshData.events?.[ffEventId] : null;
+          if (ffGame?.status === 'STATUS_FINAL') {
+            const winner = ffGame.team1?.winner ? ffGame.team1 : ffGame.team2;
+            slot[pos] = winner;
+            // Also add the resolved team to the teams map
+            if (winner.id) td.teams[winner.id] = winner;
+            patched++;
+          }
+        }
+      }
+
+      if (patched > 0) {
+        await db.query(
+          'UPDATE bracket_challenges SET tournament_data = $1, updated_at = NOW() WHERE id = $2',
+          [JSON.stringify(td), challenge.id]
+        );
+        console.log(`Patched ${patched} First Four placeholder(s) for challenge ${challenge.id}`);
+      }
+    } catch (refreshErr) {
+      console.error('Failed to patch First Four data:', refreshErr.message);
+    }
+  } else if (storedTeams < 64 || filledR64 < 32) {
+    // Full refresh only when bracket is genuinely incomplete (not yet populated)
+    try {
+      const freshData = await getTournamentBracket(challenge.season);
+      const freshTeams = Object.keys(freshData.teams || {}).length;
+      if (freshTeams >= 64) {
+        await db.query(
+          'UPDATE bracket_challenges SET tournament_data = $1, updated_at = NOW() WHERE id = $2',
+          [JSON.stringify(freshData), challenge.id]
+        );
+        challenge.tournament_data = freshData;
+        console.log(`Refreshed tournament data for challenge ${challenge.id}: ${storedTeams} → ${freshTeams} teams`);
+      }
+    } catch (refreshErr) {
+      console.error('Failed to refresh tournament data:', refreshErr.message);
+    }
+  }
+}
 
 const getUser = async (req) => {
   return db.getOne('SELECT * FROM users WHERE firebase_uid = $1', [req.firebaseUser.uid]);
@@ -100,16 +167,17 @@ router.post('/challenges', authMiddleware, async (req, res) => {
       scoringSystem = SCORING_PRESETS[scoringPreset]?.points || SCORING_PRESETS.standard.points;
     }
 
-    // Fetch tournament data from ESPN
-    const tournamentData = await getTournamentBracket(league.season);
+    // Sync tournament data from ESPN into normalized tables
+    const tournament = await syncTournamentFromESPN(league.season);
+    const tournamentData = tournament ? await buildTournamentDataFromDB(tournament.id) : await getTournamentBracket(league.season);
 
     const parsedFee = parseFloat(entryFee) || 0;
 
     const challenge = await db.getOne(`
-      INSERT INTO bracket_challenges (league_id, season, max_brackets_per_user, scoring_preset, scoring_system, tiebreaker_type, entry_deadline, entry_fee, tournament_data, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open')
+      INSERT INTO bracket_challenges (league_id, season, max_brackets_per_user, scoring_preset, scoring_system, tiebreaker_type, entry_deadline, entry_fee, tournament_data, tournament_id, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open')
       RETURNING *
-    `, [leagueId, league.season, maxBracketsPerUser, scoringPreset, JSON.stringify(scoringSystem), tiebreakerType, entryDeadline || null, parsedFee, JSON.stringify(tournamentData)]);
+    `, [leagueId, league.season, maxBracketsPerUser, scoringPreset, JSON.stringify(scoringSystem), tiebreakerType, entryDeadline || null, parsedFee, JSON.stringify(tournamentData), tournament?.id || null]);
 
     // Keep league entry_fee in sync
     if (parsedFee > 0) {
@@ -238,22 +306,11 @@ router.get('/challenges/league/:leagueId', authMiddleware, async (req, res) => {
     const challenge = await db.getOne('SELECT * FROM bracket_challenges WHERE league_id = $1 ORDER BY season DESC LIMIT 1', [req.params.leagueId]);
     if (!challenge) return res.json({ challenge: null });
 
-    // Auto-refresh tournament data if stale (fewer than 64 teams or incomplete R64 slots)
-    const storedTeams = Object.keys(challenge.tournament_data?.teams || {}).length;
-    const storedSlots = challenge.tournament_data?.slots || {};
-    const filledR64 = Object.keys(storedSlots).filter(k => parseInt(k) <= 32 && storedSlots[k]?.team1 && storedSlots[k]?.team2).length;
-    if (storedTeams < 64 || filledR64 < 32) {
-      try {
-        const freshData = await getTournamentBracket(challenge.season);
-        const freshTeams = Object.keys(freshData.teams || {}).length;
-        if (freshTeams >= 64) {
-          await db.query('UPDATE bracket_challenges SET tournament_data = $1 WHERE id = $2', [JSON.stringify(freshData), challenge.id]);
-          challenge.tournament_data = freshData;
-          console.log(`Refreshed tournament data for challenge ${challenge.id}: ${storedTeams} → ${freshTeams} teams`);
-        }
-      } catch (refreshErr) {
-        console.error('Failed to refresh tournament data:', refreshErr.message);
-      }
+    // Build tournament data from normalized tables if available, fall back to JSONB
+    if (challenge.tournament_id) {
+      challenge.tournament_data = await buildTournamentDataFromDB(challenge.tournament_id) || challenge.tournament_data;
+    } else {
+      await autoRefreshTournamentData(challenge);
     }
 
     // Get user's brackets
@@ -286,30 +343,32 @@ router.get('/challenges/:challengeId', authMiddleware, async (req, res) => {
     const challenge = await db.getOne('SELECT * FROM bracket_challenges WHERE id = $1', [req.params.challengeId]);
     if (!challenge) return res.status(404).json({ error: 'Challenge not found' });
 
-    // Auto-refresh tournament data if stale (fewer than 64 teams or incomplete R64 slots)
-    const storedTeams = Object.keys(challenge.tournament_data?.teams || {}).length;
-    const storedSlots2 = challenge.tournament_data?.slots || {};
-    const filledR64_2 = Object.keys(storedSlots2).filter(k => parseInt(k) <= 32 && storedSlots2[k]?.team1 && storedSlots2[k]?.team2).length;
-    if (storedTeams < 64 || filledR64_2 < 32) {
-      try {
-        const freshData = await getTournamentBracket(challenge.season);
-        const freshTeams = Object.keys(freshData.teams || {}).length;
-        if (freshTeams >= 64) {
-          await db.query('UPDATE bracket_challenges SET tournament_data = $1 WHERE id = $2', [JSON.stringify(freshData), challenge.id]);
-          challenge.tournament_data = freshData;
-          console.log(`Refreshed tournament data for challenge ${challenge.id}: ${storedTeams} → ${freshTeams} teams`);
-        }
-      } catch (refreshErr) {
-        console.error('Failed to refresh tournament data:', refreshErr.message);
-      }
+    // Build tournament data from normalized tables if available, fall back to JSONB
+    if (challenge.tournament_id) {
+      challenge.tournament_data = await buildTournamentDataFromDB(challenge.tournament_id) || challenge.tournament_data;
+    } else {
+      await autoRefreshTournamentData(challenge);
     }
 
     const myBrackets = await db.getAll('SELECT * FROM brackets WHERE challenge_id = $1 AND user_id = $2 ORDER BY bracket_number', [challenge.id, user.id]);
-    const results = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);
 
+    // Build results from tournament_games if available, fall back to bracket_results
     const resultsMap = {};
-    for (const r of results) {
-      resultsMap[r.slot_number] = r;
+    if (challenge.tournament_id) {
+      const games = await db.getAll(
+        `SELECT slot_number, espn_event_id, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id,
+                team1_score as winning_score, team2_score as losing_score, round, status, completed_at
+         FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
+        [challenge.tournament_id]
+      );
+      for (const g of games) {
+        resultsMap[g.slot_number] = g;
+      }
+    } else {
+      const results = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);
+      for (const r of results) {
+        resultsMap[r.slot_number] = r;
+      }
     }
 
     res.json({ challenge, myBrackets, results: resultsMap });
@@ -548,13 +607,18 @@ router.get('/:bracketId', authMiddleware, async (req, res) => {
 
     const bracket = await db.getOne(`
       SELECT b.*, bc.scoring_system, bc.tournament_data, bc.tiebreaker_type, bc.status as challenge_status,
-             bc.season as challenge_season, u.display_name as user_display_name
+             bc.season as challenge_season, bc.tournament_id, u.display_name as user_display_name
       FROM brackets b
       JOIN bracket_challenges bc ON b.challenge_id = bc.id
       JOIN users u ON b.user_id = u.id
       WHERE b.id = $1
     `, [req.params.bracketId]);
     if (!bracket) return res.status(404).json({ error: 'Bracket not found' });
+
+    // Build tournament data from normalized tables if available
+    if (bracket.tournament_id) {
+      bracket.tournament_data = await buildTournamentDataFromDB(bracket.tournament_id) || bracket.tournament_data;
+    }
 
     // Block viewing other users' brackets until tournament starts
     if (bracket.user_id !== user.id) {
@@ -567,10 +631,19 @@ router.get('/:bracketId', authMiddleware, async (req, res) => {
       }
     }
 
-    const results = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [bracket.challenge_id]);
+    // Build results from tournament_games if available
     const resultsMap = {};
-    for (const r of results) {
-      resultsMap[r.slot_number] = r;
+    if (bracket.tournament_id) {
+      const games = await db.getAll(
+        `SELECT slot_number, espn_event_id, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id,
+                team1_score as winning_score, team2_score as losing_score, round, status, completed_at
+         FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
+        [bracket.tournament_id]
+      );
+      for (const g of games) { resultsMap[g.slot_number] = g; }
+    } else {
+      const results = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [bracket.challenge_id]);
+      for (const r of results) { resultsMap[r.slot_number] = r; }
     }
 
     res.json({ bracket, results: resultsMap });
@@ -734,17 +807,25 @@ router.get('/admin/matchups/:season', async (req, res) => {
     const season = parseInt(req.params.season);
     const round = req.query.round || null;
 
-    // Get bracket data from an active challenge to find real matchups
-    const challenge = await db.getOne(
-      `SELECT tournament_data FROM bracket_challenges WHERE season = $1 ORDER BY created_at DESC LIMIT 1`,
-      [season]
-    );
+    // Get bracket data — prefer normalized tables, fall back to JSONB
+    const tournament = await db.getOne('SELECT id FROM tournaments WHERE season = $1', [season]);
+    let tournamentData = null;
+    if (tournament) {
+      tournamentData = await buildTournamentDataFromDB(tournament.id);
+    }
+    if (!tournamentData) {
+      const challenge = await db.getOne(
+        `SELECT tournament_data FROM bracket_challenges WHERE season = $1 ORDER BY created_at DESC LIMIT 1`,
+        [season]
+      );
+      tournamentData = challenge?.tournament_data;
+    }
 
-    if (!challenge?.tournament_data?.slots) {
+    if (!tournamentData?.slots) {
       return res.status(404).json({ error: 'No bracket data found' });
     }
 
-    const slots = challenge.tournament_data.slots;
+    const slots = tournamentData.slots;
     const matchups = [];
     const roundNames = { 0: 'Round of 64', 1: 'Round of 32', 2: 'Sweet 16', 3: 'Elite 8', 4: 'Final Four', 5: 'Championship' };
 
@@ -815,7 +896,7 @@ router.get('/admin/matchups/:season', async (req, res) => {
 
     if (round === 'All Cached') {
       // Build team → R64 slot mapping from tournament data
-      const teams = challenge.tournament_data?.teams || {};
+      const teams = tournamentData?.teams || {};
       const teamToR64Slot = {};
       for (const [slotNum, slotData] of Object.entries(slots)) {
         const s = parseInt(slotNum);
@@ -827,7 +908,7 @@ router.get('/admin/matchups/:season', async (req, res) => {
       }
 
       // Get region names from tournament data or use defaults
-      const regionNames = challenge.tournament_data?.regions || DEFAULT_REGIONS;
+      const regionNames = tournamentData?.regions || DEFAULT_REGIONS;
 
       // For two teams, find the round they'd meet by tracing bracket paths
       function getMeetingRound(teamId1, teamId2) {
@@ -924,17 +1005,25 @@ router.post('/admin/matchup-reports/generate-round', async (req, res) => {
   try {
     const { season = new Date().getFullYear(), round, force = false } = req.body;
 
-    // Get matchups for the round
-    const challenge = await db.getOne(
-      `SELECT tournament_data FROM bracket_challenges WHERE season = $1 ORDER BY created_at DESC LIMIT 1`,
-      [season]
-    );
+    // Get matchups for the round — prefer normalized tables, fall back to JSONB
+    const tournament = await db.getOne('SELECT id FROM tournaments WHERE season = $1', [season]);
+    let tournamentData = null;
+    if (tournament) {
+      tournamentData = await buildTournamentDataFromDB(tournament.id);
+    }
+    if (!tournamentData) {
+      const challenge = await db.getOne(
+        `SELECT tournament_data FROM bracket_challenges WHERE season = $1 ORDER BY created_at DESC LIMIT 1`,
+        [season]
+      );
+      tournamentData = challenge?.tournament_data;
+    }
 
-    if (!challenge?.tournament_data?.slots) {
+    if (!tournamentData?.slots) {
       return res.status(404).json({ error: 'No bracket data found' });
     }
 
-    const slots = challenge.tournament_data.slots;
+    const slots = tournamentData.slots;
     const roundNames = { 0: 'Round of 64', 1: 'Round of 32', 2: 'Sweet 16', 3: 'Elite 8', 4: 'Final Four', 5: 'Championship' };
     const matchupsToGenerate = [];
 
@@ -1052,76 +1141,154 @@ router.post('/update-results', async (req, res) => {
     const activeChallenges = await db.getAll("SELECT * FROM bracket_challenges WHERE status IN ('open', 'locked')");
     let totalUpdated = 0;
 
-    for (const challenge of activeChallenges) {
-      const espnResults = await getTournamentResults(challenge.season);
-      const tournamentData = challenge.tournament_data || {};
-      const slots = tournamentData.slots || {};
+    // Group challenges by season/tournament to avoid duplicate ESPN fetches
+    const seasonMap = {};
+    for (const c of activeChallenges) {
+      if (!seasonMap[c.season]) seasonMap[c.season] = [];
+      seasonMap[c.season].push(c);
+    }
 
-      // Map ESPN event IDs to slot numbers
-      const eventToSlot = {};
-      for (const [slotNum, slotData] of Object.entries(slots)) {
-        if (slotData.espnEventId) {
-          eventToSlot[slotData.espnEventId] = parseInt(slotNum);
+    for (const [season, challenges] of Object.entries(seasonMap)) {
+      const espnResults = await getTournamentResults(parseInt(season));
+
+      // Sync to tournament_games if any challenge has tournament_id
+      const tournamentId = challenges.find(c => c.tournament_id)?.tournament_id;
+      if (tournamentId) {
+        // Build event→slot map from tournament_games
+        const tGames = await db.getAll('SELECT slot_number, espn_event_id FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL', [tournamentId]);
+        const eventToSlot = {};
+        for (const g of tGames) {
+          if (g.espn_event_id) eventToSlot[g.espn_event_id] = g.slot_number;
         }
-      }
 
-      // Also check bracket_results for event mappings
-      const existingResults = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);
-      for (const er of existingResults) {
-        if (er.espn_event_id) {
-          eventToSlot[er.espn_event_id] = er.slot_number;
+        let hasFirstGameStarted = false;
+        for (const [eventId, result] of Object.entries(espnResults)) {
+          const slotNum = eventToSlot[eventId];
+          if (result.status !== 'pending') hasFirstGameStarted = true;
+
+          if (result.status === 'final' && result.winningTeamId && slotNum) {
+            await db.run(`
+              UPDATE tournament_games SET
+                winning_team_espn_id = $1, losing_team_espn_id = $2,
+                team1_score = $3, team2_score = $4,
+                status = 'final', completed_at = COALESCE(completed_at, NOW()), updated_at = NOW()
+              WHERE tournament_id = $5 AND slot_number = $6
+            `, [result.winningTeamId, result.losingTeamId, result.winningScore, result.losingScore, tournamentId, slotNum]);
+            totalUpdated++;
+          } else if (result.status === 'in_progress' && slotNum) {
+            await db.run(`
+              UPDATE tournament_games SET status = 'in_progress', updated_at = NOW()
+              WHERE tournament_id = $1 AND slot_number = $2 AND status != 'final'
+            `, [tournamentId, slotNum]);
+          }
+
+          // Also update by espn_event_id for First Four games (no slot_number)
+          if (!slotNum && (result.status === 'final' || result.status === 'in_progress')) {
+            await db.run(`
+              UPDATE tournament_games SET
+                winning_team_espn_id = CASE WHEN $1 IS NOT NULL THEN $1 ELSE winning_team_espn_id END,
+                losing_team_espn_id = CASE WHEN $2 IS NOT NULL THEN $2 ELSE losing_team_espn_id END,
+                team1_score = COALESCE($3, team1_score), team2_score = COALESCE($4, team2_score),
+                status = $5, completed_at = CASE WHEN $5 = 'final' THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
+                updated_at = NOW()
+              WHERE tournament_id = $6 AND espn_event_id = $7
+            `, [result.winningTeamId || null, result.losingTeamId || null, result.winningScore, result.losingScore, result.status, tournamentId, eventId]);
+          }
         }
-      }
 
-      let hasFirstGameStarted = false;
+        // Build results map from tournament_games for scoring
+        const allGames = await db.getAll(
+          `SELECT slot_number, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id,
+                  team1_score as winning_score, team2_score as losing_score, status, completed_at
+           FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
+          [tournamentId]
+        );
+        const resultsMap = {};
+        for (const g of allGames) { resultsMap[g.slot_number] = g; }
 
-      for (const [eventId, result] of Object.entries(espnResults)) {
-        const slotNum = eventToSlot[eventId];
-        if (!slotNum) continue;
+        // Recalculate scores + auto-lock for all challenges in this season
+        for (const challenge of challenges) {
+          if (hasFirstGameStarted && challenge.status === 'open') {
+            await db.run("UPDATE bracket_challenges SET status = 'locked', updated_at = NOW() WHERE id = $1", [challenge.id]);
+          }
+          const scoringSystem = challenge.scoring_system || [1, 2, 4, 8, 16, 32];
+          const brackets = await db.getAll('SELECT id, picks FROM brackets WHERE challenge_id = $1 AND is_submitted = true', [challenge.id]);
+          for (const bracket of brackets) {
+            const { totalScore } = calculateBracketScore(bracket.picks || {}, resultsMap, scoringSystem);
+            await db.run('UPDATE brackets SET total_score = $1, updated_at = NOW() WHERE id = $2', [totalScore, bracket.id]);
+          }
 
-        if (result.status !== 'pending') hasFirstGameStarted = true;
-
-        if (result.status === 'final' && result.winningTeamId) {
-          const round = getSlotRound(slotNum);
-          await db.run(`
-            INSERT INTO bracket_results (challenge_id, slot_number, espn_event_id, winning_team_id, losing_team_id, winning_score, losing_score, round, status, completed_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'final', NOW())
-            ON CONFLICT (challenge_id, slot_number) DO UPDATE SET
-              winning_team_id = EXCLUDED.winning_team_id,
-              losing_team_id = EXCLUDED.losing_team_id,
-              winning_score = EXCLUDED.winning_score,
-              losing_score = EXCLUDED.losing_score,
-              status = 'final',
-              completed_at = COALESCE(bracket_results.completed_at, NOW())
-          `, [challenge.id, slotNum, eventId, result.winningTeamId, result.losingTeamId, result.winningScore, result.losingScore, round]);
-          totalUpdated++;
-        } else if (result.status === 'in_progress') {
-          await db.run(`
-            INSERT INTO bracket_results (challenge_id, slot_number, espn_event_id, round, status)
-            VALUES ($1, $2, $3, $4, 'in_progress')
-            ON CONFLICT (challenge_id, slot_number) DO UPDATE SET status = 'in_progress'
-          `, [challenge.id, slotNum, eventId, getSlotRound(slotNum)]);
+          // Dual-write to bracket_results for backward compatibility
+          for (const [eventId, result] of Object.entries(espnResults)) {
+            const slotNum = eventToSlot[eventId];
+            if (!slotNum) continue;
+            if (result.status === 'final' && result.winningTeamId) {
+              await db.run(`
+                INSERT INTO bracket_results (challenge_id, slot_number, espn_event_id, winning_team_id, losing_team_id, winning_score, losing_score, round, status, completed_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'final', NOW())
+                ON CONFLICT (challenge_id, slot_number) DO UPDATE SET
+                  winning_team_id = EXCLUDED.winning_team_id, losing_team_id = EXCLUDED.losing_team_id,
+                  winning_score = EXCLUDED.winning_score, losing_score = EXCLUDED.losing_score,
+                  status = 'final', completed_at = COALESCE(bracket_results.completed_at, NOW())
+              `, [challenge.id, slotNum, eventId, result.winningTeamId, result.losingTeamId, result.winningScore, result.losingScore, getSlotRound(slotNum)]);
+            } else if (result.status === 'in_progress') {
+              await db.run(`
+                INSERT INTO bracket_results (challenge_id, slot_number, espn_event_id, round, status)
+                VALUES ($1, $2, $3, $4, 'in_progress')
+                ON CONFLICT (challenge_id, slot_number) DO UPDATE SET status = 'in_progress'
+              `, [challenge.id, slotNum, eventId, getSlotRound(slotNum)]);
+            }
+          }
         }
-      }
-
-      // Auto-lock challenge when first game starts
-      if (hasFirstGameStarted && challenge.status === 'open') {
-        await db.run("UPDATE bracket_challenges SET status = 'locked', updated_at = NOW() WHERE id = $1", [challenge.id]);
-      }
-
-      // Recalculate scores for all brackets in this challenge
-      const allResults = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);
-      const resultsMap = {};
-      for (const r of allResults) {
-        resultsMap[r.slot_number] = r;
-      }
-
-      const scoringSystem = challenge.scoring_system || [1, 2, 4, 8, 16, 32];
-      const brackets = await db.getAll('SELECT id, picks FROM brackets WHERE challenge_id = $1 AND is_submitted = true', [challenge.id]);
-
-      for (const bracket of brackets) {
-        const { totalScore } = calculateBracketScore(bracket.picks || {}, resultsMap, scoringSystem);
-        await db.run('UPDATE brackets SET total_score = $1, updated_at = NOW() WHERE id = $2', [totalScore, bracket.id]);
+      } else {
+        // Legacy path: no tournament_id, use old per-challenge logic
+        for (const challenge of challenges) {
+          const tournamentData = challenge.tournament_data || {};
+          const slots = tournamentData.slots || {};
+          const eventToSlot = {};
+          for (const [slotNum, slotData] of Object.entries(slots)) {
+            if (slotData.espnEventId) eventToSlot[slotData.espnEventId] = parseInt(slotNum);
+          }
+          const existingResults = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);
+          for (const er of existingResults) {
+            if (er.espn_event_id) eventToSlot[er.espn_event_id] = er.slot_number;
+          }
+          let hasFirstGameStarted = false;
+          for (const [eventId, result] of Object.entries(espnResults)) {
+            const slotNum = eventToSlot[eventId];
+            if (!slotNum) continue;
+            if (result.status !== 'pending') hasFirstGameStarted = true;
+            if (result.status === 'final' && result.winningTeamId) {
+              await db.run(`
+                INSERT INTO bracket_results (challenge_id, slot_number, espn_event_id, winning_team_id, losing_team_id, winning_score, losing_score, round, status, completed_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'final', NOW())
+                ON CONFLICT (challenge_id, slot_number) DO UPDATE SET
+                  winning_team_id = EXCLUDED.winning_team_id, losing_team_id = EXCLUDED.losing_team_id,
+                  winning_score = EXCLUDED.winning_score, losing_score = EXCLUDED.losing_score,
+                  status = 'final', completed_at = COALESCE(bracket_results.completed_at, NOW())
+              `, [challenge.id, slotNum, eventId, result.winningTeamId, result.losingTeamId, result.winningScore, result.losingScore, getSlotRound(slotNum)]);
+              totalUpdated++;
+            } else if (result.status === 'in_progress') {
+              await db.run(`
+                INSERT INTO bracket_results (challenge_id, slot_number, espn_event_id, round, status)
+                VALUES ($1, $2, $3, $4, 'in_progress')
+                ON CONFLICT (challenge_id, slot_number) DO UPDATE SET status = 'in_progress'
+              `, [challenge.id, slotNum, eventId, getSlotRound(slotNum)]);
+            }
+          }
+          if (hasFirstGameStarted && challenge.status === 'open') {
+            await db.run("UPDATE bracket_challenges SET status = 'locked', updated_at = NOW() WHERE id = $1", [challenge.id]);
+          }
+          const allResults = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);
+          const resultsMap = {};
+          for (const r of allResults) { resultsMap[r.slot_number] = r; }
+          const scoringSystem = challenge.scoring_system || [1, 2, 4, 8, 16, 32];
+          const brackets = await db.getAll('SELECT id, picks FROM brackets WHERE challenge_id = $1 AND is_submitted = true', [challenge.id]);
+          for (const bracket of brackets) {
+            const { totalScore } = calculateBracketScore(bracket.picks || {}, resultsMap, scoringSystem);
+            await db.run('UPDATE brackets SET total_score = $1, updated_at = NOW() WHERE id = $2', [totalScore, bracket.id]);
+          }
+        }
       }
     }
 
@@ -1150,13 +1317,25 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
       ORDER BY b.total_score DESC, b.tiebreaker_value ASC
     `, [challenge.id]);
 
-    const results = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);
+    // Build results from tournament_games if available, fall back to bracket_results
     const resultsMap = {};
     const eliminatedTeamIds = [];
-    for (const r of results) {
-      resultsMap[r.slot_number] = r;
-      if (r.status === 'final' && r.losing_team_id) {
-        eliminatedTeamIds.push(String(r.losing_team_id));
+    if (challenge.tournament_id) {
+      const games = await db.getAll(
+        `SELECT slot_number, espn_event_id, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id,
+                team1_score as winning_score, team2_score as losing_score, round, status, completed_at
+         FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
+        [challenge.tournament_id]
+      );
+      for (const g of games) {
+        resultsMap[g.slot_number] = g;
+        if (g.status === 'final' && g.losing_team_id) eliminatedTeamIds.push(String(g.losing_team_id));
+      }
+    } else {
+      const results = await db.getAll('SELECT * FROM bracket_results WHERE challenge_id = $1', [challenge.id]);
+      for (const r of results) {
+        resultsMap[r.slot_number] = r;
+        if (r.status === 'final' && r.losing_team_id) eliminatedTeamIds.push(String(r.losing_team_id));
       }
     }
 
@@ -1196,7 +1375,7 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
 
     // Determine the current round (highest round with any decided games)
     let currentRound = 0;
-    for (const r of results) {
+    for (const r of Object.values(resultsMap)) {
       if (r.status === 'final') {
         const rb = ROUND_BOUNDARIES.find(rb => r.slot_number >= rb.start && r.slot_number <= rb.end);
         if (rb) {

@@ -75,10 +75,10 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
       <div className="flex items-center gap-2 px-2 pb-1">
         {teamLogo && <img src={tl(teamLogo)} alt={teamLabel} className="w-5 h-5 sm:w-6 sm:h-6" />}
         <span className="text-xs sm:text-sm font-semibold text-fg">{teamLabel}</span>
-        {sectionLabel && <span className="text-[10px] sm:text-xs text-fg/60 uppercase tracking-wide">{sectionLabel}</span>}
+        {sectionLabel && <span className="text-sm text-fg/60 uppercase tracking-wide">{sectionLabel}</span>}
       </div>
       <div className="overflow-x-auto -mx-1 px-1 scrollbar-thin">
-        <table className="w-full text-[11px] sm:text-xs min-w-[480px]">
+        <table className="w-full text-sm min-w-[480px]">
           <thead>
             <tr className="text-fg/60 border-b border-fg/10">
               <th className="text-left py-1 sm:py-1.5 pl-2 pr-1 font-medium sticky left-0 bg-inset z-10 whitespace-nowrap w-[22%]">Player</th>
@@ -100,7 +100,7 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
                 `}
               >
                 {row.separator ? (
-                  <td colSpan={columns.length + 1} className="py-1 sm:py-1.5 pl-2 text-[10px] sm:text-xs text-fg/60 uppercase font-semibold tracking-wide">
+                  <td colSpan={columns.length + 1} className="py-1 sm:py-1.5 pl-2 text-sm text-fg/60 uppercase font-semibold tracking-wide">
                     {row.separator}
                   </td>
                 ) : (
@@ -116,7 +116,7 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
                     {row.stats.map((stat, j) => (
                       <td
                         key={j}
-                        className={`text-center py-1 sm:py-1.5 px-1 whitespace-nowrap font-mono text-fg ${
+                        className={`text-center py-1 sm:py-1.5 px-1 whitespace-nowrap text-fg ${
                           keyColumns.has(j) ? 'font-semibold' : ''
                         }`}
                       >
@@ -132,12 +132,12 @@ const StatTable = ({ columns, rows, teamLabel, teamLogo, sectionLabel, totals })
             {totals && (
               <tr className="border-t border-fg/15 bg-fg/[0.04]">
                 <td className="py-1 sm:py-1.5 pl-2 pr-1 sticky left-0 bg-inset z-10">
-                  <span className="text-fg/70 font-semibold text-[10px] sm:text-xs uppercase tracking-wide">Totals</span>
+                  <span className="text-fg/70 font-semibold text-sm uppercase tracking-wide">Totals</span>
                 </td>
                 {totals.map((val, j) => (
                   <td
                     key={j}
-                    className={`text-center py-1 sm:py-1.5 px-1 whitespace-nowrap font-mono text-fg font-semibold`}
+                    className={`text-center py-1 sm:py-1.5 px-1 whitespace-nowrap text-fg font-semibold`}
                   >
                     {val}
                   </td>
@@ -345,7 +345,7 @@ function FootballBoxScore({ data, game }) {
 
         return (
           <div key={groupName} className="space-y-3">
-            <div className="text-[10px] sm:text-xs text-fg/60 uppercase font-semibold tracking-wider">
+            <div className="text-sm text-fg/60 uppercase font-semibold tracking-wider">
               {GROUP_LABELS[groupName] || groupName}
             </div>
             {orderedTeams.map((teamData, ti) => {

@@ -1315,45 +1315,65 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
         {/* Summary tab */}
         {(detailTab === 'summary' || !hasPlays) && <>
           {/* Top Performers */}
-          {hasLeaders && (
-            <div className="space-y-2">
-              <h4 className="text-base font-semibold text-fg/70 uppercase tracking-wide flex items-center gap-1.5">
-                <Users className="w-4 h-4" />
-                Top Performers
-              </h4>
-              <div className="grid grid-cols-2 gap-4">
-                {[game.awayTeam, game.homeTeam].map((team) => {
-                  const teamLeaders = leadersByTeam[team?.abbreviation] || [];
-                  if (teamLeaders.length === 0) return <div key={team?.abbreviation || 'unknown'} />;
-                  return (
-                    <div key={team?.abbreviation} className="space-y-2">
-                      <div className="flex items-center gap-2 pb-1 border-b border-fg/10">
-                        {team?.logo && <img src={tl(team.logo)} alt={team?.abbreviation} className="w-6 h-6" />}
-                        <span className="text-base font-semibold text-fg">{team?.abbreviation}</span>
-                      </div>
-                      <div className="space-y-2">
-                        {teamLeaders.map((leader, idx) => (
-                          <div key={idx} className="flex items-center gap-2.5">
-                            {leader.player?.headshot ? (
-                              <img src={leader.player.headshot} alt={leader.player?.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-                            ) : (
-                              <div className="w-9 h-9 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-sm flex-shrink-0">
-                                {leader.player?.position || '?'}
+          {hasLeaders && (() => {
+            // Build prospect lookup by name for this game
+            const gameProspects = getGameProspects(game);
+            const prospectMap = {};
+            for (const p of gameProspects) {
+              if (p.name) prospectMap[p.name] = p;
+            }
+
+            return (
+              <div className="space-y-2">
+                <h4 className="text-base font-semibold text-fg/70 uppercase tracking-wide flex items-center gap-1.5">
+                  <Users className="w-4 h-4" />
+                  Top Performers
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  {[game.awayTeam, game.homeTeam].map((team) => {
+                    const teamLeaders = leadersByTeam[team?.abbreviation] || [];
+                    if (teamLeaders.length === 0) return <div key={team?.abbreviation || 'unknown'} />;
+                    return (
+                      <div key={team?.abbreviation} className="space-y-2">
+                        <div className="flex items-center gap-2 pb-1 border-b border-fg/10">
+                          {team?.logo && <img src={tl(team.logo)} alt={team?.abbreviation} className="w-6 h-6" />}
+                          <span className="text-base font-semibold text-fg">{team?.abbreviation}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {teamLeaders.map((leader, idx) => {
+                            const prospect = prospectMap[leader.player?.name];
+                            return (
+                              <div key={idx} className="flex items-center gap-2.5">
+                                {leader.player?.headshot ? (
+                                  <img src={leader.player.headshot} alt={leader.player?.name} className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
+                                ) : (
+                                  <div className="w-11 h-11 rounded-full bg-fg/10 flex items-center justify-center text-fg/50 text-sm flex-shrink-0">
+                                    {leader.player?.position || '?'}
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-base font-medium text-fg truncate">{leader.player?.name || 'Unknown'}</span>
+                                    {prospect && (
+                                      <span className="inline-flex items-center px-1 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#2053b1' }}>
+                                        <img src="/logos/nba.png" alt="NBA" className="w-5 h-5 object-contain" />
+                                        <span className="text-sm font-medium mr-0.5 text-white leading-none">#{prospect.rank}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-md text-fg/80 font-normal">{leader.value}</div>
+                                </div>
                               </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="text-base font-medium text-fg truncate">{leader.player?.name || 'Unknown'}</div>
-                              <div className="text-sm text-fg/50">{leader.value}</div>
-                            </div>
-                          </div>
-                        ))}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Scoring Summary */}
           {details?.scoringPlays?.length > 0 && (
@@ -1515,7 +1535,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
         >
           <div
             ref={sheetRef}
-            className={`${isDark ? 'bg-gray-900' : 'bg-white'} rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-fg/10`}
+            className="bg-surface rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-fg/10"
             style={{
               transform: sheetOpen && !sheetClosing
                 ? `translateY(${sheetTranslateY}px)`
@@ -1723,19 +1743,19 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
           onClick={() => setProspectDialogData(null)}
         >
           <div
-            className={`${isDark ? 'bg-gray-900' : 'bg-white'} rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-fg/10`}
+            className="bg-surface rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-fg/10"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-fg/10 flex-shrink-0">
               <div className="flex items-center gap-2">
-                <img src="/logos/nba.png" alt="NBA" className="w-5 h-5 object-contain" />
+                <img src="/logos/nba.png" alt="NBA" className="w-8 h-8 object-contain" />
                 <span className="text-base font-semibold text-fg">NBA Prospects</span>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setShowDraftBoard(true)}
-                  className={`px-2.5 py-1 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-blue-400 hover:bg-blue-400/10' : 'text-blue-600 hover:bg-blue-600/10'}`}
+                  className={`px-2.5 py-1 rounded-lg text-base font-medium transition-colors ${isDark ? 'text-blue-400 hover:bg-blue-400/10' : 'text-blue-600 hover:bg-blue-600/10'}`}
                 >
                   View All
                 </button>
@@ -1754,12 +1774,12 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                 } = prospect;
 
                 return (
-                  <div key={rank} className={`glass-card rounded-xl overflow-hidden ${teamStatus === 'eliminated' ? 'opacity-60' : ''}`}>
+                  <div key={rank} className="glass-card rounded-xl overflow-hidden">
                     {/* Header */}
                     <div className="p-4 pb-3">
                       <div className="flex items-start gap-3">
                         <div
-                          className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                          className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-lg"
                           style={{ backgroundColor: teamColor || '#1d428a' }}
                         >
                           #{rank}
@@ -1775,49 +1795,55 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                         <div className="flex-1 min-w-0">
                           <h3 className="text-base font-bold text-fg truncate">{name}</h3>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className={`px-1.5 py-0.5 rounded text-sm font-medium ${isDark ? 'bg-fg/10 text-fg/70' : 'bg-gray-100 text-gray-600'}`}>
+                            <span className={`px-1.5 py-0.5 rounded text-base font-medium ${isDark ? 'bg-fg/10 text-fg/70' : 'bg-gray-100 text-gray-600'}`}>
                               {position}
                             </span>
-                            <div className="flex items-center gap-1">
-                              {schoolLogo && <img src={schoolLogo} alt={school} className="w-4 h-4" onError={(e) => { e.target.style.display = 'none'; }} />}
-                              <span className="text-sm text-fg">{school}</span>
+                            <div className="flex items-center gap-2">
+                              {schoolLogo && <img src={schoolLogo} alt={school} className="w-7 h-7" onError={(e) => { e.target.style.display = 'none'; }} />}
+                              <span className="text-base text-fg/80 font-medium">{school}</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 mt-1">
-                            {teamSeed && <span className="text-sm text-fg/70">#{teamSeed} seed</span>}
+                            {teamSeed && <span className="text-base text-fg/70">#{teamSeed} seed</span>}
                             {teamStatus === 'playing_now' && (
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/15 text-red-500 text-sm font-semibold">
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/15 text-red-500 text-base font-semibold">
                                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                                 LIVE
                               </span>
                             )}
                             {teamStatus === 'eliminated' && (
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-fg/10 text-fg/60 text-sm font-medium">Eliminated</span>
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-fg/10 text-fg/60 text-base font-medium">Eliminated</span>
                             )}
                             {teamStatus !== 'playing_now' && teamStatus !== 'eliminated' && teamCurrentRound && (
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-fg/10 text-fg/70 text-sm font-medium">{teamCurrentRound}</span>
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-fg/10 text-fg/70 text-base font-medium">{teamCurrentRound}</span>
                             )}
                           </div>
                         </div>
                         <div className="flex-shrink-0">
-                          {stockDirection === 'up' && (
-                            <div className="flex items-center gap-1 text-emerald-500">
-                              <TrendingUp size={18} />
-                              <span className="text-sm font-semibold">Rising</span>
-                            </div>
-                          )}
-                          {stockDirection === 'down' && (
-                            <div className="flex items-center gap-1 text-red-400">
-                              <TrendingDown size={18} />
-                              <span className="text-sm font-semibold">Falling</span>
-                            </div>
-                          )}
-                          {stockDirection === 'neutral' && gamesPlayed > 0 && (
-                            <div className="flex items-center gap-1 text-fg/60">
-                              <Minus size={18} />
-                              <span className="text-sm font-medium">Steady</span>
-                            </div>
-                          )}
+                          {(() => {
+                            // Don't show stock direction if player DNP'd (all tourney stats are 0)
+                            const didPlay = tournamentAvgs && (tournamentAvgs.pts > 0 || tournamentAvgs.reb > 0 || tournamentAvgs.ast > 0 || tournamentAvgs.min > 0);
+                            const effectiveDirection = didPlay ? stockDirection : 'neutral';
+                            if (effectiveDirection === 'up') return (
+                              <div className="flex items-center gap-1 text-emerald-500">
+                                <TrendingUp size={18} />
+                                <span className="text-base font-semibold">Rising</span>
+                              </div>
+                            );
+                            if (effectiveDirection === 'down') return (
+                              <div className="flex items-center gap-1 text-red-400">
+                                <TrendingDown size={18} />
+                                <span className="text-base font-semibold">Falling</span>
+                              </div>
+                            );
+                            if (effectiveDirection === 'neutral' && gamesPlayed > 0 && didPlay) return (
+                              <div className="flex items-center gap-1 text-fg/60">
+                                <Minus size={18} />
+                                <span className="text-base font-medium">Steady</span>
+                              </div>
+                            );
+                            return null;
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -1859,7 +1885,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                     )}
 
                     {/* Physical Info */}
-                    <div className="px-4 pb-2 flex items-center gap-3 text-sm text-fg/70">
+                    <div className="px-4 pb-2 flex items-center gap-3 text-base text-fg/80">
                       {height && <span>{height}</span>}
                       {weight && <span>{weight} lbs</span>}
                       {year && <span>{year}</span>}
@@ -1903,9 +1929,9 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                           <>
                             <div className={`grid ${gridCols} mb-1`}>
                               <span></span>
-                              <span className="text-sm font-semibold text-fg/70 text-right pr-2">Season</span>
+                              <span className="text-base font-semibold text-fg/70 text-right pr-2">Season</span>
                               {hasTourneyGames && (
-                                <span className="text-sm font-semibold text-fg/70 text-right">
+                                <span className="text-base font-semibold text-fg/70 text-right">
                                   Tourney ({gamesPlayed})
                                 </span>
                               )}
@@ -1918,10 +1944,10 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                                 const formatted = typeof s === 'number' ? (pct ? `${s.toFixed(1)}%` : s.toFixed(1)) : s;
                                 return (
                                   <div key={label} className={`grid ${gridCols} items-center py-1.5`}>
-                                    <span className="text-sm font-medium text-fg/70">{label}</span>
-                                    <span className="text-sm font-medium text-fg text-right pr-2">{formatted}</span>
+                                    <span className="text-base font-medium text-fg/70">{label}</span>
+                                    <span className="text-base font-medium text-fg text-right pr-2">{formatted}</span>
                                     {hasTourneyGames && (
-                                      <span className={`text-sm font-semibold text-right ${
+                                      <span className={`text-base font-semibold text-right ${
                                         !hasTourney ? 'text-fg/30' : isBetter ? 'text-emerald-500' : isWorse ? 'text-red-400' : 'text-fg'
                                       }`}>
                                         {hasTourney ? (
@@ -1944,21 +1970,21 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                     {/* Game Log */}
                     {tournamentGames?.length > 0 && (
                       <div className={`px-4 pb-4 space-y-2 ${isDark ? 'bg-fg/3' : 'bg-gray-50/50'} border-t border-fg/10 pt-3`}>
-                        <span className="text-sm font-semibold text-fg/70">Game Log</span>
+                        <span className="text-base font-semibold text-fg/70">Game Log</span>
                         {tournamentGames.map((g, i) => (
                           <div key={i} className={`rounded-lg p-3 ${isDark ? 'bg-fg/5' : 'bg-white'} border border-fg/5`}>
                             <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium text-fg/70">{g.round}</span>
+                              <span className="text-base font-medium text-fg/70">{g.round}</span>
                               <div className="flex items-center gap-2">
-                                {g.result === 'W' && <span className="text-sm font-bold text-emerald-500">W</span>}
-                                {g.result === 'L' && <span className="text-sm font-bold text-red-400">L</span>}
-                                {g.result === 'LIVE' && <span className="text-sm font-bold text-red-500">LIVE</span>}
-                                <span className="text-sm font-semibold text-fg">{g.teamScore}-{g.opponentScore}</span>
+                                {g.result === 'W' && <span className="text-base font-bold text-emerald-500">W</span>}
+                                {g.result === 'L' && <span className="text-base font-bold text-red-400">L</span>}
+                                {g.result === 'LIVE' && <span className="text-base font-bold text-red-500">LIVE</span>}
+                                <span className="text-base font-semibold text-fg">{g.teamScore}-{g.opponentScore}</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2 mb-2">
                               {g.opponentLogo && <img src={g.opponentLogo} alt="" className="w-4 h-4" />}
-                              <span className="text-sm text-fg">vs {g.opponentSeed ? `(${g.opponentSeed}) ` : ''}{g.opponent}</span>
+                              <span className="text-base text-fg">vs {g.opponentSeed ? `(${g.opponentSeed}) ` : ''}{g.opponent}</span>
                             </div>
                             {g.stats ? (
                               <div className="flex items-center gap-2 flex-wrap">
@@ -1972,14 +1998,14 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
                                   { l: '3PT', v: g.stats.threePt },
                                   { l: '+/-', v: g.stats.plusMinus },
                                 ].filter(s => s.v && s.v !== '0' && s.v !== '0-0').map(s => (
-                                  <span key={s.l} className="inline-flex items-center gap-1 text-sm text-fg">
+                                  <span key={s.l} className="inline-flex items-center gap-1 text-base text-fg">
                                     <span className="text-fg/60">{s.l}</span>
                                     <span className="font-semibold">{s.v}</span>
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-sm text-fg/60">No stats available</span>
+                              <span className="text-base text-fg/60">No stats available</span>
                             )}
                           </div>
                         ))}

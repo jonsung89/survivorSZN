@@ -392,10 +392,9 @@ export default function BracketChallenge() {
   });
 
   return (
+    <div className={`transition-[padding] duration-300 ${chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'}`}>
     <div
-      className={`max-w-4xl mx-auto px-4 py-6 transition-[padding] duration-300 lg:max-w-6xl lg:px-6 ${
-        chatCollapsed ? 'lg:pr-20' : 'lg:pr-[26rem] xl:pr-[28rem]'
-      }`}
+      className="max-w-6xl mx-auto px-3 sm:px-4 py-6 lg:px-6"
       style={{ paddingBottom: 'calc(var(--chat-bar-height, 0px) + 64px)' }}
     >
       {/* Header */}
@@ -1287,6 +1286,7 @@ export default function BracketChallenge() {
           onCollapsedChange={setChatCollapsed}
         />
       )}
+    </div>
     </div>
   );
 }

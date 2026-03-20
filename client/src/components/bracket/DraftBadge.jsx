@@ -44,11 +44,11 @@ function ProspectRow({ prospect, isHighlighted, highlightRef, isDark, teamColor 
       {/* Main row */}
       <button
         onClick={() => setExpanded(v => !v)}
-        className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2.5 sm:py-3 w-full text-left"
+        className="flex items-center gap-1.5 sm:gap-3 px-2.5 sm:px-4 py-2.5 sm:py-3 w-full text-left"
       >
         {/* Rank */}
         <span
-          className={`text-sm sm:text-base font-bold w-6 sm:w-8 text-center flex-shrink-0 ${isHighlighted ? '' : 'text-fg/70'}`}
+          className={`text-md sm:text-lg font-bold w-4 sm:w-8 text-center flex-shrink-0 ${isHighlighted ? '' : 'text-fg/70'}`}
           style={isHighlighted && teamColor ? { color: teamColor } : undefined}
         >
           {p.rank}
@@ -56,22 +56,22 @@ function ProspectRow({ prospect, isHighlighted, highlightRef, isDark, teamColor 
 
         {/* School logo */}
         {p.logo && (
-          <img src={p.logo} alt="" className="w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0 object-contain" />
+          <img src={p.logo} alt="" className="w-8 h-7 sm:w-8 sm:h-8 flex-shrink-0 object-contain" />
         )}
 
         {/* Player info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-sm sm:text-base font-semibold truncate text-fg">
+            <span className="text-base font-semibold truncate text-fg">
               {p.name}
             </span>
-            <span className="text-xs sm:text-sm text-fg/60 flex-shrink-0">{p.position}</span>
+            <span className="text-base text-fg/60 flex-shrink-0">{p.position}</span>
           </div>
-          <div className="text-xs sm:text-sm text-fg/60">
+          <div className="text-sm sm:text-base font-medium text-fg/70">
             <span>{p.school}</span>
           </div>
           {(p.height || p.weight) && (
-            <div className="text-xs sm:text-sm text-fg/50">
+            <div className="text-base text-fg/60">
               {p.height}{p.height && p.weight && ' · '}{p.weight && `${p.weight} lbs`}
             </div>
           )}
@@ -83,20 +83,20 @@ function ProspectRow({ prospect, isHighlighted, highlightRef, isDark, teamColor 
             <div className="flex gap-1.5 sm:gap-2">
               {p.stats.pts > 0 && (
                 <div className="text-center">
-                  <div className="text-xs sm:text-base font-bold text-fg">{p.stats.pts}</div>
-                  <div className="text-[9px] sm:text-xs text-fg/50 uppercase">pts</div>
+                  <div className="text-base font-semibold text-fg">{p.stats.pts}</div>
+                  <div className="text-sm text-fg/60 uppercase">pts</div>
                 </div>
               )}
               {p.stats.reb > 0 && (
                 <div className="text-center">
-                  <div className="text-xs sm:text-base font-bold text-fg">{p.stats.reb}</div>
-                  <div className="text-[9px] sm:text-xs text-fg/50 uppercase">reb</div>
+                  <div className="text-base font-semibold text-fg">{p.stats.reb}</div>
+                  <div className="text-sm text-fg/60 uppercase">reb</div>
                 </div>
               )}
               {p.stats.ast > 0 && (
                 <div className="text-center">
-                  <div className="text-xs sm:text-base font-bold text-fg">{p.stats.ast}</div>
-                  <div className="text-[9px] sm:text-xs text-fg/50 uppercase">ast</div>
+                  <div className="text-base font-semibold text-fg">{p.stats.ast}</div>
+                  <div className="text-sm text-fg/60 uppercase">ast</div>
                 </div>
               )}
             </div>

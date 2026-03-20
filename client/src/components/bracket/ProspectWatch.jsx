@@ -60,9 +60,7 @@ function ProspectCard({ prospect, expanded, onToggle, isDark }) {
   };
 
   return (
-    <div className={`glass-card rounded-xl overflow-hidden transition-all ${
-      teamStatus === 'eliminated' ? 'opacity-60' : ''
-    }`}>
+    <div className="glass-card rounded-xl overflow-hidden transition-all">
       {/* Header */}
       <div className="p-4 pb-3">
         <div className="flex items-start gap-3">

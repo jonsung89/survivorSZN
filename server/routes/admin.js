@@ -2590,4 +2590,65 @@ router.post('/tournaments/:id/recalculate', async (req, res) => {
   }
 });
 
+// ─── Daily Recaps ───────────────────────────────────────────────────────────
+
+// List recaps for a tournament (across all leagues)
+router.get('/recaps', async (req, res) => {
+  try {
+    const { tournamentId } = req.query;
+    if (!tournamentId) return res.status(400).json({ error: 'tournamentId required' });
+
+    const recaps = await db.getAll(
+      `SELECT dr.*, l.name as league_name
+       FROM daily_recaps dr
+       JOIN leagues l ON l.id = dr.league_id
+       WHERE dr.tournament_id = $1
+       ORDER BY dr.recap_date DESC, l.name ASC`,
+      [tournamentId]
+    );
+    res.json({ recaps });
+  } catch (error) {
+    console.error('Get recaps error:', error);
+    res.status(500).json({ error: 'Failed to fetch recaps' });
+  }
+});
+
+// Update a recap (edit TLDR, membersTab, gamesTab, todayTab)
+router.put('/recaps/:id', async (req, res) => {
+  try {
+    const { tldr, membersTab, gamesTab, todayTab } = req.body;
+
+    const existing = await db.getOne('SELECT * FROM daily_recaps WHERE id = $1', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Recap not found' });
+
+    const meta = existing.metadata || {};
+    if (membersTab !== undefined) meta.membersTab = membersTab;
+    if (gamesTab !== undefined) meta.gamesTab = gamesTab;
+    if (todayTab !== undefined) meta.todayTab = todayTab;
+
+    const newTldr = tldr !== undefined ? tldr : existing.tldr;
+    const fullRecap = [meta.membersTab, meta.gamesTab, meta.todayTab].filter(Boolean).join('\n\n---\n\n');
+
+    const updated = await db.getOne(
+      `UPDATE daily_recaps SET tldr = $1, full_recap = $2, metadata = $3, updated_at = NOW()
+       WHERE id = $4 RETURNING *`,
+      [newTldr, fullRecap, JSON.stringify(meta), req.params.id]
+    );
+
+    // If TLDR changed, update the chat message too
+    if (tldr !== undefined && tldr !== existing.tldr) {
+      await db.run(
+        `UPDATE chat_messages SET message = $1
+         WHERE league_id = $2 AND message_type = 'ai_recap' AND metadata->>'recapDate' = $3`,
+        [newTldr, existing.league_id, existing.recap_date.toISOString().split('T')[0]]
+      );
+    }
+
+    res.json({ success: true, recap: updated });
+  } catch (error) {
+    console.error('Update recap error:', error);
+    res.status(500).json({ error: 'Failed to update recap' });
+  }
+});
+
 module.exports = router;

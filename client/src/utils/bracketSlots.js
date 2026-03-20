@@ -175,7 +175,7 @@ export function calculatePotentialPoints(picks, results, scoringSystem) {
 
     if (!userPick) continue;
 
-    if (!result || result.status === 'pending' || result.status === 'in_progress') {
+    if (!result || result.status !== 'final') {
       if (isTeamStillAlive(String(userPick), slot, picks, results)) {
         potential += scoringSystem[round] || 0;
       }

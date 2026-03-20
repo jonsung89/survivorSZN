@@ -802,6 +802,18 @@ export const adminAPI = {
     const res = await authFetch(`/admin/tournaments/${id}/games/${gameId}/refresh`, { method: 'POST' });
     return res.json();
   },
+  getRecaps: async (tournamentId) => {
+    const res = await authFetch(`/admin/recaps?tournamentId=${tournamentId}`);
+    return res.json();
+  },
+  updateRecap: async (id, body) => {
+    const res = await authFetch(`/admin/recaps/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  },
 };
 
 // Analytics API (public-facing)

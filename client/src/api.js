@@ -506,6 +506,21 @@ export const bracketAPI = {
     const res = await fetch(`${API_URL}/brackets/update-results`, { method: 'POST' });
     return res.json();
   },
+  getRecap: async (tournamentId, leagueId, date) => {
+    const res = await authFetch(`/brackets/tournaments/${tournamentId}/recap?leagueId=${leagueId}&date=${date}`);
+    return res.json();
+  },
+  getRecapDates: async (tournamentId, leagueId) => {
+    const res = await authFetch(`/brackets/tournaments/${tournamentId}/recap-dates?leagueId=${leagueId}`);
+    return res.json();
+  },
+  generateRecap: async (tournamentId, leagueId, date) => {
+    const res = await authFetch(`/brackets/tournaments/${tournamentId}/generate-recap`, {
+      method: 'POST',
+      body: JSON.stringify({ leagueId, date }),
+    });
+    return res.json();
+  },
 };
 
 // Admin API
@@ -646,6 +661,7 @@ export const adminAPI = {
   getUserVisits: async (period = 'daily', date) => {
     const params = new URLSearchParams({ period });
     if (date) params.set('date', date);
+    params.set('tz', Intl.DateTimeFormat().resolvedOptions().timeZone);
     const res = await authFetch(`/admin/stats/user-visits?${params}`);
     return res.json();
   },

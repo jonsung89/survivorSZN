@@ -12,6 +12,7 @@ import BracketSetup from '../components/bracket/BracketSetup';
 import { ShareLeagueButton, ShareLeagueModal } from '../components/ShareLeague';
 import TournamentGames from '../components/bracket/TournamentGames';
 import ProspectWatch from '../components/bracket/ProspectWatch';
+import DailyRecap from '../components/recap/DailyRecap';
 import ChatWidget from '../components/ChatWidget';
 import { getSportBadgeClasses } from '../sports';
 import SportBadge from '../components/SportBadge';
@@ -487,6 +488,11 @@ export default function BracketChallenge() {
       {/* Tournament Games — show when tournament has started (regardless of challenge status) */}
       {isTournamentLocked && (
         <TournamentGames tournamentData={tournamentData} season={challenge?.season} leaderboard={leaderboard} prospects={prospects} />
+      )}
+
+      {/* Daily Recap */}
+      {isTournamentLocked && challenge?.tournament_id && league?.id && (
+        <DailyRecap tournamentId={challenge.tournament_id} leagueId={league.id} />
       )}
 
       {/* Prospect Watch — NBA draft prospects in the tournament (hidden for now)
@@ -1282,6 +1288,7 @@ export default function BracketChallenge() {
           leagueName={league.name}
           commissionerId={league.commissionerId || league.commissioner_id}
           members={members}
+          tournamentId={challenge?.tournament_id}
           championsByUserId={tournamentStarted && (challenge?.max_brackets_per_user || 1) === 1 && tournamentData ? buildChampionsMap() : null}
           onCollapsedChange={setChatCollapsed}
         />

@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
 import CommishBadge from './CommishBadge';
 import BracketShareCard from './bracket/BracketShareCard';
+import RecapCard from './chat/RecapCard';
+import RecapDialog from './recap/RecapDialog';
 import { useThemedLogo } from '../utils/logo';
 import { useTheme } from '../context/ThemeContext';
 import { trackingAPI } from '../api';
@@ -102,7 +104,7 @@ const NFL_TEAMS = {
   '34': { name: 'Texans', abbreviation: 'HOU', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/hou.png' },
 };
 
-export default function ChatWidget({ leagueId, leagueName, commissionerId, members: membersProp = [], maxStrikes = 1, championsByUserId, onCollapsedChange }) {
+export default function ChatWidget({ leagueId, leagueName, commissionerId, members: membersProp = [], maxStrikes = 1, championsByUserId, tournamentId, onCollapsedChange }) {
   const { user, getIdToken } = useAuth();
   const tl = useThemedLogo();
   const { isDark } = useTheme();
@@ -146,6 +148,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const [gifsLoading, setGifsLoading] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showMessageMenu, setShowMessageMenu] = useState(false);
+  const [recapDialogDate, setRecapDialogDate] = useState(null);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 }); // For positioning menu near message
   const [emojiCategory, setEmojiCategory] = useState('recent');
   const [swipingMessageId, setSwipingMessageId] = useState(null);
@@ -1093,6 +1096,15 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   <span className="text-sm text-fg/40">
                     {message.message}
                   </span>
+                </div>
+              );
+            }
+
+            // AI Recap messages — centered card
+            if (message.messageType === 'ai_recap' || message.message_type === 'ai_recap') {
+              return (
+                <div key={message.id} className="flex justify-center my-4">
+                  <RecapCard message={message} onReadMore={(date) => setRecapDialogDate(date)} />
                 </div>
               );
             }
@@ -2323,6 +2335,15 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
           </div>
         </div>
       )}
+
+      {/* Recap Dialog */}
+      <RecapDialog
+        open={!!recapDialogDate}
+        onClose={() => setRecapDialogDate(null)}
+        tournamentId={tournamentId}
+        leagueId={leagueId}
+        recapDate={recapDialogDate}
+      />
     </>
   );
 }

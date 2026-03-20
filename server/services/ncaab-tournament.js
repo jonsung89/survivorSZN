@@ -1984,6 +1984,9 @@ async function syncTournamentFromESPN(season) {
     ffIndex++;
   }
 
+  // Propagate First Four winners into R64 slots
+  await propagateFirstFourWinners(tournamentId);
+
   // Update tournament status based on game states
   const gameStats = await db.getOne(
     `SELECT
@@ -2000,6 +2003,63 @@ async function syncTournamentFromESPN(season) {
 
   console.log(`[TournamentSync] Season ${season}: ${gameStats.completed}/${gameStats.total} games complete, status=${status}`);
   return { ...tourney, status };
+}
+
+/**
+ * Propagate First Four winners into their corresponding R64 slots.
+ * When a First Four game finishes, the winning team needs to be placed
+ * into the R64 slot that had a NULL team_espn_id for that position.
+ * Uses seed + region matching to find the correct R64 slot.
+ */
+async function propagateFirstFourWinners(tournamentId) {
+  // Get all completed First Four games with winner info
+  const ffGames = await db.getAll(
+    `SELECT tg.*, tt1.seed as team1_seed, tt1.region_index as team1_region,
+            tt2.seed as team2_seed, tt2.region_index as team2_region
+     FROM tournament_games tg
+     LEFT JOIN tournament_teams tt1 ON tt1.tournament_id = tg.tournament_id AND tt1.espn_team_id = tg.team1_espn_id
+     LEFT JOIN tournament_teams tt2 ON tt2.tournament_id = tg.tournament_id AND tt2.espn_team_id = tg.team2_espn_id
+     WHERE tg.tournament_id = $1 AND tg.round = -1 AND tg.status = 'final' AND tg.winning_team_espn_id IS NOT NULL`,
+    [tournamentId]
+  );
+
+  if (ffGames.length === 0) return 0;
+
+  let propagated = 0;
+  for (const ff of ffGames) {
+    const winnerId = ff.winning_team_espn_id;
+    const winnerSeed = winnerId === ff.team1_espn_id ? ff.team1_seed : ff.team2_seed;
+    const regionIdx = ff.region_index;
+
+    if (winnerSeed == null || regionIdx == null) continue;
+
+    // Find which R64 slot this First Four winner belongs in
+    // SEED_MATCHUPS maps matchup index to seed pairs: [[1,16],[8,9],[5,12],[4,13],[6,11],[3,14],[7,10],[2,15]]
+    const matchupIdx = SEED_MATCHUPS.findIndex(([s1, s2]) => s1 === winnerSeed || s2 === winnerSeed);
+    if (matchupIdx < 0) continue;
+
+    const slotNum = regionIdx * 8 + 1 + matchupIdx;
+    const [highSeed] = SEED_MATCHUPS[matchupIdx];
+    // First Four teams are always the lower seed (e.g., 11 or 16)
+    const isTeam2 = winnerSeed !== highSeed;
+
+    const teamCol = isTeam2 ? 'team2_espn_id' : 'team1_espn_id';
+    const result = await db.run(
+      `UPDATE tournament_games SET ${teamCol} = $1, updated_at = NOW()
+       WHERE tournament_id = $2 AND slot_number = $3 AND (${teamCol} IS NULL OR ${teamCol} LIKE 'ff-%')`,
+      [winnerId, tournamentId, slotNum]
+    );
+
+    if (result?.rowCount > 0) {
+      propagated++;
+      console.log(`[FirstFour] Propagated winner ${winnerId} (seed ${winnerSeed}) → slot ${slotNum} (${teamCol})`);
+    }
+  }
+
+  if (propagated > 0) {
+    console.log(`[FirstFour] Propagated ${propagated} First Four winners into R64 slots`);
+  }
+  return propagated;
 }
 
 /**
@@ -2188,4 +2248,5 @@ module.exports = {
   syncTournamentFromESPN,
   buildTournamentDataFromDB,
   refreshGameFromESPN,
+  propagateFirstFourWinners,
 };

@@ -346,6 +346,22 @@ async function initDb() {
     await client.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'user'`);
     await client.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS metadata JSONB`);
 
+    // Daily AI-generated recaps
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS daily_recaps (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        league_id UUID NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+        tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        recap_date DATE NOT NULL,
+        tldr TEXT NOT NULL,
+        full_recap TEXT NOT NULL,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(league_id, tournament_id, recap_date)
+      )
+    `);
+
     // Payment methods for commissioners (Venmo, PayPal, Zelle, Cash App)
     await client.query(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS payment_methods JSONB DEFAULT '[]'`);
 
@@ -375,6 +391,10 @@ async function initDb() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_page_views_created ON page_views(created_at)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_page_views_path_created ON page_views(page_path, created_at)`);
+    // Add location columns to page_views (idempotent)
+    await client.query(`ALTER TABLE page_views ADD COLUMN IF NOT EXISTS city TEXT`);
+    await client.query(`ALTER TABLE page_views ADD COLUMN IF NOT EXISTS region TEXT`);
+    await client.query(`ALTER TABLE page_views ADD COLUMN IF NOT EXISTS country TEXT`);
 
     // Feature events tracking (universal event table)
     await client.query(`

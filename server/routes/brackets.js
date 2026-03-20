@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport, getProspectTournamentStats, syncTournamentFromESPN, buildTournamentDataFromDB } = require('../services/ncaab-tournament');
+const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport, getProspectTournamentStats, syncTournamentFromESPN, buildTournamentDataFromDB, propagateFirstFourWinners } = require('../services/ncaab-tournament');
+const { generateAndStoreRecap } = require('../services/daily-recap');
 const { getDraftProspects, enrichPlayersWithDraftRank, getProspectsFromDB, getCurrentDraftYear } = require('../services/nba-draft');
 const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, getNextSlot, getRegionForSlot, getChildSlots, countPicks, DEFAULT_REGIONS } = require('../utils/bracket-slots');
 
@@ -1196,6 +1197,9 @@ router.post('/update-results', async (req, res) => {
           }
         }
 
+        // Propagate First Four winners into R64 slots
+        await propagateFirstFourWinners(tournamentId);
+
         // Build results map from tournament_games for scoring
         const allGames = await db.getAll(
           `SELECT slot_number, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id,
@@ -1424,6 +1428,107 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
+// ─── Daily Recap ──────────────────────────────────────────────────────────────
+
+// Get recap for a specific date
+router.get('/tournaments/:tournamentId/recap', authMiddleware, async (req, res) => {
+  try {
+    const { tournamentId } = req.params;
+    const { date, leagueId } = req.query;
+    if (!date || !leagueId) return res.status(400).json({ error: 'date and leagueId required' });
+
+    const recap = await db.getOne(
+      `SELECT * FROM daily_recaps WHERE tournament_id = $1 AND league_id = $2 AND recap_date = $3`,
+      [tournamentId, leagueId, date]
+    );
+    if (!recap) return res.status(404).json({ error: 'No recap for this date' });
+    res.json(recap);
+  } catch (error) {
+    console.error('Error fetching recap:', error);
+    res.status(500).json({ error: 'Failed to fetch recap' });
+  }
+});
+
+// Get available recap dates
+router.get('/tournaments/:tournamentId/recap-dates', authMiddleware, async (req, res) => {
+  try {
+    const { tournamentId } = req.params;
+    const { leagueId } = req.query;
+    if (!leagueId) return res.status(400).json({ error: 'leagueId required' });
+
+    const rows = await db.getAll(
+      `SELECT recap_date FROM daily_recaps WHERE tournament_id = $1 AND league_id = $2 ORDER BY recap_date DESC`,
+      [tournamentId, leagueId]
+    );
+    res.json(rows.map(r => r.recap_date));
+  } catch (error) {
+    console.error('Error fetching recap dates:', error);
+    res.status(500).json({ error: 'Failed to fetch recap dates' });
+  }
+});
+
+// Generate a recap (admin only)
+router.post('/tournaments/:tournamentId/generate-recap', authMiddleware, async (req, res) => {
+  try {
+    const user = await getUser(req);
+    if (!user?.is_admin) return res.status(403).json({ error: 'Admin only' });
+
+    const { tournamentId } = req.params;
+    const { leagueId, date } = req.body;
+    if (!leagueId || !date) return res.status(400).json({ error: 'leagueId and date required' });
+
+    const recap = await generateAndStoreRecap(tournamentId, leagueId, date);
+
+    // Send TL;DR to league chat as ai_recap message (one per date per league)
+    const io = req.app.get('io');
+    if (io) {
+      const metadataJson = JSON.stringify({ recapDate: date, recapId: recap.id });
+      // Check if ai_recap message already exists for this league+date
+      const existing = await db.getOne(
+        `SELECT id FROM chat_messages WHERE league_id = $1 AND message_type = 'ai_recap' AND metadata->>'recapDate' = $2`,
+        [leagueId, date]
+      );
+      let systemMsg;
+      if (existing) {
+        // Update existing message
+        systemMsg = await db.getOne(
+          `UPDATE chat_messages SET message = $1, metadata = $2 WHERE id = $3 RETURNING id, created_at`,
+          [recap.tldr, metadataJson, existing.id]
+        );
+      } else {
+        systemMsg = await db.getOne(
+          `INSERT INTO chat_messages (league_id, user_id, message, message_type, metadata)
+           VALUES ($1, $2, $3, 'ai_recap', $4)
+           RETURNING id, created_at`,
+          [leagueId, user.id, recap.tldr, metadataJson]
+        );
+      }
+      if (systemMsg) {
+        io.to(`league:${leagueId}`).emit('new-message', {
+          id: systemMsg.id,
+          league_id: leagueId,
+          user_id: user.id,
+          message: recap.tldr,
+          messageType: 'ai_recap',
+          message_type: 'ai_recap',
+          metadata: { recapDate: date, recapId: recap.id },
+          gif: null,
+          replyTo: null,
+          reactions: {},
+          created_at: systemMsg.created_at,
+          display_name: 'AI Recap',
+          profile_image_url: null,
+        });
+      }
+    }
+
+    res.json(recap);
+  } catch (error) {
+    console.error('Error generating recap:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate recap' });
   }
 });
 

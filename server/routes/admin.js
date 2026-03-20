@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { adminMiddleware } = require('../middleware/admin');
-const { generateAllReports, getStoredReport, getTournamentBracket, syncTournamentFromESPN, buildTournamentDataFromDB, refreshGameFromESPN } = require('../services/ncaab-tournament');
+const { generateAllReports, getStoredReport, getTournamentBracket, syncTournamentFromESPN, buildTournamentDataFromDB, refreshGameFromESPN, propagateFirstFourWinners } = require('../services/ncaab-tournament');
 const { getDraftProspects, clearProspectCache, getCacheInfo, enrichProspectsWithESPN, getProspectsFromDB, getProspectsLastUpdated, saveProspectsToDB, getDraftYears, getCurrentDraftYear, fetchStagedProspects } = require('../services/nba-draft');
 const { getSlotRound, calculateBracketScore, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
 const { getOnlineUserCount, getOnlineUserIds } = require('../socket/handlers');
@@ -1982,22 +1982,24 @@ router.delete('/announcements/:id', async (req, res) => {
 
 router.get('/stats/user-visits', async (req, res) => {
   try {
-    const { period = 'daily', date } = req.query;
-    // Default to today for daily, current month for monthly
+    const { period = 'daily', date, tz } = req.query;
+    // Use admin's timezone for date filtering (fallback to America/Chicago)
+    const timezone = tz || 'America/Chicago';
+    // Default to today in the admin's timezone
     const now = new Date();
-    const targetDate = date || now.toISOString().split('T')[0];
+    const targetDate = date || now.toLocaleDateString('en-CA', { timeZone: timezone });
 
     let dateFilter, groupBy, dateLabel;
     if (period === 'monthly') {
-      // Filter by month
+      // Filter by month in admin's timezone
       const [year, month] = targetDate.split('-');
-      dateFilter = `DATE_TRUNC('month', pv.created_at) = DATE_TRUNC('month', $1::date)`;
-      groupBy = `DATE_TRUNC('month', pv.created_at)`;
+      dateFilter = `DATE_TRUNC('month', pv.created_at AT TIME ZONE $2) = DATE_TRUNC('month', $1::date)`;
+      groupBy = `DATE_TRUNC('month', pv.created_at AT TIME ZONE $2)`;
       dateLabel = `${year}-${month}`;
     } else {
-      // Filter by day
-      dateFilter = `DATE(pv.created_at) = $1::date`;
-      groupBy = `DATE(pv.created_at)`;
+      // Filter by day in admin's timezone
+      dateFilter = `DATE(pv.created_at AT TIME ZONE $2) = $1::date`;
+      groupBy = `DATE(pv.created_at AT TIME ZONE $2)`;
       dateLabel = targetDate;
     }
 
@@ -2076,9 +2078,9 @@ router.get('/stats/user-visits', async (req, res) => {
         vs.avg_session_seconds,
         vs.last_visit_at,
         vs.sessions,
-        le.city,
-        le.region,
-        le.country
+        COALESCE(le.city, pv_geo.city) AS city,
+        COALESCE(le.region, pv_geo.region) AS region,
+        COALESCE(le.country, pv_geo.country) AS country
       FROM visitor_summary vs
       LEFT JOIN users u ON u.id = vs.user_id
       LEFT JOIN LATERAL (
@@ -2086,11 +2088,20 @@ router.get('/stats/user-visits', async (req, res) => {
         WHERE user_id = vs.user_id AND city IS NOT NULL
         ORDER BY created_at DESC LIMIT 1
       ) le ON vs.user_id IS NOT NULL
+      LEFT JOIN LATERAL (
+        SELECT city, region, country FROM page_views
+        WHERE city IS NOT NULL
+          AND (
+            (vs.user_id IS NOT NULL AND user_id = vs.user_id)
+            OR (vs.anon_id IS NOT NULL AND anon_id = vs.anon_id)
+          )
+        ORDER BY created_at DESC LIMIT 1
+      ) pv_geo ON le.city IS NULL
       ORDER BY vs.last_visit_at DESC
       LIMIT 200
     `;
 
-    const rows = await db.getAll(query, [targetDate]);
+    const rows = await db.getAll(query, [targetDate, timezone]);
 
     res.json({
       period,
@@ -2119,7 +2130,7 @@ router.get('/stats/user-visits', async (req, res) => {
   }
 });
 
-// Get page views for a specific user session (defined by user_id + time range)
+// Get page views + feature events for a specific user session (interleaved timeline)
 router.get('/stats/session-pages', async (req, res) => {
   try {
     const { userId, start, end } = req.query;
@@ -2132,26 +2143,89 @@ router.get('/stats/session-pages', async (req, res) => {
 
     // Handle anonymous visitors (visitor_key starts with "anon:")
     const isAnon = userId.startsWith('anon:');
-    const whereClause = isAnon
-      ? `anon_id = $1`
-      : `user_id = $1`;
     const paramValue = isAnon ? userId.slice(5) : userId;
 
-    const rows = await db.getAll(
-      `SELECT page_path, created_at
-       FROM page_views
-       WHERE ${whereClause}
-         AND created_at >= $2::timestamptz
-         AND created_at <= ($3::timestamptz + INTERVAL '1 second')
-       ORDER BY created_at ASC`,
-      [paramValue, start, sessionEnd]
-    );
+    const pvWhere = isAnon ? `anon_id = $1` : `user_id = $1`;
+    const feWhere = isAnon ? `session_id = $1` : `user_id = $1`;
+
+    // Fetch page views and feature events in parallel, then merge
+    const [pageRows, eventRows] = await Promise.all([
+      db.getAll(
+        `SELECT page_path, created_at
+         FROM page_views
+         WHERE ${pvWhere}
+           AND created_at >= $2::timestamptz
+           AND created_at <= ($3::timestamptz + INTERVAL '1 second')
+         ORDER BY created_at ASC`,
+        [paramValue, start, sessionEnd]
+      ),
+      db.getAll(
+        `SELECT event_name, event_data, duration_seconds, created_at
+         FROM feature_events
+         WHERE ${feWhere}
+           AND created_at >= $2::timestamptz
+           AND created_at <= ($3::timestamptz + INTERVAL '1 second')
+         ORDER BY created_at ASC`,
+        [paramValue, start, sessionEnd]
+      ),
+    ]);
+
+    // Collect tournament team IDs that need name resolution
+    const teamIds = new Set();
+    for (const r of eventRows) {
+      const d = r.event_data;
+      if (d?.team1Id) teamIds.add(d.team1Id);
+      if (d?.team2Id) teamIds.add(d.team2Id);
+      if (d?.teamId && typeof d.teamId === 'number') teamIds.add(d.teamId);
+    }
+
+    // Batch-resolve team names (event_data stores espn_team_id as numeric values)
+    let teamNameMap = {};
+    if (teamIds.size > 0) {
+      const ids = [...teamIds].map(String);
+      if (ids.length > 0) {
+        const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+        const teamRows = await db.getAll(
+          `SELECT espn_team_id, name, abbreviation, seed FROM tournament_teams WHERE espn_team_id IN (${placeholders})`,
+          ids
+        );
+        for (const t of teamRows) {
+          // Map by numeric value since that's what event_data uses
+          teamNameMap[Number(t.espn_team_id)] = t.seed ? `(${t.seed}) ${t.name}` : t.name;
+        }
+      }
+    }
+
+    // Merge into a single timeline sorted by timestamp
+    const timeline = [];
+    for (const r of pageRows) {
+      timeline.push({ type: 'page', path: r.page_path, timestamp: r.created_at });
+    }
+    for (const r of eventRows) {
+      const data = { ...r.event_data };
+      // Enrich team IDs with readable names
+      if (data.team1Id && teamNameMap[data.team1Id]) {
+        data.team1 = teamNameMap[data.team1Id];
+      }
+      if (data.team2Id && teamNameMap[data.team2Id]) {
+        data.team2 = teamNameMap[data.team2Id];
+      }
+      if (data.teamId && typeof data.teamId === 'number' && teamNameMap[data.teamId]) {
+        data.team = teamNameMap[data.teamId];
+      }
+      timeline.push({
+        type: 'event',
+        event: r.event_name,
+        data,
+        duration: r.duration_seconds,
+        timestamp: r.created_at,
+      });
+    }
+    timeline.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
     res.json({
-      pages: rows.map(r => ({
-        path: r.page_path,
-        timestamp: r.created_at,
-      })),
+      pages: timeline.filter(t => t.type === 'page').map(t => ({ path: t.path, timestamp: t.timestamp })),
+      timeline,
     });
   } catch (error) {
     console.error('Session pages error:', error);
@@ -2477,6 +2551,8 @@ router.post('/tournaments/:id/games/:gameId/refresh', async (req, res) => {
 router.post('/tournaments/:id/recalculate', async (req, res) => {
   try {
     const tournamentId = req.params.id;
+    // Propagate any pending First Four winners before recalculating
+    await propagateFirstFourWinners(tournamentId);
     // Get results from tournament_games
     const games = await db.getAll(
       `SELECT slot_number, winning_team_espn_id as winning_team_id, status

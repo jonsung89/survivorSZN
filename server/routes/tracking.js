@@ -12,6 +12,24 @@ function getDeviceType(userAgent) {
   return 'desktop';
 }
 
+// Get geolocation from IP (non-blocking, 3s timeout)
+async function getGeoFromIP(ip) {
+  try {
+    if (!ip || ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+      return { city: null, region: null, country: null };
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const resp = await fetch(`http://ip-api.com/json/${ip}?fields=city,regionName,countryCode`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!resp.ok) return { city: null, region: null, country: null };
+    const data = await resp.json();
+    return { city: data.city || null, region: data.regionName || null, country: data.countryCode || null };
+  } catch {
+    return { city: null, region: null, country: null };
+  }
+}
+
 // ─── Page View Tracking ─────────────────────────────────────────────────────
 
 router.post('/pageview', optionalAuth, async (req, res) => {
@@ -39,10 +57,25 @@ router.post('/pageview', optionalAuth, async (req, res) => {
       return res.json({ ok: true });
     }
 
-    await db.run(
-      'INSERT INTO page_views (user_id, anon_id, page_path, device_type) VALUES ($1, $2, $3, $4)',
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+
+    // Insert pageview immediately (without location), then update with geo in background
+    const result = await db.getOne(
+      'INSERT INTO page_views (user_id, anon_id, page_path, device_type) VALUES ($1, $2, $3, $4) RETURNING id',
       [userId, userId ? null : (anonId || null), path.substring(0, 255), deviceType]
     );
+
+    // Fire-and-forget: resolve geo and update the row
+    if (result?.id) {
+      getGeoFromIP(ip).then(geo => {
+        if (geo.city) {
+          db.run(
+            'UPDATE page_views SET city = $1, region = $2, country = $3 WHERE id = $4',
+            [geo.city, geo.region, geo.country, result.id]
+          ).catch(err => console.error('Pageview geo update error:', err.message));
+        }
+      });
+    }
 
     res.json({ ok: true });
   } catch (error) {

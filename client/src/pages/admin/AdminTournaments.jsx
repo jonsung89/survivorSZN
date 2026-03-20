@@ -2,9 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Loader2, RefreshCw, ChevronDown, Users, Gamepad2, Trophy, Link2,
   Search, X, Check, AlertCircle, Clock, Calculator, MapPin, Tv, Calendar,
-  Code, ChevronRight
+  Code, ChevronRight, Sparkles
 } from 'lucide-react';
-import { adminAPI } from '../../api';
+import { adminAPI, bracketAPI } from '../../api';
 import { useToast } from '../../components/Toast';
 import Loading from '../../components/Loading';
 
@@ -142,6 +142,49 @@ export default function AdminTournaments() {
       showToast('Recalculation failed', 'error');
     } finally {
       setRecalculating(false);
+    }
+  }
+
+  // Generate daily recap
+  const [generatingRecap, setGeneratingRecap] = useState(false);
+  const [recapDateInput, setRecapDateInput] = useState('');
+  const [showRecapPanel, setShowRecapPanel] = useState(false);
+  const [selectedRecapLeagues, setSelectedRecapLeagues] = useState([]);
+
+  function handleGenerateRecapClick() {
+    if (!selectedId || challenges.length === 0) {
+      showToast('No challenges linked to this tournament', 'error');
+      return;
+    }
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    setRecapDateInput(d.toISOString().split('T')[0]);
+    // Pre-select all leagues
+    setSelectedRecapLeagues(challenges.map(c => c.league_id));
+    setShowRecapPanel(true);
+  }
+
+  function toggleRecapLeague(leagueId) {
+    setSelectedRecapLeagues(prev =>
+      prev.includes(leagueId) ? prev.filter(id => id !== leagueId) : [...prev, leagueId]
+    );
+  }
+
+  async function handleGenerateRecapConfirm() {
+    if (!recapDateInput || selectedRecapLeagues.length === 0) return;
+    setShowRecapPanel(false);
+    setGeneratingRecap(true);
+    let generated = 0;
+    try {
+      for (const c of challenges.filter(c => selectedRecapLeagues.includes(c.league_id))) {
+        await bracketAPI.generateRecap(selectedId, c.league_id, recapDateInput);
+        generated++;
+      }
+      showToast(`Generated recap for ${generated} league(s) on ${recapDateInput}`, 'success');
+    } catch (err) {
+      showToast(`Recap generation failed after ${generated}: ${err.message}`, 'error');
+    } finally {
+      setGeneratingRecap(false);
     }
   }
 
@@ -286,8 +329,75 @@ export default function AdminTournaments() {
             {recalculating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
             Recalculate
           </button>
+          <button
+            onClick={handleGenerateRecapClick}
+            disabled={generatingRecap}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+          >
+            {generatingRecap ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Generate Recap
+          </button>
         </div>
       </div>
+
+      {/* Recap Generation Panel */}
+      {showRecapPanel && (
+        <div className="bg-fg/5 border border-fg/10 rounded-xl p-4 mb-4 animate-in">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <span className="text-sm font-semibold text-fg">Generate Daily Recap</span>
+            </div>
+            <button onClick={() => setShowRecapPanel(false)} className="text-fg/40 hover:text-fg/60">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-3 mb-3">
+            <label className="text-sm text-fg/60">Date:</label>
+            <input
+              type="date"
+              value={recapDateInput}
+              onChange={(e) => setRecapDateInput(e.target.value)}
+              className="px-3 py-1.5 bg-fg/10 text-fg rounded-lg text-sm border border-fg/20"
+            />
+          </div>
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm text-fg/60">Leagues to generate for:</label>
+              <button
+                onClick={() => setSelectedRecapLeagues(
+                  selectedRecapLeagues.length === challenges.length ? [] : challenges.map(c => c.league_id)
+                )}
+                className="text-sm text-fg/40 hover:text-fg/60"
+              >
+                {selectedRecapLeagues.length === challenges.length ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              {challenges.map(c => (
+                <label key={c.league_id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-fg/5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedRecapLeagues.includes(c.league_id)}
+                    onChange={() => toggleRecapLeague(c.league_id)}
+                    className="w-4 h-4 rounded accent-emerald-500"
+                  />
+                  <span className="text-sm text-fg">{c.league_name}</span>
+                  <span className="text-sm text-fg/30 ml-auto">{c.bracket_count || 0} brackets</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={handleGenerateRecapConfirm}
+            disabled={selectedRecapLeagues.length === 0}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+          >
+            <Sparkles className="w-4 h-4" />
+            Generate for {selectedRecapLeagues.length} league{selectedRecapLeagues.length !== 1 ? 's' : ''}
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-fg/5 rounded-lg p-1">

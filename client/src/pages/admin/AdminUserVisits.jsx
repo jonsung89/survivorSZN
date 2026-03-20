@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Eye, Clock, ChevronDown, ChevronLeft, ChevronRight, Users, Copy, Check, X, FileText } from 'lucide-react';
+import { Eye, Clock, ChevronDown, ChevronLeft, ChevronRight, Users, Copy, Check, X, FileText, MousePointerClick } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { adminAPI } from '../../api';
 
@@ -58,36 +58,31 @@ function formatPagePath(path) {
     '/privacy': 'Privacy Policy',
     '/terms': 'Terms of Service',
   };
-  if (staticPages[path]) return staticPages[path];
+  if (staticPages[path]) return { label: staticPages[path] };
 
   // /league/:id — Survivor Dashboard
   const leagueMatch = path.match(/^\/league\/([^/]+)$/);
   if (leagueMatch) {
-    const id = leagueMatch[1].substring(0, 8);
-    return `Survivor Dashboard (league: ${id})`;
+    return { label: 'Survivor Dashboard', params: { league: leagueMatch[1].substring(0, 8) } };
   }
   // /league/:id/pick — Make Pick
   const pickMatch = path.match(/^\/league\/([^/]+)\/pick$/);
   if (pickMatch) {
-    const id = pickMatch[1].substring(0, 8);
-    return `Make Pick (league: ${id})`;
+    return { label: 'Make Pick', params: { league: pickMatch[1].substring(0, 8) } };
   }
   // /league/:id/bracket — Bracket Dashboard
   const bracketDashMatch = path.match(/^\/league\/([^/]+)\/bracket$/);
   if (bracketDashMatch) {
-    const id = bracketDashMatch[1].substring(0, 8);
-    return `Bracket Dashboard (league: ${id})`;
+    return { label: 'Bracket Dashboard', params: { league: bracketDashMatch[1].substring(0, 8) } };
   }
   // /league/:id/bracket/:bracketId — Fill/View Bracket
   const bracketFillMatch = path.match(/^\/league\/([^/]+)\/bracket\/([^/]+)$/);
   if (bracketFillMatch) {
-    const lid = bracketFillMatch[1].substring(0, 8);
-    const bid = bracketFillMatch[2].substring(0, 8);
-    return `View Bracket (league: ${lid}, bracket: ${bid})`;
+    return { label: 'View Bracket', params: { league: bracketFillMatch[1].substring(0, 8), bracket: bracketFillMatch[2].substring(0, 8) } };
   }
   // /join/:inviteCode
   const joinMatch = path.match(/^\/join\/(.+)$/);
-  if (joinMatch) return `Join via Invite (code: ${joinMatch[1]})`;
+  if (joinMatch) return { label: 'Join via Invite', params: { code: joinMatch[1] } };
   // Admin pages
   if (path.startsWith('/admin')) {
     const sub = path.replace('/admin/', '').replace('/admin', '');
@@ -104,9 +99,77 @@ function formatPagePath(path) {
       'ncaab/bracket-test': 'Admin: Bracket Test',
       'ncaab/prospects': 'Admin: NBA Prospects',
     };
-    return adminNames[sub] || `Admin: ${sub}`;
+    return { label: adminNames[sub] || `Admin: ${sub}` };
   }
-  return path;
+  return { label: path };
+}
+
+function formatEventName(event, data) {
+  const labels = {
+    game_card_expand: 'Expanded game card',
+    game_card_collapse: 'Collapsed game card',
+    game_tab_switch: 'Switched game tab',
+    box_score_expand: 'Expanded box score',
+    sport_tab_switch: 'Switched sport',
+    bracket_submit: 'Submitted bracket',
+    bracket_reset: 'Reset bracket',
+    bracket_tab_switch: 'Switched bracket tab',
+    bracket_view_click: 'Viewed bracket',
+    bracket_score_expand: 'Expanded bracket score',
+    bracket_score_dialog_open: 'Opened score dialog',
+    bracket_status_dialog_open: 'Opened status dialog',
+    bracket_fill_navigate: 'Navigated bracket fill',
+    bracket_final_four_preview: 'Previewed Final Four',
+    matchup_detail_open: 'Opened matchup detail',
+    matchup_detail_close: 'Closed matchup detail',
+    matchup_detail_dialog_open: 'Opened matchup dialog',
+    matchup_tab_switch: 'Switched matchup tab',
+    matchup_detail_tab_switch: 'Switched matchup detail tab',
+    matchup_pick: 'Made bracket pick',
+    pick_team_select: 'Selected team',
+    pick_submit: 'Submitted pick',
+    pick_week_change: 'Changed pick week',
+    pick_override: 'Overrode pick',
+    pick_distribution_open: 'Viewed pick distribution',
+    team_info_dialog_open: 'Opened team info',
+    team_info_tab_switch: 'Switched team info tab',
+    stat_ranking_dialog_open: 'Opened stat rankings',
+    tournament_game_dialog_open: 'Opened tournament game',
+    tournament_game_tab_switch: 'Switched tournament game tab',
+    tournament_game_filter: 'Filtered tournament games',
+    prospect_dialog_open: 'Opened prospect details',
+    prospect_sort: 'Sorted prospects',
+    prospect_filter: 'Filtered prospects',
+    prospect_game_log_expand: 'Expanded prospect game log',
+    league_create: 'Created league',
+    league_join: 'Joined league',
+    league_join_invite: 'Joined via invite',
+    members_dialog_open: 'Opened members dialog',
+    members_tab_switch: 'Switched members tab',
+    winners_dialog_open: 'Viewed winners',
+    share_modal_open: 'Opened share modal',
+    share_copy: 'Copied share link',
+    share_native: 'Used native share',
+    share_regenerate_code: 'Regenerated invite code',
+    share_qr_toggle: 'Toggled QR code',
+    settings_open: 'Opened settings',
+    action_log_open: 'Viewed action log',
+    chat_open: 'Opened chat',
+    chat_close: 'Closed chat',
+    chat_message_send: 'Sent chat message',
+    final_four_share_to_chat: 'Shared Final Four to chat',
+    notifications_open: 'Opened notifications',
+    notification_click: 'Clicked notification',
+    theme_toggle: 'Toggled theme',
+    edit_profile_open: 'Opened profile editor',
+    profile_save: 'Saved profile',
+    logout: 'Logged out',
+    leaderboard_bracket_navigate: 'Navigated leaderboard',
+    survivor_week_change: 'Changed survivor week',
+    strike_modify: 'Modified strike',
+  };
+
+  return labels[event] || event.replace(/_/g, ' ');
 }
 
 export default function AdminUserVisits() {
@@ -333,12 +396,12 @@ function UserVisitRow({ user, isExpanded, onToggle }) {
 
 function SessionPagesDialog({ userId, userName, start, end, duration, pageCount, onClose }) {
   const { isDark } = useTheme();
-  const [pages, setPages] = useState(null);
+  const [timeline, setTimeline] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     adminAPI.getSessionPages(userId, start, end).then(data => {
-      setPages(data.pages || []);
+      setTimeline(data.timeline || data.pages?.map(p => ({ type: 'page', path: p.path, timestamp: p.timestamp })) || []);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [userId, start, end]);
@@ -349,12 +412,13 @@ function SessionPagesDialog({ userId, userName, start, end, duration, pageCount,
   }, []);
 
   const sessionStart = new Date(start);
+  const eventCount = timeline ? timeline.filter(t => t.type === 'event').length : 0;
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className={`relative z-10 w-full max-w-md max-h-[80vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col ${isDark ? 'bg-gray-900' : 'bg-white'}`}
+        className={`relative z-10 w-full max-w-2xl max-h-[80vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col ${isDark ? 'bg-gray-900' : 'bg-white'}`}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -366,6 +430,7 @@ function SessionPagesDialog({ userId, userName, start, end, duration, pageCount,
                 month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
               })}
               {' '}&middot;{' '}{formatDuration(duration)}{' '}&middot;{' '}{pageCount} pages
+              {eventCount > 0 && <>{' '}&middot;{' '}{eventCount} events</>}
             </p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-fg/60 hover:text-fg hover:bg-fg/10 transition-colors">
@@ -373,36 +438,76 @@ function SessionPagesDialog({ userId, userName, start, end, duration, pageCount,
           </button>
         </div>
 
-        {/* Page list */}
+        {/* Timeline */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12 text-fg/50 text-sm">Loading...</div>
-          ) : !pages?.length ? (
-            <div className="flex items-center justify-center py-12 text-fg/50 text-sm">No page views found.</div>
+          ) : !timeline?.length ? (
+            <div className="flex items-center justify-center py-12 text-fg/50 text-sm">No activity found.</div>
           ) : (
             <div className="divide-y divide-fg/5">
-              {pages.map((page, i) => {
-                const timestamp = new Date(page.timestamp);
-                const prevTimestamp = i > 0 ? new Date(pages[i - 1].timestamp) : null;
-                const timeOnPage = prevTimestamp
-                  ? Math.round((timestamp - prevTimestamp) / 1000)
-                  : null;
+              {timeline.map((item, i) => {
+                const timestamp = new Date(item.timestamp);
+                const prevTimestamp = i > 0 ? new Date(timeline[i - 1].timestamp) : null;
+                const gap = prevTimestamp ? Math.round((timestamp - prevTimestamp) / 1000) : null;
+                const isPage = item.type === 'page';
 
                 return (
-                  <div key={i} className="flex items-center gap-3 px-5 py-3">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
-                      <span className="text-sm font-semibold text-fg/50">{i + 1}</span>
-                    </div>
+                  <div key={i} className={`flex items-start gap-3 px-5 ${isPage ? 'py-3' : 'py-2'}`}>
+                    {isPage ? (
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${isDark ? 'bg-blue-500/15' : 'bg-blue-50'}`}>
+                        <FileText className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
+                      </div>
+                    ) : (
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${isDark ? 'bg-amber-500/15' : 'bg-amber-50'}`}>
+                        <MousePointerClick className={`w-3.5 h-3.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-fg truncate">{formatPagePath(page.path)}</p>
-                      <p className="text-sm text-fg/40 font-mono truncate">{page.path}</p>
+                      {isPage ? (() => {
+                        const { label, params } = formatPagePath(item.path);
+                        return (
+                          <>
+                            <p className="text-sm font-medium text-fg">{label}</p>
+                            <p className="text-xs text-fg/40 font-mono break-all">{item.path}</p>
+                            {params && Object.keys(params).length > 0 && (
+                              <div className="mt-1">
+                                <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                                  {Object.entries(params).map(([key, val]) => (
+                                    <div key={key} className="flex items-baseline gap-1.5">
+                                      <span className="text-xs text-fg/40">{key}</span>
+                                      <span className="text-xs text-fg/55 font-mono">{String(val)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })() : (
+                        <>
+                          <p className="text-sm text-fg/70">{formatEventName(item.event)}</p>
+                          {item.data && Object.keys(item.data).length > 0 && (
+                            <div className="mt-1">
+                              <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                                {Object.entries(item.data).map(([key, val]) => (
+                                  <div key={key} className="flex items-baseline gap-1.5">
+                                    <span className="text-xs text-fg/40">{key}</span>
+                                    <span className="text-xs text-fg/55 font-mono">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-sm text-fg/60">
                         {timestamp.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
                       </p>
-                      {i > 0 && timeOnPage != null && (
-                        <p className="text-sm text-fg/30">+{formatDuration(timeOnPage)}</p>
+                      {i > 0 && gap != null && gap > 0 && (
+                        <p className="text-sm text-fg/30">+{formatDuration(gap)}</p>
                       )}
                     </div>
                   </div>

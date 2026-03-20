@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Activity, Trophy, Filter, ArrowUpDown } from 'lucide-react';
-import { bracketAPI } from '../../api';
+import { bracketAPI, trackingAPI } from '../../api';
 import { useTheme } from '../../context/ThemeContext';
 
 const NBA_LOGO = 'https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nba.png&w=48&h=48';
@@ -365,8 +365,14 @@ export default function ProspectWatch({ season }) {
   }, [prospects, filter, sortBy]);
 
   const handleToggle = useCallback((rank) => {
-    setExpandedRank(prev => prev === rank ? null : rank);
-  }, []);
+    setExpandedRank(prev => {
+      if (prev !== rank) {
+        const p = prospects.find(pr => pr.rank === rank);
+        trackingAPI.event('prospect_game_log_expand', { rank, name: p?.name, school: p?.school });
+      }
+      return prev === rank ? null : rank;
+    });
+  }, [prospects]);
 
   if (loading) {
     return (
@@ -425,7 +431,7 @@ export default function ProspectWatch({ season }) {
         ].map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setSortBy(key)}
+            onClick={() => { trackingAPI.event('prospect_sort', { sortBy: key }); setSortBy(key); }}
             className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
               sortBy === key
                 ? 'bg-violet-500 text-white'
@@ -449,7 +455,7 @@ export default function ProspectWatch({ season }) {
         ].map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setFilter(key)}
+            onClick={() => { trackingAPI.event('prospect_filter', { filter: key }); setFilter(key); }}
             className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
               filter === key
                 ? 'bg-violet-500 text-white'

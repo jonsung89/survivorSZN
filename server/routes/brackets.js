@@ -3,7 +3,7 @@ const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
 const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport, getProspectTournamentStats } = require('../services/ncaab-tournament');
-const { getDraftProspects, enrichPlayersWithDraftRank } = require('../services/nba-draft');
+const { getDraftProspects, enrichPlayersWithDraftRank, getProspectsFromDB, getCurrentDraftYear } = require('../services/nba-draft');
 const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, getNextSlot, getRegionForSlot, getChildSlots, countPicks, DEFAULT_REGIONS } = require('../utils/bracket-slots');
 
 // Total games in the bracket (derived from round boundaries)
@@ -511,11 +511,17 @@ router.post('/:bracketId/reset', authMiddleware, async (req, res) => {
   }
 });
 
-// Get NBA draft prospect rankings
+// Get NBA draft prospect rankings — reads from DB (source of truth), falls back to Tankathon
 router.get('/draft-prospects', async (req, res) => {
   try {
+    // Try DB first
+    const dbProspects = await getProspectsFromDB('nba', getCurrentDraftYear());
+    if (dbProspects.length > 0) {
+      return res.json({ prospects: dbProspects, source: 'db' });
+    }
+    // Fallback to Tankathon cache if DB is empty
     const prospects = await getDraftProspects();
-    res.json({ prospects });
+    res.json({ prospects, source: 'tankathon' });
   } catch (error) {
     console.error('Error fetching draft prospects:', error);
     res.status(500).json({ error: 'Failed to fetch draft prospects' });

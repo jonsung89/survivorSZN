@@ -643,6 +643,18 @@ export const adminAPI = {
     const res = await authFetch('/admin/analytics/gamecast');
     return res.json();
   },
+  getUserVisits: async (period = 'daily', date) => {
+    const params = new URLSearchParams({ period });
+    if (date) params.set('date', date);
+    const res = await authFetch(`/admin/stats/user-visits?${params}`);
+    return res.json();
+  },
+  getSessionPages: async (userId, start, end) => {
+    const params = new URLSearchParams({ userId, start });
+    if (end) params.set('end', end);
+    const res = await authFetch(`/admin/stats/session-pages?${params}`);
+    return res.json();
+  },
   // Announcements
   getAnnouncements: async () => {
     const res = await authFetch('/admin/announcements');
@@ -699,6 +711,24 @@ export const adminAPI = {
     const res = await authFetch(`/admin/users/${userId}/activity?${new URLSearchParams(params)}`);
     return res.json();
   },
+  // NBA Prospects
+  getProspects: async (year) => {
+    const params = year ? `?year=${year}` : '';
+    const res = await authFetch(`/admin/prospects${params}`);
+    return res.json();
+  },
+  fetchProspects: async () => {
+    const res = await authFetch('/admin/prospects/fetch', { method: 'POST' });
+    return res.json();
+  },
+  confirmProspects: async (prospects, draftYear) => {
+    const res = await authFetch('/admin/prospects/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prospects, draftYear }),
+    });
+    return res.json();
+  },
 };
 
 // Analytics API (public-facing)
@@ -732,10 +762,25 @@ export const trackingAPI = {
       const token = getToken();
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers.Authorization = `Bearer ${token}`;
+
+      const body = { path };
+      if (!token) {
+        // Non-auth: include anonymous device ID
+        import('./utils/sessionId.js').then(({ getOrCreateSessionId }) => {
+          body.anonId = getOrCreateSessionId();
+          fetch(`${API_URL}/track/pageview`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+          }).catch(() => {});
+        }).catch(() => {});
+        return;
+      }
+
       fetch(`${API_URL}/track/pageview`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ path }),
+        body: JSON.stringify(body),
       }).catch(() => {});
     }).catch(() => {});
   },

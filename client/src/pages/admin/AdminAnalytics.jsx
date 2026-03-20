@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, Monitor, Smartphone, Sun, Moon, Eye, Clock, MousePointer } from 'lucide-react';
+import { BarChart3, Eye, Clock, MousePointer } from 'lucide-react';
 import { adminAPI } from '../../api';
 import Loading from '../../components/Loading';
 

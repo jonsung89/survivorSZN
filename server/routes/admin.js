@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../db/supabase');
 const { adminMiddleware } = require('../middleware/admin');
 const { generateAllReports, getStoredReport, getTournamentBracket } = require('../services/ncaab-tournament');
+const { getDraftProspects, clearProspectCache, getCacheInfo, enrichProspectsWithESPN, getProspectsFromDB, getProspectsLastUpdated, saveProspectsToDB, getDraftYears, getCurrentDraftYear, fetchStagedProspects } = require('../services/nba-draft');
 const { getSlotRound, calculateBracketScore, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
 const { getOnlineUserCount, getOnlineUserIds } = require('../socket/handlers');
 
@@ -1974,6 +1975,252 @@ router.delete('/announcements/:id', async (req, res) => {
   } catch (error) {
     console.error('Delete announcement error:', error);
     res.status(500).json({ error: 'Failed to delete announcement' });
+  }
+});
+
+// ─── User Visit Tracking ────────────────────────────────────────────────────
+
+router.get('/stats/user-visits', async (req, res) => {
+  try {
+    const { period = 'daily', date } = req.query;
+    // Default to today for daily, current month for monthly
+    const now = new Date();
+    const targetDate = date || now.toISOString().split('T')[0];
+
+    let dateFilter, groupBy, dateLabel;
+    if (period === 'monthly') {
+      // Filter by month
+      const [year, month] = targetDate.split('-');
+      dateFilter = `DATE_TRUNC('month', pv.created_at) = DATE_TRUNC('month', $1::date)`;
+      groupBy = `DATE_TRUNC('month', pv.created_at)`;
+      dateLabel = `${year}-${month}`;
+    } else {
+      // Filter by day
+      dateFilter = `DATE(pv.created_at) = $1::date`;
+      groupBy = `DATE(pv.created_at)`;
+      dateLabel = targetDate;
+    }
+
+    // Get per-user visit counts and session data
+    // A "session" = group of page views from same user/anon with <30 min gaps
+    // Uses COALESCE(user_id::text, 'anon:' || anon_id) as unified visitor key
+    const query = `
+      WITH session_boundaries AS (
+        SELECT
+          pv.user_id,
+          pv.anon_id,
+          COALESCE(pv.user_id::text, 'anon:' || pv.anon_id) AS visitor_key,
+          pv.created_at,
+          CASE
+            WHEN pv.created_at - LAG(pv.created_at) OVER (PARTITION BY COALESCE(pv.user_id::text, 'anon:' || pv.anon_id) ORDER BY pv.created_at) > INTERVAL '30 minutes'
+            OR LAG(pv.created_at) OVER (PARTITION BY COALESCE(pv.user_id::text, 'anon:' || pv.anon_id) ORDER BY pv.created_at) IS NULL
+            THEN 1
+            ELSE 0
+          END AS new_session
+        FROM page_views pv
+        WHERE ${dateFilter}
+          AND (pv.user_id IS NOT NULL OR pv.anon_id IS NOT NULL)
+      ),
+      sessions AS (
+        SELECT
+          user_id,
+          anon_id,
+          visitor_key,
+          created_at,
+          SUM(new_session) OVER (PARTITION BY visitor_key ORDER BY created_at) AS session_num
+        FROM session_boundaries
+      ),
+      session_stats AS (
+        SELECT
+          visitor_key,
+          MIN(user_id) AS user_id,
+          MIN(anon_id) AS anon_id,
+          session_num,
+          MIN(created_at) AS session_start,
+          MAX(created_at) AS session_end,
+          EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at))) AS duration_seconds,
+          COUNT(*) AS page_views
+        FROM sessions
+        GROUP BY visitor_key, session_num
+      ),
+      visitor_summary AS (
+        SELECT
+          ss.visitor_key,
+          MIN(ss.user_id) AS user_id,
+          MIN(ss.anon_id) AS anon_id,
+          COUNT(DISTINCT ss.session_num) AS visit_count,
+          SUM(ss.page_views) AS total_page_views,
+          AVG(ss.duration_seconds) AS avg_session_seconds,
+          MAX(ss.session_end) AS last_visit_at,
+          json_agg(
+            json_build_object(
+              'start', ss.session_start,
+              'end', ss.session_end,
+              'duration', ss.duration_seconds,
+              'pages', ss.page_views
+            ) ORDER BY ss.session_start DESC
+          ) AS sessions
+        FROM session_stats ss
+        GROUP BY ss.visitor_key
+      )
+      SELECT
+        vs.visitor_key,
+        vs.user_id,
+        vs.anon_id,
+        u.display_name,
+        u.first_name,
+        u.last_name,
+        u.email,
+        vs.visit_count,
+        vs.total_page_views,
+        vs.avg_session_seconds,
+        vs.last_visit_at,
+        vs.sessions,
+        le.city,
+        le.region,
+        le.country
+      FROM visitor_summary vs
+      LEFT JOIN users u ON u.id = vs.user_id
+      LEFT JOIN LATERAL (
+        SELECT city, region, country FROM login_events
+        WHERE user_id = vs.user_id AND city IS NOT NULL
+        ORDER BY created_at DESC LIMIT 1
+      ) le ON vs.user_id IS NOT NULL
+      ORDER BY vs.last_visit_at DESC
+      LIMIT 200
+    `;
+
+    const rows = await db.getAll(query, [targetDate]);
+
+    res.json({
+      period,
+      date: dateLabel,
+      users: rows.map(r => {
+        const isAnon = !r.user_id;
+        const anonShort = r.anon_id ? r.anon_id.substring(0, 8) : 'unknown';
+        return {
+          userId: r.visitor_key,
+          isAnonymous: isAnon,
+          name: isAnon
+            ? `Anonymous (${anonShort})`
+            : (r.display_name || (r.first_name && r.last_name ? `${r.first_name} ${r.last_name}` : r.first_name || r.email || r.user_id)),
+          visitCount: parseInt(r.visit_count),
+          totalPageViews: parseInt(r.total_page_views),
+          avgSessionSeconds: parseFloat(r.avg_session_seconds) || 0,
+          lastVisitAt: r.last_visit_at,
+          sessions: r.sessions || [],
+          location: r.city ? `${r.city}${r.region ? `, ${r.region}` : ''}` : null,
+        };
+      }),
+    });
+  } catch (error) {
+    console.error('User visits error:', error);
+    res.status(500).json({ error: 'Failed to fetch user visits' });
+  }
+});
+
+// Get page views for a specific user session (defined by user_id + time range)
+router.get('/stats/session-pages', async (req, res) => {
+  try {
+    const { userId, start, end } = req.query;
+    if (!userId || !start) {
+      return res.status(400).json({ error: 'userId and start are required' });
+    }
+
+    // Session end: if provided use it + 1 second buffer, otherwise use start + 30 min
+    const sessionEnd = end || new Date(new Date(start).getTime() + 30 * 60 * 1000).toISOString();
+
+    // Handle anonymous visitors (visitor_key starts with "anon:")
+    const isAnon = userId.startsWith('anon:');
+    const whereClause = isAnon
+      ? `anon_id = $1`
+      : `user_id = $1`;
+    const paramValue = isAnon ? userId.slice(5) : userId;
+
+    const rows = await db.getAll(
+      `SELECT page_path, created_at
+       FROM page_views
+       WHERE ${whereClause}
+         AND created_at >= $2::timestamptz
+         AND created_at <= ($3::timestamptz + INTERVAL '1 second')
+       ORDER BY created_at ASC`,
+      [paramValue, start, sessionEnd]
+    );
+
+    res.json({
+      pages: rows.map(r => ({
+        path: r.page_path,
+        timestamp: r.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error('Session pages error:', error);
+    res.status(500).json({ error: 'Failed to fetch session pages' });
+  }
+});
+
+// ─── NBA Prospects ──────────────────────────────────────────────────────────
+
+// Get saved prospects from DB for a given year
+router.get('/prospects', async (req, res) => {
+  try {
+    const sport = req.query.sport || 'nba';
+    const draftYear = req.query.year ? parseInt(req.query.year) : getCurrentDraftYear();
+    const prospects = await getProspectsFromDB(sport, draftYear);
+    const years = await getDraftYears(sport);
+    const lastUpdated = await getProspectsLastUpdated(sport, draftYear);
+    res.json({ prospects, draftYear, years, lastUpdated });
+  } catch (error) {
+    console.error('Prospects fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch prospects' });
+  }
+});
+
+// Get available draft years
+router.get('/prospects/years', async (req, res) => {
+  try {
+    const sport = req.query.sport || 'nba';
+    const years = await getDraftYears(sport);
+    res.json({ years, currentYear: getCurrentDraftYear() });
+  } catch (error) {
+    console.error('Prospects years error:', error);
+    res.status(500).json({ error: 'Failed to fetch draft years' });
+  }
+});
+
+// Fetch fresh data from Tankathon + ESPN (staging — not saved to DB yet)
+router.post('/prospects/fetch', async (req, res) => {
+  try {
+    const prospects = await fetchStagedProspects();
+    const matchedCount = prospects.filter(p => p.espnId).length;
+    res.json({
+      prospects,
+      matchedCount,
+      totalCount: prospects.length,
+      draftYear: getCurrentDraftYear(),
+    });
+  } catch (error) {
+    console.error('Prospects fetch/stage error:', error);
+    res.status(500).json({ error: 'Failed to fetch prospects from sources' });
+  }
+});
+
+// Confirm and save staged prospects to DB
+router.post('/prospects/confirm', async (req, res) => {
+  try {
+    const { prospects, draftYear } = req.body;
+    if (!prospects?.length) {
+      return res.status(400).json({ error: 'No prospects to save' });
+    }
+    const year = draftYear || getCurrentDraftYear();
+    await saveProspectsToDB(prospects, 'nba', year);
+    const saved = await getProspectsFromDB('nba', year);
+    const years = await getDraftYears('nba');
+    const lastUpdated = await getProspectsLastUpdated('nba', year);
+    res.json({ prospects: saved, draftYear: year, years, lastUpdated });
+  } catch (error) {
+    console.error('Prospects confirm error:', error);
+    res.status(500).json({ error: 'Failed to save prospects' });
   }
 });
 

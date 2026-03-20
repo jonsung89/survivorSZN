@@ -3,6 +3,7 @@ import { Trophy, ExternalLink, X, MessageCircle, Check } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemedLogo, getThemedColor } from '../../utils/logo';
 import { useSocket } from '../../context/SocketContext';
+import { trackingAPI } from '../../api';
 
 function getDarkBgLogo(logoUrl) {
   if (!logoUrl) return logoUrl;
@@ -54,6 +55,11 @@ export default function FinalFourPreviewDialog({ entry, tournamentData, eliminat
 
   const handleShareToChat = () => {
     if (!leagueId || shared) return;
+    trackingAPI.event('final_four_share_to_chat', {
+      leagueId,
+      memberName: entry.displayName,
+      isOwnBracket,
+    });
 
     // Build metadata with team info for rich rendering
     const buildTeamInfo = (team) => team ? {

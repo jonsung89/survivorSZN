@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, Clock } from 'lucide-react';
-import { bracketAPI } from '../../api';
+import { bracketAPI, trackingAPI } from '../../api';
 import { useTheme } from '../../context/ThemeContext';
 import useFocusTrap from '../../hooks/useFocusTrap';
 import TeamAnalysisCard from './TeamAnalysisCard';
@@ -53,6 +53,10 @@ export default function MatchupDetailDialog({
   const scrollRef = useRef(null);
   const dialogRef = useRef(null);
   useFocusTrap(dialogRef, true);
+
+  useEffect(() => {
+    trackingAPI.event('matchup_detail_dialog_open', { slot, matchup: `${team1Info?.name || 'TBD'} vs ${team2Info?.name || 'TBD'}` });
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -109,6 +113,8 @@ export default function MatchupDetailDialog({
   };
 
   const handlePick = (teamId) => {
+    const pickedTeam = teamId === team1Info?.id ? team1Info : team2Info;
+    trackingAPI.event('matchup_pick', { slot, team: pickedTeam?.name, seed: pickedTeam?.seed, matchup: `${team1Info?.name || 'TBD'} vs ${team2Info?.name || 'TBD'}` });
     onPick?.(teamId);
     onClose();
   };
@@ -427,7 +433,7 @@ export default function MatchupDetailDialog({
             role="tab"
             aria-selected={activeTab === 0}
             aria-label={`${team1Info?.name || 'TBD'} details`}
-            onClick={() => { setActiveTab(0); onTabSwitch?.('team1'); }}
+            onClick={() => { trackingAPI.event('matchup_detail_tab_switch', { slot, tab: 'team1', team: team1Info?.name }); setActiveTab(0); onTabSwitch?.('team1'); }}
             className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all relative ${
               activeTab === 0 ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
             }`}
@@ -450,7 +456,7 @@ export default function MatchupDetailDialog({
               role="tab"
               aria-selected={activeTab === 1}
               aria-label="Matchup comparison"
-              onClick={() => { setActiveTab(1); onTabSwitch?.('matchup'); }}
+              onClick={() => { trackingAPI.event('matchup_detail_tab_switch', { slot, tab: 'matchup' }); setActiveTab(1); onTabSwitch?.('matchup'); }}
               className={`px-4 flex items-center justify-center gap-1.5 py-3 text-sm font-bold transition-all relative ${
                 activeTab === 1 ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
               }`}
@@ -470,7 +476,7 @@ export default function MatchupDetailDialog({
             role="tab"
             aria-selected={activeTab === (bothTeamsKnown ? 2 : 1)}
             aria-label={`${team2Info?.name || 'TBD'} details`}
-            onClick={() => { setActiveTab(bothTeamsKnown ? 2 : 1); onTabSwitch?.('team2'); }}
+            onClick={() => { trackingAPI.event('matchup_detail_tab_switch', { slot, tab: 'team2', team: team2Info?.name }); setActiveTab(bothTeamsKnown ? 2 : 1); onTabSwitch?.('team2'); }}
             className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all relative ${
               activeTab === (bothTeamsKnown ? 2 : 1) ? 'text-fg' : 'text-fg/40 hover:text-fg/60'
             }`}

@@ -32,7 +32,9 @@ import AdminMatchups from './pages/admin/AdminMatchups';
 import AdminBracketTest from './pages/admin/AdminBracketTest';
 import AdminChatModeration from './pages/admin/AdminChatModeration';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
+import AdminUserVisits from './pages/admin/AdminUserVisits';
 import AdminAnnouncements from './pages/admin/AdminAnnouncements';
+import AdminProspects from './pages/admin/AdminProspects';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import CookieConsentBanner from './components/CookieConsentBanner';
@@ -225,6 +227,7 @@ function AppRoutes() {
         <Route path="ncaab/reports" element={<AdminReports />} />
         <Route path="ncaab/matchups" element={<AdminMatchups />} />
         <Route path="ncaab/bracket-test" element={<AdminBracketTest />} />
+        <Route path="ncaab/prospects" element={<AdminProspects />} />
         {/* Legacy redirects */}
         <Route path="reports" element={<Navigate to="/admin/ncaab/reports" replace />} />
         <Route path="matchups" element={<Navigate to="/admin/ncaab/matchups" replace />} />
@@ -232,6 +235,7 @@ function AppRoutes() {
         {/* Tools */}
         <Route path="chat" element={<AdminChatModeration />} />
         <Route path="analytics" element={<AdminAnalytics />} />
+        <Route path="analytics/user-visits" element={<AdminUserVisits />} />
         <Route path="announcements" element={<AdminAnnouncements />} />
       </Route>
 

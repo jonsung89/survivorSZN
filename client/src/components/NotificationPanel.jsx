@@ -11,7 +11,7 @@ import {
   Trophy,
   Loader2
 } from 'lucide-react';
-import { notificationAPI } from '../api';
+import { notificationAPI, trackingAPI } from '../api';
 import { useSocket } from '../context/SocketContext';
 import Avatar from './Avatar';
 
@@ -90,11 +90,13 @@ export default function NotificationPanel() {
   const handleOpen = () => {
     setIsOpen(!isOpen);
     if (!isOpen) {
+      trackingAPI.event('notifications_open', { unreadCount });
       fetchNotifications();
     }
   };
 
   const handleNotificationClick = async (notification) => {
+    trackingAPI.event('notification_click', { type: notification.type, leagueId: notification.league_id || notification.leagueId });
     // Mark as read
     if (!notification.read) {
       try {

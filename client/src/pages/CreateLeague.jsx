@@ -11,7 +11,7 @@ import {
   Info,
   Shield
 } from 'lucide-react';
-import { leagueAPI, nflAPI, bracketAPI } from '../api';
+import { leagueAPI, nflAPI, bracketAPI, trackingAPI } from '../api';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { getAllSports, getSportModule } from '../sports';
@@ -124,6 +124,7 @@ export default function CreateLeague() {
           }
         }
 
+        trackingAPI.event('league_create', { leagueName: formData.name, sportId: formData.sportId, isPrivate: formData.isPrivate, isBracketMode });
         showToast('League created successfully!', 'success');
         navigate(`/league/${result.league.id}`);
       } else {

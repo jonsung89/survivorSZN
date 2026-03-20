@@ -4,7 +4,7 @@ import {
   Lock, Loader2,
   AlertCircle, Check, LogIn, UserPlus, DollarSign
 } from 'lucide-react';
-import { leagueAPI } from '../api';
+import { leagueAPI, trackingAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from './Toast';
 import Loading from './Loading';
@@ -64,6 +64,7 @@ export default function JoinByInvite() {
     try {
       const result = await leagueAPI.join(league.id, password);
       if (result.success) {
+        trackingAPI.event('league_join_invite', { leagueId: league.id, leagueName: league.name, inviteCode });
         showToast(`Welcome to ${league.name}!`, 'success');
         navigate(`/league/${league.id}`);
       } else {

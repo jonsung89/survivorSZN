@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Trophy, XCircle, Users } from 'lucide-react';
-import { leagueAPI } from '../api';
+import { leagueAPI, trackingAPI } from '../api';
 import SportBadge from './SportBadge';
 import CommishBadge from './CommishBadge';
 import Avatar from './Avatar';
@@ -109,7 +109,7 @@ export default function LeagueMembersDialog({ leagueId, leagueName, defaultTab, 
                   return (
                     <button
                       key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
+                      onClick={() => { trackingAPI.event('members_tab_switch', { leagueId, leagueName, tab: tab.key, fromTab: activeTab }); setActiveTab(tab.key); }}
                       className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-sm font-medium transition-all ${
                         isActive
                           ? 'bg-elevated shadow-sm text-fg'

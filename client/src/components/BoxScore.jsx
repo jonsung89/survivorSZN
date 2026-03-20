@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 import { useThemedLogo } from '../utils/logo';
+import { trackingAPI } from '../api';
 
 /**
  * BoxScore component — renders full player stats for completed games.
@@ -22,7 +23,7 @@ export default function BoxScore({ playerStats, game, alwaysExpanded = false }) 
     <div className="space-y-2">
       {!alwaysExpanded && (
         <button
-          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+          onClick={(e) => { e.stopPropagation(); if (!expanded) trackingAPI.event('box_score_expand', { gameId: game?.id }); setExpanded(!expanded); }}
           className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-fg/70 uppercase tracking-wide px-3 py-1.5 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
         >
           <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />

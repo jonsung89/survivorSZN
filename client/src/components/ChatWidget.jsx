@@ -7,6 +7,7 @@ import CommishBadge from './CommishBadge';
 import BracketShareCard from './bracket/BracketShareCard';
 import { useThemedLogo } from '../utils/logo';
 import { useTheme } from '../context/ThemeContext';
+import { trackingAPI } from '../api';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Free tier API key
@@ -421,6 +422,12 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
 
   const handleSend = (isMobile = false) => {
     if (!inputValue.trim() && !selectedMessage?.gif) return;
+    trackingAPI.event('chat_message_send', {
+      leagueId,
+      hasReply: !!replyingTo,
+      hasGif: !!selectedMessage?.gif,
+      platform: isMobile ? 'mobile' : 'desktop',
+    });
     
     // Build message with metadata
     const messageData = {
@@ -862,6 +869,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   };
 
   const closeSheet = () => {
+    const duration = openedAtRef.current ? Math.round((Date.now() - openedAtRef.current) / 1000) : 0;
+    trackingAPI.event('chat_close', { leagueId, duration });
     setIsClosing(true);
     setIsAnimatingIn(false);
     setTimeout(() => {
@@ -872,6 +881,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   };
 
   const openSheet = () => {
+    trackingAPI.event('chat_open', { leagueId });
     setIsOpen(true);
     setIsClosing(false);
     openedAtRef.current = Date.now();

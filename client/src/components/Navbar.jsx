@@ -20,6 +20,7 @@ import Avatar from './Avatar';
 import NotificationPanel from './NotificationPanel';
 import BrandLogo from './BrandLogo';
 import EditProfileModal from './EditProfileModal';
+import { trackingAPI } from '../api';
 
 export default function Navbar() {
   const { user, signOut } = useAuth();
@@ -59,11 +60,13 @@ export default function Navbar() {
   }, []);
 
   const handleLogout = () => {
+    trackingAPI.event('logout');
     signOut();
     navigate('/login');
   };
 
   const openEditModal = () => {
+    trackingAPI.event('edit_profile_open');
     setEditModalOpen(true);
     setDropdownOpen(false);
     setMobileMenuOpen(false);
@@ -121,7 +124,7 @@ export default function Navbar() {
               <div className="hidden md:flex items-center gap-2 relative" ref={dropdownRef}>
                 {/* Theme toggle */}
                 <button
-                  onClick={toggleTheme}
+                  onClick={() => { trackingAPI.event('theme_toggle', { to: isDark ? 'light' : 'dark' }); toggleTheme(); }}
                   className="p-2 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
                   title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
                   aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -189,7 +192,7 @@ export default function Navbar() {
             ) : (
               <div className="hidden md:flex items-center gap-2">
                 <button
-                  onClick={toggleTheme}
+                  onClick={() => { trackingAPI.event('theme_toggle', { to: isDark ? 'light' : 'dark' }); toggleTheme(); }}
                   className="p-2 rounded-lg bg-fg/5 hover:bg-fg/10 transition-colors"
                   title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
                   aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -247,7 +250,7 @@ export default function Navbar() {
               
               {/* Theme toggle — mobile */}
               <button
-                onClick={() => { toggleTheme(); setMobileMenuOpen(false); }}
+                onClick={() => { trackingAPI.event('theme_toggle', { to: isDark ? 'light' : 'dark' }); toggleTheme(); setMobileMenuOpen(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-fg/70 hover:bg-fg/5 transition-colors"
               >
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}

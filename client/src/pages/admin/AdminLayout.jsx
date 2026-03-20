@@ -3,7 +3,7 @@ import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Trophy, FileText, ArrowLeft, Shield, Sun, Moon,
   FlaskConical, Swords, ChevronDown, ChevronRight, MessageSquare, BarChart3,
-  Megaphone
+  Megaphone, Eye, Target
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -21,6 +21,7 @@ const SPORT_SECTIONS = [
       { to: '/admin/ncaab/reports', label: 'Scouting Reports', icon: FileText },
       { to: '/admin/ncaab/matchups', label: 'Matchup Reports', icon: Swords },
       { to: '/admin/ncaab/bracket-test', label: 'Bracket Testing', icon: FlaskConical },
+      { to: '/admin/ncaab/prospects', label: 'NBA Prospects', icon: Target },
     ],
   },
   {
@@ -32,7 +33,13 @@ const SPORT_SECTIONS = [
 
 const TOOL_NAV = [
   { to: '/admin/chat', icon: MessageSquare, label: 'Chat Moderation' },
-  { to: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
+  {
+    icon: BarChart3, label: 'Analytics',
+    items: [
+      { to: '/admin/analytics', label: 'Overview', icon: BarChart3 },
+      { to: '/admin/analytics/user-visits', label: 'User Visits', icon: Eye },
+    ],
+  },
   { to: '/admin/announcements', icon: Megaphone, label: 'Announcements' },
 ];
 
@@ -40,7 +47,7 @@ export default function AdminLayout() {
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
 
-  // Auto-expand sport sections that have an active child route
+  // Auto-expand sport sections and tool sections that have an active child route
   const getDefaultExpanded = () => {
     const expanded = {};
     SPORT_SECTIONS.forEach(section => {
@@ -48,14 +55,21 @@ export default function AdminLayout() {
         expanded[section.sportId] = true;
       }
     });
+    TOOL_NAV.forEach(item => {
+      if (item.items?.some(sub => location.pathname === sub.to || location.pathname.startsWith(sub.to + '/'))) {
+        expanded[`tool_${item.label}`] = true;
+      }
+    });
     return expanded;
   };
 
   const [expandedSports, setExpandedSports] = useState(getDefaultExpanded);
 
-  const toggleSport = (sportId) => {
-    setExpandedSports(prev => ({ ...prev, [sportId]: !prev[sportId] }));
+  const toggleSection = (key) => {
+    setExpandedSports(prev => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const toggleSport = (sportId) => toggleSection(sportId);
 
   // Check if any sport section item is active (for mobile)
   const isSportItemActive = (section) => {
@@ -66,7 +80,7 @@ export default function AdminLayout() {
   const allMobileItems = [
     ...CORE_NAV,
     ...SPORT_SECTIONS.flatMap(s => s.items),
-    ...TOOL_NAV,
+    ...TOOL_NAV.flatMap(item => item.items ? item.items : [item]),
   ];
 
   return (
@@ -165,22 +179,63 @@ export default function AdminLayout() {
               Tools
             </span>
             <div className="mt-2 space-y-0.5">
-              {TOOL_NAV.map(({ to, icon: Icon, label }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-fg/10 text-fg'
-                        : 'text-fg/50 hover:text-fg hover:bg-fg/5'
-                    }`
-                  }
-                >
-                  <Icon className="w-4.5 h-4.5" />
-                  {label}
-                </NavLink>
-              ))}
+              {TOOL_NAV.map((item) => {
+                const Icon = item.icon;
+                if (item.items) {
+                  const sectionKey = `tool_${item.label}`;
+                  const isExpanded = expandedSports[sectionKey];
+                  const hasActiveChild = item.items.some(sub => location.pathname === sub.to || location.pathname.startsWith(sub.to + '/'));
+                  return (
+                    <div key={item.label}>
+                      <button
+                        onClick={() => toggleSection(sectionKey)}
+                        className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                          hasActiveChild ? 'text-fg bg-fg/5' : 'text-fg/50 hover:text-fg hover:bg-fg/5'
+                        }`}
+                      >
+                        <span className="flex items-center gap-3">
+                          <Icon className="w-4.5 h-4.5" />
+                          {item.label}
+                        </span>
+                        {isExpanded ? <ChevronDown className="w-4 h-4 text-fg/30" /> : <ChevronRight className="w-4 h-4 text-fg/30" />}
+                      </button>
+                      {isExpanded && (
+                        <div className="ml-3 pl-3 border-l border-fg/10 space-y-0.5 mt-0.5">
+                          {item.items.map(({ to, label, icon: SubIcon }) => (
+                            <NavLink
+                              key={to}
+                              to={to}
+                              end
+                              className={({ isActive }) =>
+                                `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                  isActive ? 'bg-fg/10 text-fg font-medium' : 'text-fg/40 hover:text-fg hover:bg-fg/5'
+                                }`
+                              }
+                            >
+                              <SubIcon className="w-4 h-4" />
+                              {label}
+                            </NavLink>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        isActive ? 'bg-fg/10 text-fg' : 'text-fg/50 hover:text-fg hover:bg-fg/5'
+                      }`
+                    }
+                  >
+                    <Icon className="w-4.5 h-4.5" />
+                    {item.label}
+                  </NavLink>
+                );
+              })}
             </div>
           </div>
         </nav>

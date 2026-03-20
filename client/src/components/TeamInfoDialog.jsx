@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X, ExternalLink, Newspaper, BarChart3, Calendar, Loader2
 } from 'lucide-react';
-import { nflAPI, scheduleAPI } from '../api';
+import { nflAPI, scheduleAPI, trackingAPI } from '../api';
 import { useThemedLogo } from '../utils/logo';
 
 /**
@@ -25,9 +25,16 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
 
   const isNFL = sport === 'nfl';
 
-  // Reset to stats tab when team changes
+  // Reset to stats tab when team changes + track
   useEffect(() => {
     setActiveTab('stats');
+    if (team?.id) {
+      trackingAPI.event('team_info_dialog_open', {
+        teamId: team.id,
+        teamName: team.name || team.abbreviation,
+        sport,
+      });
+    }
   }, [team?.id]);
 
   // Auto-scroll to latest game when schedule tab is opened
@@ -651,7 +658,10 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
           {tabs.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                trackingAPI.event('team_info_tab_switch', { teamName: team?.name || team?.abbreviation, tab: tab.id, fromTab: activeTab });
+                setActiveTab(tab.id);
+              }}
               className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-1.5 transition-colors ${
                 activeTab === tab.id
                   ? 'text-fg border-b-2 border-white'

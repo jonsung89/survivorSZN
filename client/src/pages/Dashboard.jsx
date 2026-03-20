@@ -11,7 +11,7 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { leagueAPI, userAPI, nflAPI } from '../api';
+import { leagueAPI, userAPI, nflAPI, trackingAPI } from '../api';
 import Loading from '../components/Loading';
 import AppIcon from '../components/AppIcon';
 import { BROADCAST_NETWORKS } from '../sports/nfl/constants';
@@ -600,7 +600,7 @@ export default function Dashboard() {
                 {/* League icon — clickable to open members dialog */}
                 <button
                   className="relative flex-shrink-0 hover:scale-105 transition-transform"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMembersDialog({ open: true, leagueId: league.id, leagueName: league.name, defaultTab: 'winners' }); }}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); trackingAPI.event('members_dialog_open', { leagueId: league.id, leagueName: league.name, source: 'dashboard' }); setMembersDialog({ open: true, leagueId: league.id, leagueName: league.name, defaultTab: 'winners' }); }}
                 >
                   <AppIcon
                     className="w-10 h-10"

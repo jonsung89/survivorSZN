@@ -6,7 +6,7 @@ import {
   AlertCircle, Eye, EyeOff, History, AlertTriangle, Edit3,
   Pencil, CalendarCheck, DollarSign, Lock
 } from 'lucide-react';
-import { leagueAPI, nflAPI, picksAPI } from '../api';
+import { leagueAPI, nflAPI, picksAPI, trackingAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useToast } from '../components/Toast';
@@ -65,6 +65,12 @@ export default function LeagueDetail() {
   // Helper to change week
   const handleWeekChange = (newWeek) => {
     if (newWeek === selectedWeek) return;
+    trackingAPI.event('survivor_week_change', {
+      leagueId,
+      leagueName: league?.name,
+      fromWeek: selectedWeek,
+      toWeek: newWeek,
+    });
     setSelectedWeek(newWeek);
   };
 
@@ -557,10 +563,17 @@ export default function LeagueDetail() {
 
   const handleModifyStrikes = async () => {
     if (!strikeDialog || !strikeDialog.action || !strikeDialog.week) return;
-    
+
     const { member, action, week } = strikeDialog;
     setModifyingStrike(member.memberId);
-    
+    trackingAPI.event('strike_modify', {
+      leagueId,
+      leagueName: league?.name,
+      action,
+      memberName: member.displayName,
+      week,
+    });
+
     try {
       const result = await leagueAPI.modifyStrikes(leagueId, member.memberId, action, strikeReason, week);
       if (result.success) {
@@ -619,8 +632,15 @@ export default function LeagueDetail() {
   // Commissioner: Set pick for a member
   const handleSetMemberPick = async () => {
     if (!pickDialog || selectedTeamsForPick.length === 0) return;
-    
+
     const { member, week } = pickDialog;
+    trackingAPI.event('pick_override', {
+      leagueId,
+      leagueName: league?.name,
+      memberName: member.displayName,
+      week,
+      teams: selectedTeamsForPick.map(id => NFL_TEAMS[id]?.name || id).join(', '),
+    });
     const isDoublePick = (league.doublePickWeeks || []).includes(week);
     const requiredPicks = isDoublePick ? 2 : 1;
     
@@ -776,19 +796,28 @@ export default function LeagueDetail() {
           )}
 
           {/* Share button - visible to all members */}
-          <ShareLeagueButton onClick={() => setShowShareModal(true)} />
+          <ShareLeagueButton onClick={() => {
+            trackingAPI.event('share_modal_open', { leagueId, leagueName: league?.name, source: 'survivor_dashboard' });
+            setShowShareModal(true);
+          }} />
           
           {isCommissioner && (
             <>
               <button
-                onClick={() => setShowActionLog(true)}
+                onClick={() => {
+                  trackingAPI.event('action_log_open', { leagueId, leagueName: league?.name });
+                  setShowActionLog(true);
+                }}
                 className="btn-secondary flex items-center gap-2 text-sm sm:text-base py-2.5 sm:py-3"
               >
                 <History className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span className="hidden sm:inline">History</span>
               </button>
               <button
-                onClick={() => setShowSettings(true)}
+                onClick={() => {
+                  trackingAPI.event('settings_open', { leagueId, leagueName: league?.name, source: 'survivor_dashboard' });
+                  setShowSettings(true);
+                }}
                 className="btn-secondary flex items-center gap-2 text-sm sm:text-base py-2.5 sm:py-3"
               >
                 <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -799,7 +828,10 @@ export default function LeagueDetail() {
           {/* Show action log for non-commissioners too */}
           {!isCommissioner && actionLog.length > 0 && (
             <button
-              onClick={() => setShowActionLog(true)}
+              onClick={() => {
+                trackingAPI.event('action_log_open', { leagueId, leagueName: league?.name });
+                setShowActionLog(true);
+              }}
               className="btn-secondary flex items-center gap-2 text-sm sm:text-base py-2.5 sm:py-3"
             >
               <History className="w-4 h-4 sm:w-5 sm:h-5" />

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Share2, Copy, Check, RefreshCw, Link, QrCode, X, Loader2, AlertCircle } from 'lucide-react';
-import { leagueAPI } from '../api';
+import { leagueAPI, trackingAPI } from '../api';
 
 // Just the button - modal is rendered separately in parent
 export function ShareLeagueButton({ onClick }) {
@@ -44,6 +44,7 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
     try {
       await navigator.clipboard.writeText(text);
       setCopied(type);
+      trackingAPI.event('share_copy', { leagueId: league.id, leagueName: league.name, copyType: type });
       setTimeout(() => setCopied(null), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
@@ -51,6 +52,7 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
   };
 
   const handleShare = async () => {
+    trackingAPI.event('share_native', { leagueId: league.id, leagueName: league.name });
     if (navigator.share) {
       try {
         await navigator.share({
@@ -70,7 +72,7 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
     if (!confirm('Are you sure you want to regenerate the invite code? The old code will stop working.')) {
       return;
     }
-    
+    trackingAPI.event('share_regenerate_code', { leagueId: league.id, leagueName: league.name });
     setRegenerating(true);
     try {
       const result = await leagueAPI.regenerateInviteCode(league.id);
@@ -207,7 +209,7 @@ export function ShareLeagueModal({ league, isCommissioner, onClose, onInviteCode
                   {navigator.share ? 'Share' : 'Copy Link'}
                 </button>
                 <button
-                  onClick={() => setShowQR(!showQR)}
+                  onClick={() => { if (!showQR) trackingAPI.event('share_qr_toggle', { leagueId: league.id, leagueName: league.name }); setShowQR(!showQR); }}
                   className={`p-3 rounded-xl transition-all ${
                     showQR ? 'bg-nfl-blue text-white' : 'bg-fg/10 hover:bg-fg/20 text-fg'
                   }`}

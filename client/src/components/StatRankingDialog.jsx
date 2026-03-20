@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, TrendingUp, AlertCircle } from 'lucide-react';
-import { scheduleAPI } from '../api';
+import { scheduleAPI, trackingAPI } from '../api';
 import { useThemedLogo } from '../utils/logo';
 
 // Sport display names for the dialog header
@@ -29,6 +29,7 @@ export default function StatRankingDialog({ sport, statKey, statLabel, currentTe
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    trackingAPI.event('stat_ranking_dialog_open', { sport, statKey, statLabel });
     setLoading(true);
     setError(null);
     scheduleAPI.getStatRankings(sport, statKey)

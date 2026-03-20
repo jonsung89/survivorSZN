@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Trophy, Plus, ArrowLeft, Loader2, Users, Settings, Check, Clock, Calendar, DollarSign, X, Crown, Pencil, Lock, RotateCcw, History, Copy, ExternalLink, ChevronDown } from 'lucide-react';
-import { bracketAPI, leagueAPI } from '../api';
+import { bracketAPI, leagueAPI, trackingAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../components/Toast';
@@ -739,7 +739,15 @@ export default function BracketChallenge() {
         {['brackets', 'leaderboard', 'members'].map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => {
+              trackingAPI.event('bracket_tab_switch', {
+                tab,
+                fromTab: activeTab,
+                leagueId,
+                leagueName: league?.name,
+              });
+              setActiveTab(tab);
+            }}
             className={`px-4 py-2 text-sm md:text-base font-medium transition-colors border-b-2 -mb-px ${
               activeTab === tab
                 ? 'border-violet-500 text-fg'
@@ -800,8 +808,20 @@ export default function BracketChallenge() {
                     className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer"
                     onClick={() => {
                       if (champTeam && (tournamentStarted || bracket.is_submitted)) {
+                        trackingAPI.event('bracket_final_four_preview', {
+                          source: 'my_brackets',
+                          leagueId,
+                          leagueName: league?.name,
+                          bracketId: bracket.id,
+                          bracketName: bracket.name || `Bracket ${bracket.bracket_number}`,
+                        });
                         setMyBracketPreview(previewEntry);
                       } else {
+                        trackingAPI.event('bracket_fill_navigate', {
+                          leagueId,
+                          leagueName: league?.name,
+                          bracketId: bracket.id,
+                        });
                         navigate(`/league/${leagueId}/bracket/${bracket.id}`);
                       }
                     }}
@@ -834,7 +854,16 @@ export default function BracketChallenge() {
                     {!bracket.is_submitted ? (
                       <div
                         className="w-12 h-12 relative cursor-pointer"
-                        onClick={() => navigate(`/league/${leagueId}/bracket/${bracket.id}`)}
+                        onClick={() => {
+                          trackingAPI.event('bracket_fill_navigate', {
+                            source: 'progress_ring',
+                            leagueId,
+                            leagueName: league?.name,
+                            bracketId: bracket.id,
+                            progress,
+                          });
+                          navigate(`/league/${leagueId}/bracket/${bracket.id}`);
+                        }}
                       >
                         <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
                           <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
@@ -852,7 +881,15 @@ export default function BracketChallenge() {
                       </div>
                     ) : (
                       <button
-                        onClick={() => navigate(`/league/${leagueId}/bracket/${bracket.id}`)}
+                        onClick={() => {
+                          trackingAPI.event('bracket_view_click', {
+                            leagueId,
+                            leagueName: league?.name,
+                            bracketId: bracket.id,
+                            bracketName: bracket.name || `Bracket ${bracket.bracket_number}`,
+                          });
+                          navigate(`/league/${leagueId}/bracket/${bracket.id}`);
+                        }}
                         className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-sm md:text-base font-medium transition-colors ${isDark ? 'bg-fg/10 text-fg/60 hover:bg-fg/15' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                       >
                         View
@@ -865,7 +902,19 @@ export default function BracketChallenge() {
                 {scoreData && (
                   <div className="mt-2.5">
                     <button
-                      onClick={() => setExpandedBracketId(prev => prev === bracket.id ? null : bracket.id)}
+                      onClick={() => {
+                        const expanding = expandedBracketId !== bracket.id;
+                        if (expanding) {
+                          trackingAPI.event('bracket_score_expand', {
+                            leagueId,
+                            leagueName: league?.name,
+                            bracketId: bracket.id,
+                            bracketName: bracket.name || `Bracket ${bracket.bracket_number}`,
+                            score: scoreData?.totalScore,
+                          });
+                        }
+                        setExpandedBracketId(prev => prev === bracket.id ? null : bracket.id);
+                      }}
                       className="flex items-center gap-3 w-full text-left text-sm md:text-base"
                     >
                       <span className="font-semibold text-fg">{scoreData.totalScore} pts</span>
@@ -983,11 +1032,19 @@ export default function BracketChallenge() {
           leaderboard={leaderboard}
           currentUserId={user?.id}
           leagueId={leagueId}
+          leagueName={league?.name}
           scoringSystem={scoringSystem}
           tournamentStarted={tournamentStarted}
           tournamentData={tournamentData}
           eliminatedTeamIds={eliminatedTeamIds}
-          onBracketClick={(bracketId) => navigate(`/league/${leagueId}/bracket/${bracketId}`)}
+          onBracketClick={(bracketId) => {
+            trackingAPI.event('leaderboard_bracket_navigate', {
+              leagueId,
+              leagueName: league?.name,
+              bracketId,
+            });
+            navigate(`/league/${leagueId}/bracket/${bracketId}`);
+          }}
         />
       )}
 

@@ -291,6 +291,12 @@ export default function BracketFill() {
   };
 
   const handleSubmit = async () => {
+    trackingAPI.event('bracket_submit', {
+      leagueId,
+      bracketId,
+      bracketName: bracket?.name,
+      pickCount,
+    });
     if (pickCount < TOTAL_GAMES) {
       showToast(`Complete all picks first (${pickCount}/${TOTAL_GAMES})`, 'error');
       return;
@@ -322,6 +328,7 @@ export default function BracketFill() {
 
   const handleReset = async () => {
     if (!confirm('Reset this bracket? All picks will be cleared.')) return;
+    trackingAPI.event('bracket_reset', { leagueId, bracketId, bracketName: bracket?.name });
     try {
       const result = await bracketAPI.resetBracket(bracketId);
       if (result.success) {
@@ -419,7 +426,10 @@ export default function BracketFill() {
           )}
           {bracket.is_submitted && scoreData && (
             <button
-              onClick={() => setShowScoreDialog(true)}
+              onClick={() => {
+                trackingAPI.event('bracket_score_dialog_open', { leagueId, bracketId, score: scoreData?.totalScore });
+                setShowScoreDialog(true);
+              }}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-semibold transition-colors ${
                 isDark ? 'bg-fg/10 text-fg/60 hover:bg-fg/15' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}

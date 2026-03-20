@@ -325,6 +325,11 @@ async function initDb() {
     await client.query(`ALTER TABLE page_views ADD COLUMN IF NOT EXISTS device_type TEXT`);
     await client.query(`ALTER TABLE feature_events ADD COLUMN IF NOT EXISTS device_type TEXT`);
 
+    // Anonymous tracking: make user_id nullable and add anon_id for non-auth visitors
+    await client.query(`ALTER TABLE page_views ALTER COLUMN user_id DROP NOT NULL`);
+    await client.query(`ALTER TABLE page_views ADD COLUMN IF NOT EXISTS anon_id TEXT`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_page_views_anon ON page_views(anon_id) WHERE anon_id IS NOT NULL`);
+
     // Login events tracking (sign-in history with geolocation)
     await client.query(`
       CREATE TABLE IF NOT EXISTS login_events (
@@ -341,6 +346,34 @@ async function initDb() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_login_events_created ON login_events(created_at)`);
+
+    // Draft prospects table — sport-agnostic, year-separated
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS draft_prospects (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        sport TEXT NOT NULL DEFAULT 'nba',
+        draft_year INTEGER NOT NULL,
+        rank INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        normalized_name TEXT,
+        position TEXT,
+        school TEXT,
+        height TEXT,
+        weight TEXT,
+        year TEXT,
+        logo TEXT,
+        stats JSONB DEFAULT '{}',
+        espn_id TEXT,
+        jersey TEXT,
+        headshot_url TEXT,
+        espn_stats JSONB,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(sport, draft_year, rank)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_draft_prospects_sport_year ON draft_prospects(sport, draft_year)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_draft_prospects_name ON draft_prospects(normalized_name)`);
 
     console.log('✅ Supabase database initialized successfully');
   } catch (error) {

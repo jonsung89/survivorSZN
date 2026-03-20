@@ -4,6 +4,7 @@ import { useToast } from './Toast';
 import { X, Camera, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 import Cropper from 'react-easy-crop';
 import Avatar from './Avatar';
+import { trackingAPI } from '../api';
 
 // Generate cropped image from canvas
 async function getCroppedImg(imageSrc, pixelCrop) {
@@ -155,6 +156,7 @@ export default function EditProfileModal({ onClose }) {
       });
 
       if (result.success) {
+        trackingAPI.event('profile_save', { hasImageChange: !!imageData || imageRemoved });
         showToast('Profile updated!', 'success');
         onClose();
       } else {

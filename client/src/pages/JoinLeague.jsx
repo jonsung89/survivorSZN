@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Search, Trophy, Lock, Users, Loader2, Check, ArrowRight } from 'lucide-react';
-import { leagueAPI } from '../api';
+import { leagueAPI, trackingAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { getSportBadgeClasses } from '../sports';
@@ -71,6 +71,7 @@ export default function JoinLeague() {
     try {
       const result = await leagueAPI.join(league.id, league.hasPassword ? password : '');
       if (result.success) {
+        trackingAPI.event('league_join', { leagueId: league.id, leagueName: league.name });
         showToast(`Joined ${league.name}!`, 'success');
         navigate(`/league/${league.id}`);
       } else {

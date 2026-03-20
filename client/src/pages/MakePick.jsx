@@ -5,7 +5,7 @@ import {
   Loader2, TrendingUp, TrendingDown, AlertTriangle, X, ExternalLink, Newspaper,
   BarChart3, MapPin, Trophy, Info, Lightbulb
 } from 'lucide-react';
-import { leagueAPI, picksAPI, nflAPI } from '../api';
+import { leagueAPI, picksAPI, nflAPI, trackingAPI } from '../api';
 import { useToast } from '../components/Toast';
 import Loading from '../components/Loading';
 import { getSportModule } from '../sports';
@@ -247,6 +247,9 @@ export default function MakePick() {
 
   const handleSelectTeam = (team) => {
     if (!team || team.isLocked || (team.isUsed && !team.isCurrentPick)) return;
+    if (team.id !== selectedTeam) {
+      trackingAPI.event('pick_team_select', { leagueId, leagueName: league?.name, week: selectedWeek, teamName: team.name });
+    }
     setSelectedTeam(team.id === selectedTeam ? null : team.id);
   };
 
@@ -265,6 +268,8 @@ export default function MakePick() {
       });
 
       if (result.success) {
+        const team = getSelectedTeam();
+        trackingAPI.event('pick_submit', { leagueId, leagueName: league?.name, week: selectedWeek, teamName: team?.name, isUpdate: !!currentPick });
         showToast(currentPick ? 'Pick updated!' : 'Pick submitted!', 'success');
         navigate(`/league/${leagueId}`);
       } else {
@@ -311,7 +316,7 @@ export default function MakePick() {
       {/* Week Selector */}
       <div className="flex items-center justify-between bg-fg/5 rounded-lg p-1 mb-3 sm:mb-4">
         <button
-          onClick={() => setSelectedWeek(Math.max(startWeek, selectedWeek - 1))}
+          onClick={() => { trackingAPI.event('pick_week_change', { leagueId, fromWeek: selectedWeek, toWeek: Math.max(startWeek, selectedWeek - 1) }); setSelectedWeek(Math.max(startWeek, selectedWeek - 1)); }}
           disabled={selectedWeek <= startWeek || loadingWeek}
           className="p-2 sm:p-3 hover:bg-fg/10 rounded-lg disabled:opacity-30"
         >
@@ -330,7 +335,7 @@ export default function MakePick() {
           )}
         </div>
         <button
-          onClick={() => setSelectedWeek(Math.min(23, selectedWeek + 1))}
+          onClick={() => { trackingAPI.event('pick_week_change', { leagueId, fromWeek: selectedWeek, toWeek: Math.min(23, selectedWeek + 1) }); setSelectedWeek(Math.min(23, selectedWeek + 1)); }}
           disabled={selectedWeek >= 23 || loadingWeek}
           className="p-2 sm:p-3 hover:bg-fg/10 rounded-lg disabled:opacity-30"
         >

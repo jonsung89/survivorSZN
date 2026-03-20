@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Trophy, Users, Plus, Search, ChevronRight, AlertCircle, X } from 'lucide-react';
-import { leagueAPI } from '../api';
+import { leagueAPI, trackingAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import Loading from '../components/Loading';
 import { getSportModule, getSportGradient, getSportBadgeClasses } from '../sports';
@@ -77,7 +77,11 @@ export default function Leagues() {
         <div className="flex items-center gap-3 sm:gap-4">
           <button
             className="relative flex-shrink-0 hover:scale-105 transition-transform"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMembersDialog({ open: true, leagueId: league.id, leagueName: league.name, defaultTab: 'winners' }); }}
+            onClick={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              trackingAPI.event('members_dialog_open', { leagueId: league.id, leagueName: league.name, source: 'league_card_icon' });
+              setMembersDialog({ open: true, leagueId: league.id, leagueName: league.name, defaultTab: 'winners' });
+            }}
           >
             <AppIcon
               className="w-12 h-12 sm:w-14 sm:h-14"
@@ -180,6 +184,7 @@ export default function Leagues() {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        trackingAPI.event('bracket_status_dialog_open', { leagueName: league.name });
                         setBracketDialog({ open: true, leagueName: league.name, brackets: bs.brackets, totalSubmitted: bs.totalSubmitted });
                       }}
                     >
@@ -214,6 +219,7 @@ export default function Leagues() {
                     onClick={(e) => {
                       e.preventDefault();
                       const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
+                      trackingAPI.event('winners_dialog_open', { leagueName: league.name, winnerCount: league.winners?.length });
                       setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
                     }}
                     className="hidden sm:inline text-xs font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 transition-colors cursor-pointer"
@@ -228,7 +234,8 @@ export default function Leagues() {
                       onClick={(e) => {
                         e.preventDefault();
                         const prizePool = league.prizePotOverride || (league.entryFee * league.memberCount) || 0;
-                        setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
+                        trackingAPI.event('winners_dialog_open', { leagueName: league.name, winnerCount: league.winners?.length });
+                      setWinnersDialog({ open: true, leagueName: league.name, winners: league.winners, prizePool });
                       }}
                       className="hidden sm:inline badge text-xs bg-fg/10 text-fg/50 border-fg/20 hover:bg-fg/15 hover:text-fg/70 transition-colors cursor-pointer"
                     >

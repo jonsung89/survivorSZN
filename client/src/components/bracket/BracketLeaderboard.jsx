@@ -2,12 +2,13 @@ import { useState, useEffect, Fragment } from 'react';
 import { Trophy, ChevronDown, Eye } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemedLogo } from '../../utils/logo';
+import { trackingAPI } from '../../api';
 import FinalFourPreviewDialog from './FinalFourPreviewDialog';
 
 const ROUND_LABELS = ['R64', 'R32', 'S16', 'E8', 'F4', 'CHAMP'];
 const TOOLTIP_KEY = 'survivorszn_champion_logo_tooltip_seen';
 
-export default function BracketLeaderboard({ leaderboard, currentUserId, leagueId, scoringSystem, tournamentStarted, tournamentData, eliminatedTeamIds, onBracketClick }) {
+export default function BracketLeaderboard({ leaderboard, currentUserId, leagueId, leagueName, scoringSystem, tournamentStarted, tournamentData, eliminatedTeamIds, onBracketClick }) {
   const [expandedRow, setExpandedRow] = useState(null);
   const [previewEntry, setPreviewEntry] = useState(null);
   const [showLogoTooltip, setShowLogoTooltip] = useState(false);
@@ -47,17 +48,47 @@ export default function BracketLeaderboard({ leaderboard, currentUserId, leagueI
   })();
 
   const handleRowClick = (entry) => {
+    const expanding = expandedRow !== entry.bracketId;
+    if (expanding) {
+      trackingAPI.event('leaderboard_member_expand', {
+        leagueId,
+        leagueName,
+        memberName: entry.displayName,
+        bracketId: entry.bracketId,
+        score: entry.totalScore,
+        rank: entry.rank,
+      });
+    }
     setExpandedRow(prev => prev === entry.bracketId ? null : entry.bracketId);
   };
 
   const toggleExpand = (e, bracketId) => {
     e.stopPropagation();
+    const expanding = expandedRow !== bracketId;
+    if (expanding) {
+      const entry = leaderboard.find(e => e.bracketId === bracketId);
+      trackingAPI.event('leaderboard_score_expand', {
+        leagueId,
+        leagueName,
+        memberName: entry?.displayName,
+        bracketId,
+        score: entry?.totalScore,
+      });
+    }
     setExpandedRow(prev => prev === bracketId ? null : bracketId);
   };
 
   const handleChampionClick = (e, entry) => {
     e.stopPropagation();
     if (tournamentStarted || entry.userId === currentUserId) {
+      trackingAPI.event('bracket_final_four_preview', {
+        source: 'leaderboard',
+        leagueId,
+        leagueName,
+        memberName: entry.displayName,
+        bracketId: entry.bracketId,
+        rank: entry.rank,
+      });
       setPreviewEntry(entry);
     }
   };

@@ -14,35 +14,38 @@ function getDeviceType(userAgent) {
 
 // ─── Page View Tracking ─────────────────────────────────────────────────────
 
-router.post('/pageview', authMiddleware, async (req, res) => {
+router.post('/pageview', optionalAuth, async (req, res) => {
   try {
-    const { path } = req.body;
+    const { path, anonId } = req.body;
     if (!path || typeof path !== 'string') {
       return res.status(400).json({ error: 'path is required' });
     }
 
-    // Look up user to check admin/bot status (skip tracking for admins and bots)
-    const user = await db.getOne(
-      'SELECT id, is_admin, is_bot FROM users WHERE firebase_uid = $1',
-      [req.firebaseUser.uid]
-    );
+    const deviceType = getDeviceType(req.headers['user-agent']);
+    let userId = null;
 
-    if (!user || user.is_admin || user.is_bot) {
-      // Skip tracking for admins, bots, or unknown users, but still return 200
+    if (req.firebaseUser) {
+      // Authenticated user — look up and skip admins/bots
+      const user = await db.getOne(
+        'SELECT id, is_admin, is_bot FROM users WHERE firebase_uid = $1',
+        [req.firebaseUser.uid]
+      );
+      if (!user || user.is_admin || user.is_bot) {
+        return res.json({ ok: true });
+      }
+      userId = user.id;
+    } else if (!anonId) {
+      // No auth and no anon ID — skip
       return res.json({ ok: true });
     }
 
-    const deviceType = getDeviceType(req.headers['user-agent']);
-
-    // Insert page view (fire-and-forget style, but we await for error handling)
     await db.run(
-      'INSERT INTO page_views (user_id, page_path, device_type) VALUES ($1, $2, $3)',
-      [user.id, path.substring(0, 255), deviceType]
+      'INSERT INTO page_views (user_id, anon_id, page_path, device_type) VALUES ($1, $2, $3, $4)',
+      [userId, userId ? null : (anonId || null), path.substring(0, 255), deviceType]
     );
 
     res.json({ ok: true });
   } catch (error) {
-    // Don't fail the request — tracking is best-effort
     console.error('Page view tracking error:', error.message);
     res.json({ ok: true });
   }

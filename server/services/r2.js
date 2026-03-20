@@ -48,8 +48,28 @@ async function deleteAvatar(userId) {
   }));
 }
 
+async function uploadProspectHeadshot(espnId, buffer, contentType = 'image/png') {
+  const client = getClient();
+  if (!client) throw new Error('R2 not configured');
+
+  const key = `prospects/${espnId}.png`;
+
+  await client.send(new PutObjectCommand({
+    Bucket: bucketName,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+  }));
+
+  return `${publicUrl}/${key}`;
+}
+
+function getProspectHeadshotUrl(espnId) {
+  return `${publicUrl}/prospects/${espnId}.png`;
+}
+
 function isConfigured() {
   return !!(accountId && bucketName && publicUrl);
 }
 
-module.exports = { uploadAvatar, deleteAvatar, isConfigured };
+module.exports = { uploadAvatar, deleteAvatar, uploadProspectHeadshot, getProspectHeadshotUrl, isConfigured };

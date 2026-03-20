@@ -587,6 +587,11 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
 
   // Open game dialog + fetch details
   const openGameDialog = async (game) => {
+    trackingAPI.event('tournament_game_dialog_open', {
+      gameId: game.id,
+      matchup: `${game.awayTeam?.abbreviation || game.awayTeam?.shortName} vs ${game.homeTeam?.abbreviation || game.homeTeam?.shortName}`,
+      status: game.status,
+    });
     setDialogGame(game);
     setDetailTab('summary');
     const gameLive = isGameLive(game);
@@ -761,6 +766,10 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
               className="mt-2 pt-2 border-t border-fg/10"
               onClick={(e) => {
                 e.stopPropagation();
+                trackingAPI.event('pick_distribution_open', {
+                  gameId: game.id,
+                  matchup: `${game.awayTeam?.abbreviation || game.awayTeam?.shortName} vs ${game.homeTeam?.abbreviation || game.homeTeam?.shortName}`,
+                });
                 setPickBreakdownGame(game);
               }}
             >
@@ -874,6 +883,11 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
           return (
             <div className="mt-2 pt-2 border-t border-fg/10 hover:bg-fg/5 -mx-3 sm:-mx-4 px-3 sm:px-4 pb-1 rounded-b-xl transition-colors" onClick={(e) => {
               e.stopPropagation();
+              trackingAPI.event('prospect_dialog_open', {
+                gameId: game.id,
+                matchup: `${game.awayTeam?.abbreviation || game.awayTeam?.shortName} vs ${game.homeTeam?.abbreviation || game.homeTeam?.shortName}`,
+                prospectCount: awayProspects.length + homeProspects.length,
+              });
               // Find full prospect objects from the prospects array
               const allNames = [...awayProspects, ...homeProspects].map(p => p.name);
               const fullProspects = prospects.filter(p => allNames.includes(p.name));
@@ -1258,7 +1272,16 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
             {['summary', ...(hasPlayerStats ? ['boxscore'] : []), 'gamecast', 'shotchart'].map(tab => (
               <button
                 key={tab}
-                onClick={(e) => { e.stopPropagation(); setDetailTab(tab); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  trackingAPI.event('tournament_game_tab_switch', {
+                    gameId: dialogGame?.id,
+                    tab,
+                    fromTab: detailTab,
+                    matchup: dialogGame ? `${dialogGame.awayTeam?.abbreviation} vs ${dialogGame.homeTeam?.abbreviation}` : undefined,
+                  });
+                  setDetailTab(tab);
+                }}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   detailTab === tab ? 'bg-fg/15 text-fg/90' : 'bg-fg/5 text-fg/40 hover:bg-fg/10 hover:text-fg/60'
                 }`}
@@ -1425,7 +1448,10 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
           ].map(tab => (
             <button
               key={tab.key}
-              onClick={() => setGameFilter(tab.key)}
+              onClick={() => {
+                trackingAPI.event('tournament_game_filter', { filter: tab.key, fromFilter: gameFilter });
+                setGameFilter(tab.key);
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
                 gameFilter === tab.key
                   ? tab.key === 'live' ? 'bg-red-600 text-white' : 'bg-fg/15 text-fg'

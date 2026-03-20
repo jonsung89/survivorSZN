@@ -14,6 +14,9 @@
  */
 
 const { getSport } = require('../sports');
+const { db } = require('../db/supabase');
+const { refreshGameFromESPN } = require('./ncaab-tournament');
+const { calculateBracketScore } = require('../utils/bracket-slots');
 
 // Polling intervals
 const LIVE_POLL_MIN = 6 * 1000;              // minimum live poll delay
@@ -212,6 +215,13 @@ class LiveScorePoller {
           delayed: false,
           timestamp: Date.now(),
         });
+
+        // Auto-persist final ncaab tournament games to the database
+        if (sportId === 'ncaab') {
+          this._persistFinalGames(changedGames, state.prevGames).catch(err => {
+            console.error('[LiveScorePoller] Error persisting final games:', err.message);
+          });
+        }
       }
 
       // Schedule next poll — adapt cadence to game state
@@ -261,6 +271,65 @@ class LiveScorePoller {
       this._schedulePoll(sportId, backoff);
     } finally {
       state.polling = false;
+    }
+  }
+
+  /**
+   * Auto-persist ncaab games that just went final to tournament_games table.
+   * Also recalculates bracket scores for affected challenges.
+   */
+  async _persistFinalGames(changedGames) {
+    const newlyFinal = changedGames.filter(g => g.status === 'STATUS_FINAL');
+    if (newlyFinal.length === 0) return;
+
+    const espnEventIds = newlyFinal.map(g => String(g.id));
+
+    // Find matching tournament_games rows that aren't already final
+    const tournamentGames = await db.getAll(
+      `SELECT tg.id, tg.tournament_id, tg.espn_event_id
+       FROM tournament_games tg
+       WHERE tg.espn_event_id = ANY($1) AND tg.status != 'final'`,
+      [espnEventIds]
+    );
+
+    if (tournamentGames.length === 0) return;
+
+    console.log(`[LiveScorePoller] Auto-persisting ${tournamentGames.length} newly final tournament game(s)`);
+
+    const affectedTournaments = new Set();
+    for (const tg of tournamentGames) {
+      try {
+        await refreshGameFromESPN(tg.tournament_id, tg.id);
+        affectedTournaments.add(tg.tournament_id);
+        console.log(`[LiveScorePoller] Persisted game ${tg.espn_event_id} for tournament ${tg.tournament_id}`);
+      } catch (err) {
+        console.error(`[LiveScorePoller] Failed to persist game ${tg.espn_event_id}:`, err.message);
+      }
+    }
+
+    // Recalculate bracket scores for affected tournaments
+    for (const tournamentId of affectedTournaments) {
+      try {
+        const allGames = await db.getAll(
+          'SELECT slot_number, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id, status FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL',
+          [tournamentId]
+        );
+        const resultsMap = {};
+        for (const g of allGames) resultsMap[g.slot_number] = g;
+
+        const challenges = await db.getAll('SELECT * FROM bracket_challenges WHERE tournament_id = $1', [tournamentId]);
+        for (const ch of challenges) {
+          const scoringSystem = ch.scoring_system || [1, 2, 4, 8, 16, 32];
+          const brackets = await db.getAll('SELECT id, picks FROM brackets WHERE challenge_id = $1 AND is_submitted = true', [ch.id]);
+          for (const b of brackets) {
+            const { totalScore } = calculateBracketScore(b.picks || {}, resultsMap, scoringSystem);
+            await db.run('UPDATE brackets SET total_score = $1 WHERE id = $2', [totalScore, b.id]);
+          }
+        }
+        console.log(`[LiveScorePoller] Recalculated scores for tournament ${tournamentId}`);
+      } catch (err) {
+        console.error(`[LiveScorePoller] Failed to recalculate scores for tournament ${tournamentId}:`, err.message);
+      }
     }
   }
 

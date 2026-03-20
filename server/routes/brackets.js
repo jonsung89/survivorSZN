@@ -358,7 +358,9 @@ router.get('/challenges/:challengeId', authMiddleware, async (req, res) => {
     if (challenge.tournament_id) {
       const games = await db.getAll(
         `SELECT slot_number, espn_event_id, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id,
-                team1_score as winning_score, team2_score as losing_score, round, status, completed_at
+                CASE WHEN winning_team_espn_id = team1_espn_id THEN team1_score ELSE team2_score END as winning_score,
+                CASE WHEN winning_team_espn_id = team1_espn_id THEN team2_score ELSE team1_score END as losing_score,
+                round, status, completed_at
          FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
         [challenge.tournament_id]
       );
@@ -637,7 +639,9 @@ router.get('/:bracketId', authMiddleware, async (req, res) => {
     if (bracket.tournament_id) {
       const games = await db.getAll(
         `SELECT slot_number, espn_event_id, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id,
-                team1_score as winning_score, team2_score as losing_score, round, status, completed_at
+                CASE WHEN winning_team_espn_id = team1_espn_id THEN team1_score ELSE team2_score END as winning_score,
+                CASE WHEN winning_team_espn_id = team1_espn_id THEN team2_score ELSE team1_score END as losing_score,
+                round, status, completed_at
          FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
         [bracket.tournament_id]
       );
@@ -1203,7 +1207,9 @@ router.post('/update-results', async (req, res) => {
         // Build results map from tournament_games for scoring
         const allGames = await db.getAll(
           `SELECT slot_number, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id,
-                  team1_score as winning_score, team2_score as losing_score, status, completed_at
+                  CASE WHEN winning_team_espn_id = team1_espn_id THEN team1_score ELSE team2_score END as winning_score,
+                  CASE WHEN winning_team_espn_id = team1_espn_id THEN team2_score ELSE team1_score END as losing_score,
+                  status, completed_at
            FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
           [tournamentId]
         );
@@ -1327,7 +1333,9 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
     if (challenge.tournament_id) {
       const games = await db.getAll(
         `SELECT slot_number, espn_event_id, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id,
-                team1_score as winning_score, team2_score as losing_score, round, status, completed_at
+                CASE WHEN winning_team_espn_id = team1_espn_id THEN team1_score ELSE team2_score END as winning_score,
+                CASE WHEN winning_team_espn_id = team1_espn_id THEN team2_score ELSE team1_score END as losing_score,
+                round, status, completed_at
          FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
         [challenge.tournament_id]
       );

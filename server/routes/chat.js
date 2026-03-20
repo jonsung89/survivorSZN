@@ -48,7 +48,7 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
         u.profile_image_url
       FROM chat_messages cm
       LEFT JOIN users u ON cm.user_id = u.id
-      WHERE cm.league_id = $1
+      WHERE cm.league_id = $1 AND cm.deleted_at IS NULL
     `;
     const params = [leagueId];
 
@@ -99,8 +99,8 @@ router.get('/leagues/:leagueId/unread', async (req, res) => {
 
     // Count messages after last read
     const result = await db.getOne(
-      `SELECT COUNT(*) as count FROM chat_messages 
-       WHERE league_id = $1 AND created_at > $2 AND user_id != $3`,
+      `SELECT COUNT(*) as count FROM chat_messages
+       WHERE league_id = $1 AND created_at > $2 AND user_id != $3 AND deleted_at IS NULL`,
       [leagueId, lastReadAt, user.id]
     );
 
@@ -121,8 +121,9 @@ router.get('/unread', async (req, res) => {
       SELECT 
         lm.league_id,
         COALESCE(
-          (SELECT COUNT(*) FROM chat_messages cm 
-           WHERE cm.league_id = lm.league_id 
+          (SELECT COUNT(*) FROM chat_messages cm
+           WHERE cm.league_id = lm.league_id
+           AND cm.deleted_at IS NULL
            AND cm.created_at > COALESCE(
              (SELECT last_read_at FROM chat_read_status crs 
               WHERE crs.user_id = $1 AND crs.league_id = lm.league_id),

@@ -1735,10 +1735,13 @@ router.get('/chat/leagues/:id/messages', async (req, res) => {
 
 router.delete('/chat/messages/:id', async (req, res) => {
   try {
-    await db.run(
-      `UPDATE chat_messages SET message = NULL, gif = NULL, deleted_at = NOW(), deleted_by = 'admin' WHERE id = $1`,
-      [req.params.id]
-    );
+    // Get the league_id before deleting so we can notify connected clients
+    const msg = await db.getOne('SELECT league_id FROM chat_messages WHERE id = $1', [req.params.id]);
+    await db.run('DELETE FROM chat_messages WHERE id = $1', [req.params.id]);
+    // Emit socket event so connected clients remove the message in real-time
+    if (msg?.league_id && req.app.get('io')) {
+      req.app.get('io').to(`league:${msg.league_id}`).emit('message-removed', { messageId: req.params.id });
+    }
     res.json({ success: true });
   } catch (error) {
     console.error('Delete chat message error:', error);

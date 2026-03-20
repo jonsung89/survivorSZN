@@ -287,13 +287,21 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   // Listen for message updates (including soft deletes)
   useEffect(() => {
     const unsubscribe = on('message-updated', ({ messageId, message, gif, deletedAt, deletedBy }) => {
-      setMessages(prev => prev.map(m => 
-        m.id === messageId 
+      setMessages(prev => prev.map(m =>
+        m.id === messageId
           ? { ...m, message, gif, deletedAt, deletedBy }
           : m
       ));
     });
 
+    return unsubscribe;
+  }, [on]);
+
+  // Listen for hard deletes (admin moderation)
+  useEffect(() => {
+    const unsubscribe = on('message-removed', ({ messageId }) => {
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    });
     return unsubscribe;
   }, [on]);
 

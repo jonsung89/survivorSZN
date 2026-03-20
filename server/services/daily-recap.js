@@ -269,7 +269,7 @@ async function generateRecap(data) {
     `#${p.rank} ${p.name} (${p.school}, ${p.position})`
   ).join('\n');
 
-  const prompt = `You're writing a daily recap for a March Madness bracket challenge group chat. Write like a real person talking to friends — casual, fun, a little trash-talky. NO emojis anywhere.
+  const prompt = `You're writing a daily recap for a March Madness bracket challenge group chat. Write like a normal person — straightforward, casual, informative. NO emojis anywhere. Do NOT use hype language like "went nuclear", "absolutely crushed it", "rest of you scrubs", "let's gooo", etc. Just state what happened plainly with a little personality.
 
 DATA FOR ${data.recapDate}:
 
@@ -295,16 +295,21 @@ FORMATTING RULES (apply to all sections):
 - NO emojis anywhere
 - Write casually like a friend, not a sports bot
 
-SECTION 1 (TLDR for chat): 2-3 casual sentences for the group chat. Lead with who's winning/losing, mention big upsets, tease today. Write like you're texting friends. No headers needed here.
+SECTION 1 (TLDR for chat): 2-3 casual, SHORT sentences for the group chat. Lead with who's winning/losing, mention big upsets, tease today. Write it like a normal text message — no hype words, no trying to sound cool, no "scrubs", no "nuclear", no "let's go". Just say what happened. No headers needed here.
 
 SECTION 2 (MEMBERS TAB): This tab is ONLY about the members — their picks, their standings, their wins and losses. Do NOT include game recaps, game summaries, or NBA prospect watch sections here. Those belong in the Games tab.
 
-Start with a ## header for the leaderboard standings. Show the current standings as a numbered list with points. IMPORTANT: If multiple members have the same score, they are TIED — show them with the same rank number (e.g. "T-1." for a tie at #1). Do NOT give different rank numbers to members with the same score. Then use ### headers per member (or group of members) to break up the analysis. For each member, talk about their record, which picks hit, bold calls, painful misses. Frame everything from the member's perspective — "PlayerA nailed the #12 upset pick" not "Team X pulled the upset."
+Start with a ## header for the leaderboard standings. Show the current standings as a numbered list with ONE MEMBER PER LINE. Each member MUST be on its own separate line. IMPORTANT: If multiple members have the same score, they are TIED — show them with the same rank number (e.g. "T-1." for a tie at #1). Do NOT give different rank numbers to members with the same score. Then use ### headers per member (or group of members) to break up the analysis. For each member, talk about their record, which picks hit, bold calls, painful misses. Frame everything from the member's perspective — "PlayerA nailed the #12 upset pick" not "Team X pulled the upset."
 
-Example structure:
+Example structure (EACH MEMBER ON ITS OWN LINE):
 ## Current Standings
-1. **PlayerA** — 10 pts (8/13)
-2. **PlayerB** — 8 pts (7/13)
+1. **PlayerA** — 10 pts (8/13 yesterday)
+2. **PlayerB** — 8 pts (7/13 yesterday)
+3. **PlayerC** — 7 pts (6/13 yesterday)
+T-4. **PlayerD** — 5 pts (5/13 yesterday)
+T-4. **PlayerE** — 5 pts (4/13 yesterday)
+
+NEVER put multiple members on the same line. Each member gets its own numbered line.
 
 ### PlayerA is Rolling
 Paragraph about their picks and results...
@@ -348,7 +353,12 @@ IMPORTANT:
 - Use markdown formatting generously — headers, bold, bullet lists, blockquotes, horizontal rules. The content will be rendered with styled markdown so take advantage of it.
 - ALWAYS include the seed number with every team mention, like "#1 Duke", "#12 High Point", "#5 Wisconsin". Never just say "Duke" — always "#1 Duke". This applies everywhere in all sections.
 - When mentioning NBA prospects, ALWAYS include their projected draft rank like "projected #3 pick **AJ Dybantsa**" or "#1 overall prospect **Cameron Boozer**". Weave prospect mentions naturally into game recaps, not just in a separate section.
-- Keep the TONE casual and fun.`;
+- Keep the TONE casual and fun.
+
+CRITICAL SECTION BOUNDARIES — READ THIS CAREFULLY:
+- SECTION 2 (MEMBERS) must NEVER contain headers like "Yesterday's Action", "Yesterday's Chaos", "NBA Prospect Watch", "Key Players", game score recaps, or any content that belongs in the Games tab. If you catch yourself writing about game results as standalone sections in Section 2, STOP and move that content to Section 3 instead. Section 2 is ONLY about member picks and standings.
+- SECTION 3 (GAMES) is the ONLY place for game recaps, scores, and prospect performance reviews.
+- SECTION 4 (TODAY) is the ONLY place for today's preview and prospect watch for upcoming games.`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',

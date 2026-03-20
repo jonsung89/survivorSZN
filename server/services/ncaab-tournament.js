@@ -2092,12 +2092,23 @@ async function refreshGameFromESPN(tournamentId, gameId) {
     : statusType === 'STATUS_IN_PROGRESS' ? 'in_progress'
     : 'pending';
 
-  const team1EspnId = String(comp1.id);
-  const team2EspnId = String(comp2.id);
-  const team1Score = comp1.score != null ? parseInt(comp1.score) : null;
-  const team2Score = comp2.score != null ? parseInt(comp2.score) : null;
-  const winnerId = gameStatus === 'final' ? (comp1.winner ? team1EspnId : team2EspnId) : null;
-  const loserId = gameStatus === 'final' ? (comp1.winner ? team2EspnId : team1EspnId) : null;
+  // Match ESPN competitors to existing team1/team2 order in the database
+  // ESPN returns competitors in home/away order which may differ from bracket order
+  const compA = competitors.find(c => String(c.id) === String(game.team1_espn_id));
+  const compB = competitors.find(c => String(c.id) === String(game.team2_espn_id));
+  // If teams don't match existing order (e.g. teams not yet set), fall back to ESPN order
+  const team1Score = compA ? (compA.score != null ? parseInt(compA.score) : null)
+    : (comp1.score != null ? parseInt(comp1.score) : null);
+  const team2Score = compB ? (compB.score != null ? parseInt(compB.score) : null)
+    : (comp2.score != null ? parseInt(comp2.score) : null);
+  // Keep existing team1/team2 order, only fill in if not already set
+  const team1EspnId = game.team1_espn_id || String(comp1.id);
+  const team2EspnId = game.team2_espn_id || String(comp2.id);
+
+  const winnerComp = competitors.find(c => c.winner);
+  const loserComp = competitors.find(c => !c.winner);
+  const winnerId = gameStatus === 'final' && winnerComp ? String(winnerComp.id) : null;
+  const loserId = gameStatus === 'final' && loserComp ? String(loserComp.id) : null;
 
   // Extract venue and broadcast from gameInfo if available
   const gameInfo = data?.gameInfo;

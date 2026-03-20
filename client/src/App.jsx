@@ -37,6 +37,7 @@ import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 import AdminProspects from './pages/admin/AdminProspects';
 import AdminTournaments from './pages/admin/AdminTournaments';
 import AdminAPIReference from './pages/admin/AdminAPIReference';
+import AdminRecaps from './pages/admin/AdminRecaps';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import CookieConsentBanner from './components/CookieConsentBanner';
@@ -240,6 +241,7 @@ function AppRoutes() {
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="analytics/user-visits" element={<AdminUserVisits />} />
         <Route path="announcements" element={<AdminAnnouncements />} />
+        <Route path="recaps" element={<AdminRecaps />} />
         <Route path="api-reference" element={<AdminAPIReference />} />
       </Route>
 

@@ -3,7 +3,7 @@ import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Trophy, FileText, ArrowLeft, Shield, Sun, Moon,
   FlaskConical, Swords, ChevronDown, ChevronRight, MessageSquare, BarChart3,
-  Megaphone, Eye, Target, Database, Globe
+  Megaphone, Eye, Target, Database, Globe, Sparkles
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -42,6 +42,7 @@ const TOOL_NAV = [
     ],
   },
   { to: '/admin/announcements', icon: Megaphone, label: 'Announcements' },
+  { to: '/admin/recaps', icon: Sparkles, label: 'Recaps' },
   { to: '/admin/api-reference', icon: Globe, label: 'API Reference' },
 ];
 

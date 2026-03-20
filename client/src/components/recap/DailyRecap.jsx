@@ -56,9 +56,17 @@ function RecapMarkdown({ content, isDark }) {
         ul: ({ children }) => (
           <ul className="text-base text-fg/80 space-y-1 mb-3 ml-4 list-disc">{children}</ul>
         ),
-        ol: ({ children }) => (
-          <ol className="text-base text-fg/80 space-y-1 mb-3 ml-4 list-decimal">{children}</ol>
-        ),
+        ol: ({ children }) => {
+          const count = Array.isArray(children) ? children.filter(Boolean).length : 0;
+          const useTwoCol = count > 6;
+          return (
+            <ol className={`text-base text-fg/80 mb-3 ml-4 list-decimal ${useTwoCol ? 'columns-2 gap-x-6' : 'space-y-1'}`}
+              style={useTwoCol ? { columnGap: '2rem' } : undefined}
+            >
+              {children}
+            </ol>
+          );
+        },
         li: ({ children }) => (
           <li className="leading-relaxed">{children}</li>
         ),

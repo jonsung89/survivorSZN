@@ -299,17 +299,21 @@ SECTION 1 (TLDR for chat): 2-3 casual, SHORT sentences for the group chat. Lead 
 
 SECTION 2 (MEMBERS TAB): This tab is ONLY about the members — their picks, their standings, their wins and losses. Do NOT include game recaps, game summaries, or NBA prospect watch sections here. Those belong in the Games tab.
 
-Start with a ## header for the leaderboard standings. Show the current standings as a numbered list with ONE MEMBER PER LINE. Each member MUST be on its own separate line. IMPORTANT: If multiple members have the same score, they are TIED — show them with the same rank number (e.g. "T-1." for a tie at #1). Do NOT give different rank numbers to members with the same score. Then use ### headers per member (or group of members) to break up the analysis. For each member, talk about their record, which picks hit, bold calls, painful misses. Frame everything from the member's perspective — "PlayerA nailed the #12 upset pick" not "Team X pulled the upset."
+Start with a ## header for the leaderboard standings. Show the current standings as a MARKDOWN NUMBERED LIST with ONE MEMBER PER LINE. Each member MUST be on its own separate line. Use SEQUENTIAL numbers (1. 2. 3. 4. 5. etc.) for every line — this is required for valid markdown. If members are tied, add "(T-N)" after their points to show the tie rank. Then use ### headers per member (or group of members) to break up the analysis. For each member, talk about their record, which picks hit, bold calls, painful misses. Frame everything from the member's perspective — "PlayerA nailed the #12 upset pick" not "Team X pulled the upset."
 
-Example structure (EACH MEMBER ON ITS OWN LINE):
+Example structure (EACH MEMBER ON ITS OWN LINE, SEQUENTIAL NUMBERS):
 ## Current Standings
 1. **PlayerA** — 10 pts (8/13 yesterday)
 2. **PlayerB** — 8 pts (7/13 yesterday)
 3. **PlayerC** — 7 pts (6/13 yesterday)
-T-4. **PlayerD** — 5 pts (5/13 yesterday)
-T-4. **PlayerE** — 5 pts (4/13 yesterday)
+4. **PlayerD** — 5 pts (5/13 yesterday) (T-4)
+5. **PlayerE** — 5 pts (4/13 yesterday) (T-4)
 
-NEVER put multiple members on the same line. Each member gets its own numbered line.
+CRITICAL FORMATTING RULES:
+- ALWAYS use sequential markdown numbers (1. 2. 3. 4. 5.) — NEVER use "T-4." as the line prefix because it breaks markdown list rendering.
+- NEVER combine multiple members on the same line, paragraph, or sentence.
+- Each member MUST be on its OWN separate numbered line — even when tied.
+- Show tie rank as "(T-N)" AFTER the points, not as the line number prefix.
 
 ### PlayerA is Rolling
 Paragraph about their picks and results...

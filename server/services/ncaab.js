@@ -91,8 +91,10 @@ function parsePlayerStats(boxscore) {
         if (!stats[0] || stats[0] === '0' || stats[0] === '0:00') return;
 
         const player = {
+          id: athleteEntry.athlete?.id ? String(athleteEntry.athlete.id) : null,
           name: athleteEntry.athlete?.displayName || 'Unknown',
           shortName: athleteEntry.athlete?.shortName || athleteEntry.athlete?.displayName || 'Unknown',
+          jersey: athleteEntry.athlete?.jersey || null,
           position: athleteEntry.athlete?.position?.abbreviation || '',
           headshot: athleteEntry.athlete?.headshot?.href || null,
           starter: athleteEntry.starter || false,

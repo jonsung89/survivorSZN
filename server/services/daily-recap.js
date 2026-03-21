@@ -4,6 +4,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { db } = require('../db/supabase');
 const { calculateBracketScore, getSlotRound, getRegionForSlot, ROUND_BOUNDARIES, SEED_MATCHUPS } = require('../utils/bracket-slots');
+const ncaabProvider = require('./ncaab');
 
 /**
  * Gather all data needed to generate a daily recap.
@@ -96,19 +97,18 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
     return { ...m, dailyCorrect: correct, dailyIncorrect: incorrect, totalGamesForDay, correctPicks, incorrectPicks };
   });
 
-  // 7. NBA draft prospects on teams that played
+  // 7. NBA draft prospects on teams that played (with regular season stats)
   const teamIds = [...new Set(allGames.flatMap(g => [g.team1_espn_id, g.team2_espn_id].filter(Boolean)))];
   let prospects = [];
   if (teamIds.length > 0) {
-    // Get tournament teams for matching (team names are like "Duke Blue Devils", prospect schools are like "Duke")
     const teams = await db.getAll(
       `SELECT espn_team_id, name FROM tournament_teams WHERE tournament_id = $1 AND espn_team_id = ANY($2)`,
       [tournamentId, teamIds]
     );
     if (teams.length > 0) {
-      // Match prospects by checking if team name starts with prospect school name
       prospects = await db.getAll(
-        `SELECT dp.name, dp.school, dp.position, dp.rank, dp.headshot_url, tt.espn_team_id
+        `SELECT dp.name, dp.school, dp.position, dp.rank, dp.headshot_url, dp.espn_id, dp.jersey,
+                dp.espn_stats, dp.stats as tankathon_stats, tt.espn_team_id
          FROM draft_prospects dp
          JOIN tournament_teams tt ON tt.tournament_id = $2 AND tt.espn_team_id = ANY($3)
            AND tt.name ILIKE dp.school || '%'
@@ -116,6 +116,78 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
          ORDER BY dp.rank ASC`,
         [new Date().getFullYear(), tournamentId, teamIds]
       );
+    }
+  }
+
+  // 7b. Fetch box scores for yesterday's games (key players + prospect game stats)
+  const gameBoxScores = [];
+
+  // Build a map of prospect ESPN IDs for quick lookup
+  const prospectEspnIds = new Set(prospects.map(p => p.espn_id).filter(Boolean));
+
+  for (const game of allGames) {
+    if (!game.espn_event_id) continue;
+    try {
+      const details = await ncaabProvider.getGameDetails(game.espn_event_id, { cacheTtl: 300000 });
+      if (!details?.playerStats?.teams) continue;
+
+      const gameKeyPlayers = [];
+      const prospectGameStats = [];
+
+      for (const teamData of details.playerStats.teams) {
+        const allPlayers = [...(teamData.starters || []), ...(teamData.bench || [])];
+        for (const player of allPlayers) {
+          if (!player.stats || !player.name) continue;
+          // Parse stat columns (order matches ESPN: MIN, FG, 3PT, FT, OREB, DREB, REB, AST, STL, BLK, TO, PF, PTS)
+          const cols = details.playerStats.columns || [];
+          const statMap = {};
+          cols.forEach((col, i) => { statMap[col] = player.stats[i]; });
+
+          const pts = parseInt(statMap.PTS) || 0;
+          const reb = parseInt(statMap.REB) || 0;
+          const ast = parseInt(statMap.AST) || 0;
+          const stl = parseInt(statMap.STL) || 0;
+          const blk = parseInt(statMap.BLK) || 0;
+          const to = parseInt(statMap.TO) || 0;
+          const min = parseInt(statMap.MIN) || 0;
+
+          const playerStat = {
+            name: player.name,
+            jersey: player.jersey,
+            team: teamData.team?.abbreviation || teamData.team?.name || '',
+            pts, reb, ast, stl, blk, to, min,
+            fg: statMap.FG || '',
+            threes: statMap['3PT'] || '',
+            ft: statMap.FT || '',
+            espnId: player.id,
+          };
+
+          // Check if this player is an NBA prospect
+          if (player.id && prospectEspnIds.has(String(player.id))) {
+            prospectGameStats.push(playerStat);
+          }
+
+          // Key player: 15+ pts, or 10+ reb, or 7+ ast, or double-double
+          const categories = [pts >= 10 ? 1 : 0, reb >= 10 ? 1 : 0, ast >= 10 ? 1 : 0];
+          const isDoubleDouble = categories.filter(c => c).length >= 2;
+          if (pts >= 15 || reb >= 10 || ast >= 7 || isDoubleDouble || (stl + blk >= 5)) {
+            gameKeyPlayers.push(playerStat);
+          }
+        }
+      }
+
+      // Sort key players by points descending
+      gameKeyPlayers.sort((a, b) => b.pts - a.pts);
+
+      gameBoxScores.push({
+        espnGameId: game.espn_event_id,
+        team1: game.team1_name,
+        team2: game.team2_name,
+        keyPlayers: gameKeyPlayers.slice(0, 6), // top 6 performers
+        prospectStats: prospectGameStats,
+      });
+    } catch (err) {
+      console.warn(`[Recap] Failed to fetch box score for game ${game.espn_event_id}:`, err.message);
     }
   }
 
@@ -187,6 +259,7 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
     totalGames: totalGamesForDay,
     memberScores: memberPickAnalysis,
     prospects,
+    gameBoxScores,
     todaysGames,
     todayPickAnalysis,
     todayProspects,
@@ -245,9 +318,36 @@ async function generateRecap(data) {
     return `${m.displayName}: ${m.dailyCorrect}/${m.totalGamesForDay} correct${boldPicks.length > 0 ? ` | Bold correct: ${boldPicks.join(', ')}` : ''}`;
   }).join('\n');
 
-  const prospectsSummary = data.prospects.map(p =>
-    `#${p.rank} ${p.name} (${p.school}, ${p.position})`
-  ).join('\n');
+  // Build prospect summary with regular season averages
+  const prospectsSummary = data.prospects.map(p => {
+    const avg = p.espn_stats || p.tankathon_stats || {};
+    const seasonAvg = [
+      avg.ppg && `${avg.ppg} ppg`,
+      avg.rpg && `${avg.rpg} rpg`,
+      avg.apg && `${avg.apg} apg`,
+      avg.fgPct && `${avg.fgPct}% FG`,
+    ].filter(Boolean).join(', ');
+
+    // Find their game stats from box scores
+    const gameStats = data.gameBoxScores?.flatMap(g => g.prospectStats)
+      .find(s => s.espnId && String(s.espnId) === String(p.espn_id));
+
+    let gameLine = '';
+    if (gameStats) {
+      gameLine = ` | GAME STATS: ${gameStats.pts} PTS, ${gameStats.reb} REB, ${gameStats.ast} AST, ${gameStats.fg} FG, ${gameStats.threes} 3PT${gameStats.stl ? `, ${gameStats.stl} STL` : ''}${gameStats.blk ? `, ${gameStats.blk} BLK` : ''}, ${gameStats.min} MIN`;
+    }
+
+    return `#${p.rank} ${p.name} (${p.school}, ${p.position})${seasonAvg ? ` [Season avg: ${seasonAvg}]` : ''}${gameLine}`;
+  }).join('\n');
+
+  // Build key players summary from box scores
+  const keyPlayersSummary = (data.gameBoxScores || []).map(g => {
+    if (!g.keyPlayers?.length) return null;
+    const players = g.keyPlayers.map(p =>
+      `  ${p.name} (${p.team}): ${p.pts} PTS, ${p.reb} REB, ${p.ast} AST, ${p.fg} FG, ${p.threes} 3PT${p.stl >= 2 ? `, ${p.stl} STL` : ''}${p.blk >= 2 ? `, ${p.blk} BLK` : ''}, ${p.min} MIN`
+    ).join('\n');
+    return `${g.team1} vs ${g.team2}:\n${players}`;
+  }).filter(Boolean).join('\n\n');
 
   const todayGamesSummary = data.todaysGames.map(g =>
     `(${g.team1_seed}) ${g.team1_name} vs (${g.team2_seed}) ${g.team2_name}${g.start_time ? ` @ ${new Date(g.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Los_Angeles' })} PT` : ''}`
@@ -273,7 +373,8 @@ ${leaderboardSummary || 'No brackets submitted yet'}
 
 MEMBER PERFORMANCE:
 ${memberHighlights || 'No member data'}
-${data.prospects.length > 0 ? `\nNBA PROSPECTS WHO PLAYED:\n${prospectsSummary}` : ''}
+${data.prospects.length > 0 ? `\nNBA PROSPECTS WHO PLAYED (with actual game stats and season averages):\n${prospectsSummary}` : ''}
+${keyPlayersSummary ? `\nKEY PLAYER PERFORMANCES (box scores):\n${keyPlayersSummary}` : ''}
 ${data.todaysGames.length > 0 ? `\nTODAY'S GAMES:\n${todayGamesSummary}\n\nMEMBER PICKS FOR TODAY:\n${todayPicksSummary || 'No data'}${data.todayProspects.length > 0 ? `\n\nPROSPECTS PLAYING TODAY:\n${todayProspectsSummary}` : ''}` : ''}
 
 Generate FOUR sections separated by ===SEPARATOR===
@@ -333,7 +434,10 @@ Paragraph about the big upsets...
 Quick summary of expected results.
 
 ${data.prospects.length > 0 ? `### NBA Prospect Watch
-Dedicate a full section to NBA prospects who played yesterday. For each notable prospect, mention their projected draft position (e.g. "projected #1 pick"), their school, position, and how they performed. Call out prospects who showed out AND ones who disappeared. This section is important — fans care about future NBA talent.` : ''}
+Dedicate a full section to NBA prospects who played yesterday. You have their ACTUAL GAME STATS and SEASON AVERAGES above — use them accurately. Compare their game performance to their season averages. Call out prospects who showed out (exceeded their averages) AND ones who struggled (well below averages). For example, if a prospect averages 14 ppg but scored 0 points, that's a terrible game — say so. If someone averaging 8 ppg dropped 22, that's a breakout. Be honest and specific with the numbers. Do NOT fabricate any stats — only use the exact numbers provided.` : ''}
+
+${keyPlayersSummary ? `### Key Performers
+Highlight the standout players from yesterday's games using the actual box score stats provided. Focus on players who dominated (high scoring, double-doubles, efficient shooting), players who struggled despite expectations (low shooting %, high turnovers), and players who made clutch contributions in close games. Reference their actual stat lines — points, shooting splits, rebounds, assists. Do NOT make up stats.` : ''}
 
 SECTION 4 (TODAY TAB):${data.todaysGames.length > 0 ? ` Preview of today's slate.
 
@@ -360,7 +464,7 @@ CRITICAL SECTION BOUNDARIES — READ THIS CAREFULLY:
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 3072,
+    max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   });
 

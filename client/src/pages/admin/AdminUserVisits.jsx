@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Eye, Clock, ChevronDown, ChevronLeft, ChevronRight, Users, Copy, Check, X, FileText, MousePointerClick } from 'lucide-react';
+import { Eye, Clock, ChevronDown, ChevronLeft, ChevronRight, Users, Copy, Check, X, FileText, MousePointerClick, Monitor, Smartphone, Tablet } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { adminAPI } from '../../api';
 
@@ -167,6 +167,20 @@ function formatEventName(event, data) {
     leaderboard_bracket_navigate: 'Navigated leaderboard',
     survivor_week_change: 'Changed survivor week',
     strike_modify: 'Modified strike',
+    // Daily Recap
+    recap_view: 'Viewed daily recap',
+    recap_tab_switch: 'Switched recap tab',
+    recap_date_navigate: 'Navigated recap date',
+    // Live Feed
+    live_feed_view: 'Viewed live feed',
+    live_feed_play_click: 'Clicked live feed play',
+    live_feed_commentary_click: 'Clicked live feed commentary',
+    live_feed_new_plays_click: 'Scrolled to new plays',
+    // Bracket Challenge extras
+    prize_pot_click: 'Opened prize pot',
+    payment_status_toggle: 'Toggled payment status',
+    league_name_edit: 'Edited league name',
+    tournament_date_navigate: 'Navigated tournament date',
   };
 
   return labels[event] || event.replace(/_/g, ' ');
@@ -324,7 +338,16 @@ function UserVisitRow({ user, isExpanded, onToggle }) {
         onClick={onToggle}
       >
         <td className="px-4 py-2.5">
-          <div className="text-fg font-medium">{user.name}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-fg font-medium">{user.name}</span>
+            {user.deviceType && (
+              <span className="text-fg/40" title={user.deviceType}>
+                {user.deviceType === 'mobile' ? <Smartphone className="w-3.5 h-3.5" /> :
+                 user.deviceType === 'tablet' ? <Tablet className="w-3.5 h-3.5" /> :
+                 <Monitor className="w-3.5 h-3.5" />}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1 mt-0.5">
             <span className="text-fg/40 text-sm font-mono">{user.userId}</span>
             <button

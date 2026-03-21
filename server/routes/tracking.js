@@ -12,6 +12,13 @@ function getDeviceType(userAgent) {
   return 'desktop';
 }
 
+// Skip automated/bot traffic (headless browsers, Claude MCP, scrapers)
+function isBot(userAgent) {
+  if (!userAgent) return false;
+  const ua = userAgent.toLowerCase();
+  return /headless|puppeteer|playwright|selenium|phantom|crawl|spider|bot|scrape|curl|wget|node-fetch|undici/.test(ua);
+}
+
 // Get geolocation from IP (non-blocking, 3s timeout)
 async function getGeoFromIP(ip) {
   try {
@@ -37,6 +44,11 @@ router.post('/pageview', optionalAuth, async (req, res) => {
     const { path, anonId } = req.body;
     if (!path || typeof path !== 'string') {
       return res.status(400).json({ error: 'path is required' });
+    }
+
+    // Skip bot/automated traffic
+    if (isBot(req.headers['user-agent'])) {
+      return res.json({ ok: true });
     }
 
     const deviceType = getDeviceType(req.headers['user-agent']);
@@ -91,6 +103,11 @@ router.post('/event', optionalAuth, async (req, res) => {
     const { event, data, duration, sessionId } = req.body;
     if (!event || typeof event !== 'string') {
       return res.status(400).json({ error: 'event is required' });
+    }
+
+    // Skip bot/automated traffic
+    if (isBot(req.headers['user-agent'])) {
+      return res.json({ ok: true });
     }
 
     let userId = null;

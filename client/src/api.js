@@ -844,9 +844,15 @@ export const analyticsAPI = {
   },
 };
 
+// Skip tracking on localhost (dev / Claude MCP sessions)
+const isLocalhost = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+);
+
 // Tracking API (lightweight, fire-and-forget — uses plain fetch to avoid 401 redirect loops)
 export const trackingAPI = {
   pageView: (path) => {
+    if (isLocalhost) return;
     import('./utils/consent.js').then(({ shouldTrack }) => {
       if (!shouldTrack()) return;
       const token = getToken();
@@ -875,6 +881,7 @@ export const trackingAPI = {
     }).catch(() => {});
   },
   event: (eventName, data = {}, duration = null) => {
+    if (isLocalhost) return;
     import('./utils/consent.js').then(({ shouldTrack }) => {
       if (!shouldTrack()) return;
 

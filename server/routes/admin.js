@@ -2083,7 +2083,8 @@ router.get('/stats/user-visits', async (req, res) => {
         vs.sessions,
         COALESCE(le.city, pv_geo.city) AS city,
         COALESCE(le.region, pv_geo.region) AS region,
-        COALESCE(le.country, pv_geo.country) AS country
+        COALESCE(le.country, pv_geo.country) AS country,
+        pv_device.device_type
       FROM visitor_summary vs
       LEFT JOIN users u ON u.id = vs.user_id
       LEFT JOIN LATERAL (
@@ -2100,6 +2101,15 @@ router.get('/stats/user-visits', async (req, res) => {
           )
         ORDER BY created_at DESC LIMIT 1
       ) pv_geo ON le.city IS NULL
+      LEFT JOIN LATERAL (
+        SELECT device_type FROM page_views
+        WHERE device_type IS NOT NULL
+          AND (
+            (vs.user_id IS NOT NULL AND user_id = vs.user_id)
+            OR (vs.anon_id IS NOT NULL AND anon_id = vs.anon_id)
+          )
+        ORDER BY created_at DESC LIMIT 1
+      ) pv_device ON true
       ORDER BY vs.last_visit_at DESC
       LIMIT 200
     `;
@@ -2124,6 +2134,7 @@ router.get('/stats/user-visits', async (req, res) => {
           lastVisitAt: r.last_visit_at,
           sessions: r.sessions || [],
           location: r.city ? `${r.city}${r.region ? `, ${r.region}` : ''}` : null,
+          deviceType: r.device_type || null,
         };
       }),
     });

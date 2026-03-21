@@ -197,6 +197,12 @@ export default function useLiveGameFeed(sport, games, options = {}) {
           const bClock = parseClockToSeconds(b.clock?.displayValue || b.clock) ?? 1200;
           // Lower clock = later in the period (closer to end)
           if (aClock !== bClock) return aClock - bClock;
+          // At same game time: sort by total score (higher total = more recent play)
+          const aScore = (a.homeScore ?? 0) + (a.awayScore ?? 0);
+          const bScore = (b.homeScore ?? 0) + (b.awayScore ?? 0);
+          if (aScore !== bScore) return bScore - aScore;
+          // Same score + same time: commentary above plays
+          if (a.type !== b.type) return a.type === 'commentary' ? -1 : 1;
           // Tie-break by timestamp (wall clock)
           return b.timestamp - a.timestamp;
         });

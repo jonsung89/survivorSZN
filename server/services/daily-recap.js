@@ -9,8 +9,9 @@ const { calculateBracketScore, getSlotRound, getRegionForSlot, ROUND_BOUNDARIES,
  * Gather all data needed to generate a daily recap.
  */
 async function gatherRecapData(tournamentId, leagueId, recapDate) {
-  // 1. Yesterday's completed games
-  const games = await db.getAll(
+  // 1. Yesterday's completed games — use start_time for date grouping since late games
+  //    can finish after midnight PT but still belong to that day's slate
+  const allGames = await db.getAll(
     `SELECT tg.*,
             t1.name as team1_name, t1.seed as team1_seed, t1.logo as team1_logo, t1.color as team1_color, t1.abbreviation as team1_abbr,
             t2.name as team2_name, t2.seed as team2_seed, t2.logo as team2_logo, t2.color as team2_color, t2.abbreviation as team2_abbr
@@ -18,27 +19,10 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
      LEFT JOIN tournament_teams t1 ON t1.tournament_id = tg.tournament_id AND t1.espn_team_id = tg.team1_espn_id
      LEFT JOIN tournament_teams t2 ON t2.tournament_id = tg.tournament_id AND t2.espn_team_id = tg.team2_espn_id
      WHERE tg.tournament_id = $1 AND tg.status = 'final'
-       AND DATE(tg.completed_at AT TIME ZONE 'America/Los_Angeles') = $2
-     ORDER BY tg.completed_at ASC`,
+       AND DATE(tg.start_time AT TIME ZONE 'America/Los_Angeles') = $2
+     ORDER BY tg.start_time ASC`,
     [tournamentId, recapDate]
   );
-
-  // Also try start_time if completed_at doesn't have results
-  let allGames = games;
-  if (games.length === 0) {
-    allGames = await db.getAll(
-      `SELECT tg.*,
-              t1.name as team1_name, t1.seed as team1_seed, t1.logo as team1_logo, t1.color as team1_color, t1.abbreviation as team1_abbr,
-              t2.name as team2_name, t2.seed as team2_seed, t2.logo as team2_logo, t2.color as team2_color, t2.abbreviation as team2_abbr
-       FROM tournament_games tg
-       LEFT JOIN tournament_teams t1 ON t1.tournament_id = tg.tournament_id AND t1.espn_team_id = tg.team1_espn_id
-       LEFT JOIN tournament_teams t2 ON t2.tournament_id = tg.tournament_id AND t2.espn_team_id = tg.team2_espn_id
-       WHERE tg.tournament_id = $1 AND tg.status = 'final'
-         AND DATE(tg.start_time AT TIME ZONE 'America/Los_Angeles') = $2
-       ORDER BY tg.start_time ASC`,
-      [tournamentId, recapDate]
-    );
-  }
 
   // 2. Get the bracket challenge for this league/tournament
   const challenge = await db.getOne(
@@ -57,11 +41,13 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
     [challenge.id]
   ) : [];
 
-  // 4. Build results map for scoring
+  // 4. Build results map for scoring — only include games that started on or before the recap date
+  //    so standings reflect the state AT THE END of that day, not including later games
   const allTournamentGames = await db.getAll(
     `SELECT slot_number, winning_team_espn_id as winning_team_id, losing_team_espn_id as losing_team_id, status
-     FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL`,
-    [tournamentId]
+     FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL AND status = 'final'
+       AND DATE(start_time AT TIME ZONE 'America/Los_Angeles') <= $2`,
+    [tournamentId, recapDate]
   );
   const resultsMap = {};
   for (const g of allTournamentGames) {
@@ -83,16 +69,21 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
   }).sort((a, b) => b.totalScore - a.totalScore);
 
   // 6. Analyze picks for yesterday's games
-  const gameSlots = allGames.filter(g => g.slot_number).map(g => g.slot_number);
+  const gamesWithSlots = allGames.filter(g => g.slot_number);
+  const totalGamesForDay = gamesWithSlots.length;
   const memberPickAnalysis = memberScores.map(m => {
     let correct = 0;
     let incorrect = 0;
     const correctPicks = [];
     const incorrectPicks = [];
-    for (const game of allGames) {
-      if (!game.slot_number) continue;
+    for (const game of gamesWithSlots) {
       const pick = m.picks[game.slot_number] || m.picks[String(game.slot_number)];
-      if (!pick) continue;
+      if (!pick) {
+        // No pick = wrong — still counts against them
+        incorrect++;
+        incorrectPicks.push({ picked: '(no pick)', winner: game.winning_team_espn_id === game.team1_espn_id ? game.team1_name : game.team2_name });
+        continue;
+      }
       if (String(pick) === String(game.winning_team_espn_id)) {
         correct++;
         correctPicks.push({ team: game.winning_team_espn_id === game.team1_espn_id ? game.team1_name : game.team2_name, seed: game.winning_team_espn_id === game.team1_espn_id ? game.team1_seed : game.team2_seed });
@@ -102,7 +93,7 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
         incorrectPicks.push({ picked: pickedTeam, winner: game.winning_team_espn_id === game.team1_espn_id ? game.team1_name : game.team2_name });
       }
     }
-    return { ...m, dailyCorrect: correct, dailyIncorrect: incorrect, correctPicks, incorrectPicks };
+    return { ...m, dailyCorrect: correct, dailyIncorrect: incorrect, totalGamesForDay, correctPicks, incorrectPicks };
   });
 
   // 7. NBA draft prospects on teams that played
@@ -193,6 +184,7 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
   return {
     recapDate,
     games: allGames,
+    totalGames: totalGamesForDay,
     memberScores: memberPickAnalysis,
     prospects,
     todaysGames,
@@ -245,12 +237,12 @@ async function generateRecap(data) {
     // Check if this rank is a tie
     const countAtScore = top10.filter(x => x.totalScore === m.totalScore).length;
     const prefix = countAtScore > 1 ? `T-${rank}` : `${rank}`;
-    return `${prefix}. ${m.displayName}${m.bracketName ? ` (${m.bracketName})` : ''} — ${m.totalScore} pts, ${m.correctPicks} correct | Today: ${m.dailyCorrect}/${m.dailyCorrect + m.dailyIncorrect} correct`;
+    return `${prefix}. ${m.displayName}${m.bracketName ? ` (${m.bracketName})` : ''} — ${m.totalScore} pts, ${m.correctPicks} correct | Yesterday: ${m.dailyCorrect}/${m.totalGamesForDay} correct`;
   }).join('\n');
 
   const memberHighlights = data.memberScores.map(m => {
     const boldPicks = m.correctPicks.filter(p => p.seed >= 8).map(p => `(${p.seed}) ${p.team}`);
-    return `${m.displayName}: ${m.dailyCorrect}/${m.dailyCorrect + m.dailyIncorrect} correct${boldPicks.length > 0 ? ` | Bold correct: ${boldPicks.join(', ')}` : ''}`;
+    return `${m.displayName}: ${m.dailyCorrect}/${m.totalGamesForDay} correct${boldPicks.length > 0 ? ` | Bold correct: ${boldPicks.join(', ')}` : ''}`;
   }).join('\n');
 
   const prospectsSummary = data.prospects.map(p =>
@@ -303,11 +295,13 @@ Start with a ## header for the leaderboard standings. Show the current standings
 
 Example structure (EACH MEMBER ON ITS OWN LINE, SEQUENTIAL NUMBERS):
 ## Current Standings
-1. **PlayerA** — 10 pts (8/13 yesterday)
-2. **PlayerB** — 8 pts (7/13 yesterday)
-3. **PlayerC** — 7 pts (6/13 yesterday)
-4. **PlayerD** — 5 pts (5/13 yesterday) (T-4)
-5. **PlayerE** — 5 pts (4/13 yesterday) (T-4)
+1. **PlayerA** — 10 pts (8/${data.totalGames} yesterday)
+2. **PlayerB** — 8 pts (7/${data.totalGames} yesterday)
+3. **PlayerC** — 7 pts (6/${data.totalGames} yesterday)
+4. **PlayerD** — 5 pts (5/${data.totalGames} yesterday) (T-4)
+5. **PlayerE** — 5 pts (4/${data.totalGames} yesterday) (T-4)
+
+IMPORTANT: The denominator for "X/Y yesterday" must ALWAYS be ${data.totalGames} (total completed games), not the number of games a member happened to pick. If a member didn't pick a game, it still counts against them.
 
 CRITICAL FORMATTING RULES:
 - ALWAYS use sequential markdown numbers (1. 2. 3. 4. 5.) — NEVER use "T-4." as the line prefix because it breaks markdown list rendering.

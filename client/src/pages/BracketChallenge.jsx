@@ -456,7 +456,7 @@ export default function BracketChallenge() {
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <ShareLeagueButton onClick={() => setShowShareModal(true)} />
           {isCommissioner ? (
             <>
@@ -484,7 +484,29 @@ export default function BracketChallenge() {
               <span className="hidden sm:inline">History</span>
             </button>
           )}
+          {/* Prize Pot badge */}
+          {entryFee > 0 && (
+            <button
+              onClick={() => setShowPaymentStatus(true)}
+              className="btn-secondary flex items-center gap-1.5 text-sm py-2.5"
+            >
+              <DollarSign className="w-4 h-4 text-green-500" />
+              <span className="font-semibold text-fg">${(entryFee * paidCount).toLocaleString()}</span>
+              <span className="text-fg/40">·</span>
+              <span className={paidCount === members.length ? 'text-green-500 font-medium' : 'text-fg/60'}>
+                {paidCount}/{members.length} Paid
+              </span>
+            </button>
+          )}
         </div>
+
+        {/* Unpaid reminder */}
+        {!isCommissioner && !currentUserPaid && entryFee > 0 && (
+          <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-fg/[0.06] border border-amber-500/30">
+            <DollarSign className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <span className="text-sm font-medium text-fg/80">You haven't been marked as paid yet</span>
+          </div>
+        )}
       </div>
 
       {/* Tournament Games — show when tournament has started (regardless of challenge status) */}
@@ -503,11 +525,10 @@ export default function BracketChallenge() {
       )}
       */}
 
-      {/* Countdown + Prize Pot — side by side on desktop */}
+      {/* Countdown */}
       {(() => {
         const showCountdown = isOpen && !isTournamentLocked && lockCountdown && fieldAnnounced;
-        const showPrizePot = entryFee > 0;
-        if (!showCountdown && !showPrizePot) return null;
+        if (!showCountdown) return null;
 
         return (
           <div className="grid gap-4 mb-5 grid-cols-1">
@@ -551,192 +572,7 @@ export default function BracketChallenge() {
               </div>
             )}
 
-            {showPrizePot && (
-              <div className="glass-card rounded-xl p-4 sm:p-5 animate-in">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
-                      <DollarSign className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-fg/60 text-sm">Prize Pot</p>
-                      <p className="text-2xl font-bold text-fg">
-                        ${(entryFee * paidCount).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-4 sm:gap-6">
-                    <div className="text-center">
-                      <p className="text-fg/60 text-sm">Per Bracket</p>
-                      <p className="text-lg font-semibold text-fg">${entryFee}</p>
-                    </div>
-                    <button
-                      onClick={() => setShowPaymentStatus(true)}
-                      className="text-center hover:bg-fg/5 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
-                    >
-                      <p className="text-fg/60 text-sm">Paid</p>
-                      <p className="text-lg font-semibold text-green-500">
-                        {paidCount}/{members.length}
-                      </p>
-                    </button>
-                    <div className="text-center">
-                      <p className="text-fg/60 text-sm">Entries</p>
-                      <p className="text-lg font-semibold text-fg">{leaderboard.length}</p>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-fg/40 text-sm mt-3 pt-3 border-t border-fg/10">
-                  💰 Pot splits evenly among winners. Each submitted bracket = one ${entryFee} entry.
-                </p>
-
-                {/* Unpaid reminder for current user */}
-                {!isCommissioner && !currentUserPaid && entryFee > 0 && (
-                  <div className="flex items-center gap-2 mt-3 py-2 px-3 rounded-lg bg-fg/[0.06] border border-amber-500/30">
-                    <DollarSign className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                    <span className="text-sm font-medium text-fg/80">You haven't been marked as paid yet</span>
-                  </div>
-                )}
-
-                {/* Payment Methods */}
-                {editingPayment ? (
-                  <div className="mt-3 pt-3 border-t border-fg/10">
-                    <p className="text-sm font-medium text-fg/70 mb-3">Payment Methods</p>
-                    <div className="space-y-2">
-                      {paymentDraft.map((pm, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <select
-                            value={pm.platform}
-                            onChange={(e) => updatePaymentMethod(idx, 'platform', e.target.value)}
-                            className="input-field !w-auto text-sm py-1.5 flex-shrink-0"
-                          >
-                            {Object.entries(PAYMENT_PLATFORMS).map(([key, cfg]) => (
-                              <option key={key} value={key}>{cfg.name}</option>
-                            ))}
-                          </select>
-                          <input
-                            type="text"
-                            value={pm.handle}
-                            onChange={(e) => updatePaymentMethod(idx, 'handle', e.target.value)}
-                            placeholder={PAYMENT_PLATFORMS[pm.platform]?.placeholder}
-                            className="input-field text-sm py-1.5 flex-1"
-                          />
-                          <button
-                            onClick={() => removePaymentMethod(idx)}
-                            className="p-1.5 text-fg/40 hover:text-red-400 transition-colors flex-shrink-0"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between mt-3">
-                      {paymentDraft.length < Object.keys(PAYMENT_PLATFORMS).length ? (
-                        <button
-                          onClick={addPaymentMethod}
-                          className={`text-sm transition-colors ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-nfl-blue hover:text-nfl-blue/80'}`}
-                        >
-                          + Add method
-                        </button>
-                      ) : <span />}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setEditingPayment(false)}
-                          className="px-3 py-1.5 text-sm text-fg/60 hover:text-fg transition-colors"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSavePayment}
-                          disabled={savingPayment}
-                          className={`px-3 py-1.5 text-sm text-white rounded-lg transition-colors disabled:opacity-50 ${isDark ? 'bg-blue-600 hover:bg-blue-500' : 'bg-nfl-blue hover:bg-nfl-blue/90'}`}
-                        >
-                          {savingPayment ? 'Saving...' : 'Save'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : paymentMethods.length > 0 ? (
-                  <div className="mt-3 pt-3 border-t border-fg/10">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-base font-semibold text-fg/80">Payment</p>
-                      {isCommissioner && (
-                        <button onClick={handleEditPayment} className="p-1 text-fg/40 hover:text-fg/70 transition-colors">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                    {currentUserPaid && !isCommissioner ? (
-                      <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-fg/[0.06]">
-                        <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        <span className="text-sm font-medium text-fg/80">You're all paid up</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2.5">
-                        {paymentMethods.map((pm, idx) => {
-                          const link = getPaymentLink(pm.platform, pm.handle);
-                          const platformColor = PAYMENT_PLATFORMS[pm.platform]?.color || '#666';
-                          const copyHandle = () => {
-                            navigator.clipboard.writeText(pm.handle);
-                            showToast('Copied to clipboard', 'success');
-                          };
-                          return (
-                            <div key={idx} className="flex items-center gap-2">
-                              {link ? (
-                                <a
-                                  href={link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all active:scale-[0.98]"
-                                  style={{ backgroundColor: platformColor + '12', border: `1px solid ${platformColor}30` }}
-                                >
-                                  <span
-                                    className="text-sm font-bold px-2 py-0.5 rounded text-white flex-shrink-0"
-                                    style={{ backgroundColor: platformColor }}
-                                  >
-                                    {PAYMENT_PLATFORMS[pm.platform]?.name || pm.platform}
-                                  </span>
-                                  <span className="text-base font-medium text-fg/80 truncate flex-1">{pm.handle}</span>
-                                  <ExternalLink className="w-4 h-4 text-fg/30 flex-shrink-0" />
-                                </a>
-                              ) : (
-                                <div
-                                  className="flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
-                                  style={{ backgroundColor: platformColor + '12', border: `1px solid ${platformColor}30` }}
-                                >
-                                  <span
-                                    className="text-sm font-bold px-2 py-0.5 rounded text-white flex-shrink-0"
-                                    style={{ backgroundColor: platformColor }}
-                                  >
-                                    {PAYMENT_PLATFORMS[pm.platform]?.name || pm.platform}
-                                  </span>
-                                  <span className="text-base font-medium text-fg/80 truncate flex-1">{pm.handle}</span>
-                                </div>
-                              )}
-                              <button
-                                onClick={copyHandle}
-                                className="p-2 rounded-lg bg-fg/5 hover:bg-fg/10 text-fg/40 hover:text-fg/70 transition-colors flex-shrink-0"
-                                title="Copy username"
-                              >
-                                <Copy className="w-4 h-4" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ) : isCommissioner ? (
-                  <div className="mt-3 pt-3 border-t border-fg/10">
-                    <button
-                      onClick={handleEditPayment}
-                      className="text-sm text-fg/40 hover:text-fg/60 transition-colors"
-                    >
-                      + Add payment info
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            )}
+            {/* Prize pot moved to header badge */}
           </div>
         );
       })()}

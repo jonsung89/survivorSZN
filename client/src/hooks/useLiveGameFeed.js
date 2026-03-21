@@ -160,6 +160,10 @@ export default function useLiveGameFeed(sport, games, options = {}) {
         const pid = play.participants?.[0]?.playerId;
         const playerStatLine = pid ? getPlayerStatLine(gameState, pid, play) : null;
 
+        // Get assister's assist count for scoring plays
+        const assisterId = play.scoringPlay ? play.participants?.[1]?.playerId : null;
+        const assisterAssists = assisterId ? (gameState?.playerStats?.get(assisterId)?.assists || 0) : 0;
+
         const item = {
           id: `play-${play.id}`,
           type: 'play',
@@ -174,6 +178,7 @@ export default function useLiveGameFeed(sport, games, options = {}) {
           period: play.period,
           clock: play.clock,
           playerStatLine,
+          assisterAssists,
         };
         newItems.push(item);
       }

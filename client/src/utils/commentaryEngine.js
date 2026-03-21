@@ -464,8 +464,10 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
         streak.consecutiveScores = 0;
 
         if (streak.consecutiveMisses >= 4 && canEmit(gameState, `cold_${pid}`, now, 20000)) {
+          const ps = getOrCreatePlayerStats(gameState, pid);
+          const fgLine = ps.fgAttempted > 0 ? ` (${ps.fgMade}/${ps.fgAttempted} FG)` : '';
           commentary.push(makeCommentary('player_cold',
-            `${playerName(play)} has missed ${streak.consecutiveMisses} straight from the field`,
+            `${playerName(play)} has missed ${streak.consecutiveMisses} straight from the field${fgLine}`,
             { icon: '❄️', teamColor: playTeam.color, teamLogo: playTeam.logo, priority: 4, ...playerVisuals(play, playTeam) }
           ));
         }
@@ -830,17 +832,42 @@ export function getPlayerStatLine(gameState, playerId, play) {
   const ps = gameState?.playerStats?.get(playerId);
   if (!ps) return null;
 
+  const playText = ((play?.shortText || '') + ' ' + (play?.text || '')).toLowerCase();
+  const isSteal = playText.includes('steal');
+  const isBlock = playText.includes('block');
+  const isTurnover = playText.includes('turnover');
+
   const parts = [];
-  if (ps.points > 0) parts.push(`${ps.points} PTS`);
-  if (play?.scoreValue === 3 && ps.threeAttempted > 0) {
-    const pct = Math.round(ps.threeMade / ps.threeAttempted * 100);
-    parts.push(`3PT ${ps.threeMade}/${ps.threeAttempted} (${pct}%)`);
+
+  // For scoring plays, lead with points and shooting
+  if (play?.scoringPlay) {
+    if (ps.points > 0) parts.push(`${ps.points} PTS`);
+    if (play.scoreValue === 3 && ps.threeAttempted > 0) {
+      const pct = Math.round(ps.threeMade / ps.threeAttempted * 100);
+      parts.push(`3PT ${ps.threeMade}/${ps.threeAttempted} (${pct}%)`);
+    }
+    if (ps.fgAttempted > 0 && play.scoreValue !== 3) {
+      parts.push(`FG ${ps.fgMade}/${ps.fgAttempted}`);
+    }
+    if (ps.rebounds >= 3) parts.push(`${ps.rebounds} REB`);
+    if (ps.assists >= 2) parts.push(`${ps.assists} AST`);
   }
-  if (ps.fgAttempted > 0 && play?.scoreValue !== 3) {
-    parts.push(`FG ${ps.fgMade}/${ps.fgAttempted}`);
+  // For steals, lead with steal count
+  else if (isSteal) {
+    if (ps.steals > 0) parts.push(`${ps.steals} STL`);
+    if (ps.points > 0) parts.push(`${ps.points} PTS`);
   }
-  if (ps.rebounds >= 3) parts.push(`${ps.rebounds} REB`);
-  if (ps.assists >= 2) parts.push(`${ps.assists} AST`);
+  // For blocks, lead with block count
+  else if (isBlock) {
+    if (ps.blocks > 0) parts.push(`${ps.blocks} BLK`);
+    if (ps.points > 0) parts.push(`${ps.points} PTS`);
+  }
+  // For turnovers, show TO count and points
+  else if (isTurnover) {
+    if (ps.turnovers > 0) parts.push(`${ps.turnovers} TO`);
+    if (ps.points > 0) parts.push(`${ps.points} PTS`);
+    if (ps.fgAttempted > 0) parts.push(`FG ${ps.fgMade}/${ps.fgAttempted}`);
+  }
 
   return parts.length > 0 ? parts.join(' · ') : null;
 }

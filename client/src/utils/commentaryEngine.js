@@ -159,6 +159,14 @@ function makeCommentary(kind, text, opts = {}) {
     playAwayScore: opts.playAwayScore ?? null,
     playPeriod: opts.playPeriod ?? null,
     playClock: opts.playClock ?? null,
+    // If set, this commentary should be merged into the play item instead of shown separately
+    mergeWithPlay: opts.mergeWithPlay || false,
+    // The play ID this commentary was triggered by (for merging)
+    triggerPlayId: opts.triggerPlayId || null,
+    // Enrichment type for merged commentary — tells getPlayAction how to weave it in
+    enrichType: opts.enrichType || null,
+    // Extra data for enrichment (e.g., streak count, milestone value)
+    enrichData: opts.enrichData || null,
   };
 }
 
@@ -386,11 +394,25 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
     }
 
     // ── Scoring Run Detection ────────────────────────────────────────
+    // Emit run commentary when the RUNNING team scores (not when opponent breaks it)
     if (play.scoringPlay && playTeam) {
       const run = gameState.runTracker;
       if (run.teamId === playTeam.id) {
-        // Same team scoring
+        // Same team scoring — extend the run
         run.points += play.scoreValue || 0;
+
+        // Emit commentary on the running team's score when they hit 8+ points
+        const elapsed = getElapsedSeconds(run.startClock, run.startPeriod, clock, period, courtType);
+        const timeStr = elapsed > 0 ? ` over the last ${formatClockDuration(elapsed)}` : '';
+        if (run.points >= 8 && run.opponentPoints <= 2 && canEmit(gameState, 'run', now, 15000)) {
+          const runTeam = run.teamId === homeTeam?.id ? homeTeam : awayTeam;
+          const runText = run.opponentPoints === 0
+            ? `${teamName(runTeam)} on a ${run.points}-0 run${timeStr}`
+            : `${teamName(runTeam)} on a ${run.points}-${run.opponentPoints} run${timeStr}`;
+          commentary.push(makeCommentary('run', runText, {
+            icon: '🏃', teamColor: runTeam.color, teamLogo: runTeam.logo, priority: 7,
+          }));
+        }
       } else if (run.teamId === null) {
         // Start new run
         run.teamId = playTeam.id;
@@ -399,53 +421,27 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
         run.startClock = clock;
         run.startPeriod = period;
       } else {
-        // Other team scored — check if previous run was significant
-        if (run.points >= 8 && run.opponentPoints <= 2 && canEmit(gameState, 'run', now)) {
-          const runTeam = run.teamId === homeTeam?.id ? homeTeam : awayTeam;
-          const elapsed = getElapsedSeconds(run.startClock, run.startPeriod, clock, period, courtType);
-          const timeStr = elapsed > 0 ? ` over the last ${formatClockDuration(elapsed)}` : '';
-          const runText = run.opponentPoints === 0
-            ? `${teamName(runTeam)} on a ${run.points}-0 run${timeStr}`
-            : `${teamName(runTeam)} on a ${run.points}-${run.opponentPoints} run${timeStr}`;
-          commentary.push(makeCommentary('run', runText, {
-            icon: '🏃', teamColor: runTeam.color, teamLogo: runTeam.logo, priority: 7,
-          }));
+        // Other team scored — track opponent points in the run
+        run.opponentPoints += play.scoreValue || 0;
+
+        // If opponent has scored enough, the run is over
+        if (run.opponentPoints > 4) {
+          // Start new run for this team
+          run.teamId = playTeam.id;
+          run.points = play.scoreValue || 0;
+          run.opponentPoints = 0;
+          run.startClock = clock;
+          run.startPeriod = period;
         }
-        // Start new run for this team
-        run.teamId = playTeam.id;
-        run.points = play.scoreValue || 0;
-        run.opponentPoints = 0;
-        run.startClock = clock;
-        run.startPeriod = period;
       }
     } else if (play.scoringPlay && !playTeam) {
       // Unknown team scored — break any run
       gameState.runTracker.teamId = null;
     }
-    // Track opponent points in a run (when other team scores small)
-    if (play.scoringPlay && playTeam && gameState.runTracker.teamId && gameState.runTracker.teamId !== playTeam.id) {
-      gameState.runTracker.opponentPoints += play.scoreValue || 0;
-      // If opponent has scored enough, end the run
-      if (gameState.runTracker.opponentPoints > 4) {
-        // Check if run was significant before resetting
-        const run = gameState.runTracker;
-        if (run.points >= 12 && canEmit(gameState, 'run_broken', now)) {
-          const runTeam = run.teamId === homeTeam?.id ? homeTeam : awayTeam;
-          commentary.push(makeCommentary('run_broken',
-            `${teamName(otherTeam)} finally responds — ${teamName(runTeam)}'s ${run.points}-${run.opponentPoints} run is over`,
-            { icon: '✋', priority: 5 }
-          ));
-        }
-        run.teamId = playTeam.id;
-        run.points = play.scoreValue || 0;
-        run.opponentPoints = 0;
-        run.startClock = clock;
-        run.startPeriod = period;
-      }
-    }
 
-    // ── Player Scoring Streak ────────────────────────────────────────
-    if (pid && play.shootingPlay && playTeam) {
+    // ── Player Scoring Streak (field goals only, not free throws) ───
+    const isFreeThrow = play.pointsAttempted === 1 || play.scoreValue === 1;
+    if (pid && play.shootingPlay && !isFreeThrow && playTeam) {
       const streak = getOrCreatePlayerStreak(gameState, pid);
       const ps = getOrCreatePlayerStats(gameState, pid);
 
@@ -456,7 +452,10 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
         if (streak.consecutiveScores >= 3 && canEmit(gameState, `streak_${pid}`, now)) {
           commentary.push(makeCommentary('player_streak',
             `${playerName(play)} is on fire — ${streak.consecutiveScores} straight buckets (${ps.points} PTS)`,
-            { icon: '🔥', teamColor: playTeam.color, teamLogo: playTeam.logo, priority: 7, ...playerVisuals(play, playTeam) }
+            { icon: '🔥', teamColor: playTeam.color, teamLogo: playTeam.logo, priority: 7,
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'hot_streak', enrichData: { count: streak.consecutiveScores, points: ps.points },
+              ...playerVisuals(play, playTeam) }
           ));
         }
       } else if (!play.scoringPlay) {
@@ -464,11 +463,13 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
         streak.consecutiveScores = 0;
 
         if (streak.consecutiveMisses >= 4 && canEmit(gameState, `cold_${pid}`, now, 20000)) {
-          const ps = getOrCreatePlayerStats(gameState, pid);
-          const fgLine = ps.fgAttempted > 0 ? ` (${ps.fgMade}/${ps.fgAttempted} FG)` : '';
+          const fgLine = ps.fgAttempted > 0 ? `${ps.fgMade}/${ps.fgAttempted}` : '';
           commentary.push(makeCommentary('player_cold',
-            `${playerName(play)} has missed ${streak.consecutiveMisses} straight from the field${fgLine}`,
-            { icon: '❄️', teamColor: playTeam.color, teamLogo: playTeam.logo, priority: 4, ...playerVisuals(play, playTeam) }
+            `${playerName(play)} has missed ${streak.consecutiveMisses} straight from the field (${fgLine} FG)`,
+            { icon: '❄️', teamColor: playTeam.color, teamLogo: playTeam.logo, priority: 4,
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'cold_streak', enrichData: { count: streak.consecutiveMisses, fg: fgLine },
+              ...playerVisuals(play, playTeam) }
           ));
         }
       }
@@ -485,7 +486,10 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
         if (streak.consecutiveFTs >= 8 && canEmit(gameState, `ft_streak_${pid}`, now, 20000)) {
           commentary.push(makeCommentary('ft_streak',
             `Perfect from the line — ${playerName(play)} is ${ps.ftMade}/${ps.ftAttempted} FT`,
-            { icon: '🎯', priority: 4, ...playerVisuals(play, playTeam) }
+            { icon: '🎯', priority: 4,
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'ft_perfect', enrichData: { made: ps.ftMade, attempted: ps.ftAttempted },
+              ...playerVisuals(play, playTeam) }
           ));
         }
       } else {
@@ -494,7 +498,10 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
         if (streak.consecutiveFTMisses >= 3 && canEmit(gameState, `ft_miss_${pid}`, now, 20000)) {
           commentary.push(makeCommentary('ft_drought',
             `Struggling at the line — ${playerName(play)} has missed ${streak.consecutiveFTMisses} straight free throws`,
-            { icon: '😬', priority: 4, ...playerVisuals(play, playTeam) }
+            { icon: '😬', priority: 4,
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'ft_cold', enrichData: { count: streak.consecutiveFTMisses },
+              ...playerVisuals(play, playTeam) }
           ));
         }
       }
@@ -509,7 +516,10 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
           if (canEmit(gameState, `milestone_${pid}_${m}`, now, 0)) {
             commentary.push(makeCommentary('scoring_milestone',
               `${playerName(play)} now has ${ps.points} POINTS tonight!`,
-              { icon: m >= 30 ? '💥' : '⭐', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: m >= 30 ? 9 : 7, ...playerVisuals(play, playTeam) }
+              { icon: m >= 30 ? '💥' : '⭐', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: m >= 30 ? 9 : 7,
+                mergeWithPlay: true, triggerPlayId: play.id,
+                enrichType: 'milestone', enrichData: { points: ps.points, milestone: m },
+                ...playerVisuals(play, playTeam) }
             ));
           }
           break;
@@ -523,7 +533,10 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
       if (ps.fgMade >= 5 && ps.fgMade === ps.fgAttempted && canEmit(gameState, `perfect_${pid}`, now, 30000)) {
         commentary.push(makeCommentary('perfect_shooting',
           `${playerName(play)} is ${ps.fgMade}-for-${ps.fgAttempted} from the field — hasn't missed!`,
-          { icon: '🎯', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: 6, ...playerVisuals(play, playTeam) }
+          { icon: '🎯', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: 6,
+            mergeWithPlay: true, triggerPlayId: play.id,
+            enrichType: 'perfect_fg', enrichData: { made: ps.fgMade, attempted: ps.fgAttempted },
+            ...playerVisuals(play, playTeam) }
         ));
       }
     }
@@ -634,24 +647,31 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
 
     // ── And-One Detection ────────────────────────────────────────────
     if (play.scoringPlay && play.shootingPlay && play.scoreValue >= 2 && playTeam) {
-      // Check if next play (or play text) mentions foul
       if (playText.includes('and one') || playText.includes('and-one') || playText.includes('and 1')) {
         if (canEmit(gameState, 'and_one', now)) {
           commentary.push(makeCommentary('and_one',
             `AND ONE! ${playerName(play)} scores through contact`,
-            { icon: '💪', teamColor: playTeam.color, teamLogo: playTeam.logo, priority: 7, ...playerVisuals(play, playTeam) }
+            { icon: '💪', teamColor: playTeam.color, teamLogo: playTeam.logo, priority: 7,
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'and_one',
+              ...playerVisuals(play, playTeam) }
           ));
         }
       }
     }
 
     // ── Buzzer Beater ────────────────────────────────────────────────
-    if (play.scoringPlay && clock != null && clock <= 2) {
+    // Only field goals (not free throws) at 0:00 or 0:01 — actual buzzer beaters
+    if (play.scoringPlay && play.scoreValue >= 2 && clock != null && clock <= 1) {
       if (canEmit(gameState, 'buzzer_beater', now, 0)) {
         const periodLabel = period === 1 ? 'the first half' : period === 2 ? 'the second half' : `OT${period - 2}`;
+        const shotDesc = play.scoreValue === 3 ? 'THREE at the buzzer' : 'BUZZER BEATER';
         commentary.push(makeCommentary('buzzer_beater',
-          `BUZZER BEATER by ${playerName(play)} at the end of ${periodLabel}!`,
-          { icon: '🚨', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: 10, ...playerVisuals(play, playTeam) }
+          `${shotDesc} by ${playerName(play)} at the end of ${periodLabel}!`,
+          { icon: '🚨', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: 10,
+            mergeWithPlay: true, triggerPlayId: play.id,
+            enrichType: 'buzzer_beater', enrichData: { periodLabel },
+            ...playerVisuals(play, playTeam) }
         ));
       }
     }
@@ -682,18 +702,27 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
           const shotType = play.scoreValue === 3 ? 'Three-pointer' : 'Basket';
           commentary.push(makeCommentary('game_tying',
             `GAME TIED! ${shotType} by ${playerName(play)} with ${clockDisplay} remaining!`,
-            { icon: '🚨', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: 10, ...playerVisuals(play, playTeam) }
+            { icon: '🚨', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: 10,
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'game_tying', enrichData: { clockDisplay },
+              ...playerVisuals(play, playTeam) }
           ));
         }
       }
 
-      // Go-ahead bucket
-      if (play.scoringPlay && leadTeamId === playTeam?.id && clock != null && clock <= 30) {
+      // Go-ahead bucket — only when the scoring team actually TAKES the lead
+      // (they must have been tied or trailing before this play)
+      if (play.scoringPlay && leadTeamId === playTeam?.id &&
+          gameState.currentLeadTeam !== playTeam?.id &&
+          clock != null && clock <= 30) {
         if (canEmit(gameState, 'go_ahead', now, 0)) {
           const clockDisplay = play.clock?.displayValue || play.clock || '';
           commentary.push(makeCommentary('go_ahead',
             `GO-AHEAD BUCKET by ${playerName(play)} with ${clockDisplay} left!`,
-            { icon: '🚨', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: 10, ...playerVisuals(play, playTeam) }
+            { icon: '🚨', teamColor: playTeam?.color, teamLogo: playTeam?.logo, priority: 10,
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'go_ahead', enrichData: { clockDisplay },
+              ...playerVisuals(play, playTeam) }
           ));
         }
       }

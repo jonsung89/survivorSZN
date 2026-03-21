@@ -108,8 +108,15 @@ export default function useLiveGameFeed(sport, games, options = {}) {
 
       // On first poll, skip commentary — it would flood the feed with old events.
       // Commentary engine still ran above to build game state for future polls.
+      // Collect merge-able commentary (keyed by triggerPlayId) to attach to play items
+      const mergeMap = new Map(); // playId → commentary item
       if (!isFirstPoll) {
         for (const c of commentaryItems) {
+          if (c.mergeWithPlay && c.triggerPlayId) {
+            // Don't add as separate feed item — merge into the play item below
+            mergeMap.set(c.triggerPlayId, c);
+            continue;
+          }
           const item = {
             id: `commentary-${gameId}-${c.kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             type: 'commentary',
@@ -164,6 +171,9 @@ export default function useLiveGameFeed(sport, games, options = {}) {
         const assisterId = play.scoringPlay ? play.participants?.[1]?.playerId : null;
         const assisterAssists = assisterId ? (gameState?.playerStats?.get(assisterId)?.assists || 0) : 0;
 
+        // Check if there's a merged commentary for this play (buzzer beater, go-ahead, etc.)
+        const mergedCommentary = mergeMap.get(play.id) || null;
+
         const item = {
           id: `play-${play.id}`,
           type: 'play',
@@ -179,6 +189,8 @@ export default function useLiveGameFeed(sport, games, options = {}) {
           clock: play.clock,
           playerStatLine,
           assisterAssists,
+          // Merged commentary replaces the default play description
+          mergedCommentary,
         };
         newItems.push(item);
       }

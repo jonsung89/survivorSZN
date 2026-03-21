@@ -165,7 +165,7 @@ function GameScoreLine({ homeTeam, awayTeam, homeScore, awayScore, period, clock
 
 // ── Play Item ────────────────────────────────────────────────────────────
 function PlayItem({ item, isDark, tl, onGameClick }) {
-  const { play, homeTeam, awayTeam, homeScore, awayScore, period, clock, playerStatLine, assisterAssists, gameId } = item;
+  const { play, homeTeam, awayTeam, homeScore, awayScore, period, clock, playerStatLine, assisterAssists, gameId, mergedCommentary } = item;
 
   const playTeam = play.team?.id === homeTeam?.id ? homeTeam : play.team?.id === awayTeam?.id ? awayTeam : null;
   const teamColor = playTeam?.color || '#666';
@@ -193,7 +193,7 @@ function PlayItem({ item, isDark, tl, onGameClick }) {
   return (
     <div
       className={`flex items-center gap-4 px-4 sm:gap-5 sm:px-5 py-2.5 cursor-pointer transition-colors ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.03]'}`}
-      style={{ borderLeft: `3px solid ${teamColor}` }}
+      style={{ borderLeft: `3px solid ${mergedCommentary ? '#f59e0b' : teamColor}` }}
       onClick={() => onGameClick?.(gameId)}
     >
       {/* Avatar area */}
@@ -259,7 +259,8 @@ function PlayItem({ item, isDark, tl, onGameClick }) {
       {/* Play content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1.5 flex-wrap">
-          <span className="text-base text-fg">
+          <span className={`text-base text-fg ${mergedCommentary ? 'font-semibold' : ''}`}>
+            {mergedCommentary?.icon && <span className="mr-1">{mergedCommentary.icon}</span>}
             {participant && (
               <span className="font-semibold">
                 {participant.jersey ? `#${participant.jersey} ` : ''}
@@ -267,14 +268,17 @@ function PlayItem({ item, isDark, tl, onGameClick }) {
               </span>
             )}
             {participant && ' '}
-            <span className={`${isScoring ? 'font-medium text-fg/80' : isMiss ? 'text-fg/60' : isBlock || isSteal ? 'text-fg font-medium' : isTurnover ? 'text-fg/70' : 'text-fg/80'}`}>
-              {getPlayAction(play, { homeScore, awayScore, period, clock })}
+            <span className={mergedCommentary
+              ? 'font-semibold text-fg'
+              : `${isScoring ? 'font-medium text-fg/80' : isMiss ? 'text-fg/60' : isBlock || isSteal ? 'text-fg font-medium' : isTurnover ? 'text-fg/70' : 'text-fg/80'}`
+            }>
+              {getEnrichedPlayAction(play, mergedCommentary, { homeScore, awayScore, period, clock })}
             </span>
           </span>
         </div>
 
-        {/* Assist line */}
-        {hasAssist && (
+        {/* Assist line (skip when merged commentary already covers it) */}
+        {hasAssist && !mergedCommentary && (
           <div className="text-sm sm:text-base text-fg/70">
             Assist: <span className="font-medium text-fg/80">{assister.jersey ? `#${assister.jersey} ` : ''}{assister.shortName || assister.name}</span>
             {assisterAssists > 0 && <span className="text-fg/60"> ({assisterAssists} AST)</span>}
@@ -282,7 +286,7 @@ function PlayItem({ item, isDark, tl, onGameClick }) {
         )}
 
         {/* Stat line */}
-        {playerStatLine && (
+        {playerStatLine && !mergedCommentary?.enrichData?.points && (
           <div className="text-sm sm:text-base text-fg/90 mt-0.5">
             {playerStatLine}
           </div>
@@ -503,6 +507,93 @@ function getGameContext(play, homeScore, awayScore, period, clock) {
 }
 
 // ── Creative play descriptions ─────────────────────────────────────────
+// ── Enriched Play Action ─────────────────────────────────────────────
+// Combines the play description with commentary enrichment into one natural sentence
+function getEnrichedPlayAction(play, mergedCommentary, gameCtx) {
+  // When no enrichment, use full play action with game context
+  if (!mergedCommentary?.enrichType) return getPlayAction(play, gameCtx);
+
+  // With enrichment, get the base action WITHOUT game context (enrichment provides context)
+  const baseAction = getPlayAction(play, {});
+
+  const { enrichType, enrichData } = mergedCommentary;
+  const clockDisplay = gameCtx?.clock?.displayValue || gameCtx?.clock || '';
+
+  switch (enrichType) {
+    case 'hot_streak': {
+      const { count, points } = enrichData;
+      return pick([
+        `${baseAction} — ${count} straight buckets! (${points} PTS)`,
+        `${baseAction} — that's ${count} in a row! (${points} PTS)`,
+        `${baseAction} — CAN'T MISS! ${count} straight (${points} PTS)`,
+      ], play);
+    }
+    case 'cold_streak': {
+      const { count, fg } = enrichData;
+      return pick([
+        `${baseAction} — ${count} straight misses (${fg} FG)`,
+        `${baseAction} — that's ${count} in a row from the field (${fg} FG)`,
+        `can't buy a bucket — ${count} straight misses (${fg} FG)`,
+      ], play);
+    }
+    case 'ft_cold': {
+      const { count } = enrichData;
+      return pick([
+        `${baseAction} — ${count} straight misses from the line`,
+        `struggling at the stripe — ${count} straight FT misses`,
+        `${baseAction} — can't find the bottom of the net (${count} straight)`,
+      ], play);
+    }
+    case 'ft_perfect': {
+      const { made, attempted } = enrichData;
+      return `${baseAction} — perfect ${made}/${attempted} from the line`;
+    }
+    case 'milestone': {
+      const { points, milestone } = enrichData;
+      return pick([
+        `${baseAction} — ${points} POINTS tonight!`,
+        `${baseAction} to reach ${points} points!`,
+        `${baseAction} — now up to ${points} PTS on the night!`,
+      ], play);
+    }
+    case 'perfect_fg': {
+      const { made, attempted } = enrichData;
+      return `${baseAction} — ${made}-for-${made} from the field, hasn't missed!`;
+    }
+    case 'and_one': {
+      return pick([
+        `AND ONE! ${baseAction} through contact`,
+        `${baseAction} AND ONE!`,
+        `scores through contact — AND ONE!`,
+      ], play);
+    }
+    case 'buzzer_beater': {
+      const { periodLabel } = enrichData;
+      return pick([
+        `${baseAction} — BUZZER BEATER!`,
+        `BEATS THE BUZZER! ${baseAction}`,
+        `AT THE BUZZER! ${baseAction}`,
+      ], play);
+    }
+    case 'game_tying': {
+      return pick([
+        `${baseAction} to TIE THE GAME with ${clockDisplay} left!`,
+        `GAME TIED! ${baseAction} with ${clockDisplay} remaining!`,
+        `${baseAction} — IT'S TIED with ${clockDisplay} to go!`,
+      ], play);
+    }
+    case 'go_ahead': {
+      return pick([
+        `${baseAction} to take the lead with ${clockDisplay} left!`,
+        `${baseAction} — GO-AHEAD BUCKET with ${clockDisplay} remaining!`,
+        `clutch ${baseAction.toLowerCase()} to grab the lead!`,
+      ], play);
+    }
+    default:
+      return baseAction;
+  }
+}
+
 function getPlayAction(play, { homeScore, awayScore, period, clock } = {}) {
   if (!play) return '';
   const text = (play.shortText || play.text || '').toLowerCase();

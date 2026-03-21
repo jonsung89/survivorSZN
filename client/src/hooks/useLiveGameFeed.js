@@ -187,23 +187,27 @@ export default function useLiveGameFeed(sport, games, options = {}) {
     if (newItems.length > 0) {
       setFeedItems(prev => {
         const combined = [...newItems, ...prev];
-        // Sort by game time descending (latest game action first)
-        // Higher period = later, lower clock seconds remaining = later
+        // Sort by real-world wall clock time (newest first)
+        // This correctly interleaves plays across multiple games
         combined.sort((a, b) => {
-          const aPeriod = a.period?.number || a.period || 1;
-          const bPeriod = b.period?.number || b.period || 1;
-          if (aPeriod !== bPeriod) return bPeriod - aPeriod;
-          const aClock = parseClockToSeconds(a.clock?.displayValue || a.clock) ?? 1200;
-          const bClock = parseClockToSeconds(b.clock?.displayValue || b.clock) ?? 1200;
-          // Lower clock = later in the period (closer to end)
-          if (aClock !== bClock) return aClock - bClock;
-          // At same game time: sort by total score (higher total = more recent play)
-          const aScore = (a.homeScore ?? 0) + (a.awayScore ?? 0);
-          const bScore = (b.homeScore ?? 0) + (b.awayScore ?? 0);
-          if (aScore !== bScore) return bScore - aScore;
-          // Same score + same time: commentary above plays
+          const aTime = new Date(a.wallclock).getTime() || a.timestamp;
+          const bTime = new Date(b.wallclock).getTime() || b.timestamp;
+          if (aTime !== bTime) return bTime - aTime;
+          // Same wall clock: within the same game, use game time as tiebreak
+          if (a.gameId === b.gameId) {
+            const aPeriod = a.period?.number || a.period || 1;
+            const bPeriod = b.period?.number || b.period || 1;
+            if (aPeriod !== bPeriod) return bPeriod - aPeriod;
+            const aClock = parseClockToSeconds(a.clock?.displayValue || a.clock) ?? 1200;
+            const bClock = parseClockToSeconds(b.clock?.displayValue || b.clock) ?? 1200;
+            if (aClock !== bClock) return aClock - bClock;
+            // Same game time: higher score = more recent
+            const aScore = (a.homeScore ?? 0) + (a.awayScore ?? 0);
+            const bScore = (b.homeScore ?? 0) + (b.awayScore ?? 0);
+            if (aScore !== bScore) return bScore - aScore;
+          }
+          // Commentary before plays at exact same time
           if (a.type !== b.type) return a.type === 'commentary' ? -1 : 1;
-          // Tie-break by timestamp (wall clock)
           return b.timestamp - a.timestamp;
         });
         return combined.slice(0, MAX_FEED_ITEMS);

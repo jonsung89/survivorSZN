@@ -687,6 +687,12 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
   };
 
   const navigateDate = (dir) => {
+    const newDate = addDays(selectedDate, dir);
+    trackingAPI.event('tournament_date_navigate', {
+      direction: dir === -1 ? 'previous' : 'next',
+      fromDate: selectedDate,
+      toDate: newDate,
+    });
     setSelectedDate(prev => addDays(prev, dir));
   };
 

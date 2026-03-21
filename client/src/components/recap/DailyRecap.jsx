@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useTheme } from '../../context/ThemeContext';
-import { bracketAPI } from '../../api';
+import { bracketAPI, trackingAPI } from '../../api';
 
 function getLocalDateStr(d = new Date()) {
   const y = d.getFullYear();
@@ -232,6 +232,12 @@ export default function DailyRecap({ tournamentId, leagueId }) {
           setRecap(null);
         } else {
           setRecap(data);
+          trackingAPI.event('recap_view', {
+            date: selectedDate,
+            leagueId,
+            tournamentId,
+            hasContent: !!(data.metadata?.membersTab || data.full_recap),
+          });
         }
       })
       .catch(() => setRecap(null))
@@ -242,7 +248,15 @@ export default function DailyRecap({ tournamentId, leagueId }) {
     if (!availableDates.length) return;
     const idx = availableDates.indexOf(selectedDate);
     const newIdx = dir === -1 ? Math.min(idx + 1, availableDates.length - 1) : Math.max(idx - 1, 0);
-    setSelectedDate(availableDates[newIdx]);
+    const newDate = availableDates[newIdx];
+    setSelectedDate(newDate);
+    trackingAPI.event('recap_date_navigate', {
+      direction: dir === -1 ? 'older' : 'newer',
+      fromDate: selectedDate,
+      toDate: newDate,
+      leagueId,
+      tournamentId,
+    });
   };
 
   const canGoLeft = availableDates.indexOf(selectedDate) < availableDates.length - 1;
@@ -302,7 +316,16 @@ export default function DailyRecap({ tournamentId, leagueId }) {
         {TABS.map(tab => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              trackingAPI.event('recap_tab_switch', {
+                tab: tab.key,
+                fromTab: activeTab,
+                date: selectedDate,
+                leagueId,
+                tournamentId,
+              });
+              setActiveTab(tab.key);
+            }}
             className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? isDark ? 'bg-white/10 text-fg shadow-sm' : 'bg-white text-fg shadow-sm'

@@ -327,6 +327,7 @@ export default function BracketChallenge() {
         setMyBrackets(prev => prev.map(b =>
           b.id === bracketId ? { ...b, picks: {}, tiebreaker_value: null, is_submitted: false, submitted_at: null } : b
         ));
+        trackingAPI.event('bracket_reset', { leagueId, bracketId });
         showToast('Bracket reset', 'success');
       } else {
         showToast(result.error || 'Failed to reset bracket', 'error');
@@ -344,6 +345,7 @@ export default function BracketChallenge() {
     setLeague(prev => ({ ...prev, name: trimmed }));
     try {
       await leagueAPI.updateSettings(leagueId, { name: trimmed });
+      trackingAPI.event('league_name_edit', { leagueId, oldName, newName: trimmed });
       showToast('League name updated', 'success');
     } catch {
       setLeague(prev => ({ ...prev, name: oldName }));
@@ -354,11 +356,18 @@ export default function BracketChallenge() {
   const handleTogglePayment = async (member) => {
     setTogglingPayment(member.id);
     try {
-      await leagueAPI.togglePayment(leagueId, member.id, !member.hasPaid);
+      const newPaidStatus = !member.hasPaid;
+      await leagueAPI.togglePayment(leagueId, member.id, newPaidStatus);
+      trackingAPI.event('payment_status_toggle', {
+        leagueId,
+        memberId: member.id,
+        memberName: member.displayName || member.username,
+        newStatus: newPaidStatus ? 'paid' : 'unpaid',
+      });
       setLeague(prev => ({
         ...prev,
         members: prev.members.map(m =>
-          m.id === member.id ? { ...m, hasPaid: !m.hasPaid } : m
+          m.id === member.id ? { ...m, hasPaid: newPaidStatus } : m
         ),
       }));
     } catch {
@@ -461,14 +470,20 @@ export default function BracketChallenge() {
           {isCommissioner ? (
             <>
               <button
-                onClick={() => setShowActionLog(true)}
+                onClick={() => {
+                  trackingAPI.event('action_log_open', { leagueId, leagueName: league?.name });
+                  setShowActionLog(true);
+                }}
                 className="btn-secondary flex items-center gap-2 text-sm py-2.5"
               >
                 <History className="w-4 h-4" />
                 <span className="hidden sm:inline">History</span>
               </button>
               <button
-                onClick={() => setShowSettings(true)}
+                onClick={() => {
+                  trackingAPI.event('settings_open', { leagueId, leagueName: league?.name });
+                  setShowSettings(true);
+                }}
                 className="btn-secondary flex items-center gap-2 text-sm py-2.5"
               >
                 <Settings className="w-4 h-4" />
@@ -477,7 +492,10 @@ export default function BracketChallenge() {
             </>
           ) : actionLog.length > 0 && (
             <button
-              onClick={() => setShowActionLog(true)}
+              onClick={() => {
+                trackingAPI.event('action_log_open', { leagueId, leagueName: league?.name });
+                setShowActionLog(true);
+              }}
               className="btn-secondary flex items-center gap-2 text-sm py-2.5"
             >
               <History className="w-4 h-4" />
@@ -487,7 +505,15 @@ export default function BracketChallenge() {
           {/* Prize Pot badge */}
           {entryFee > 0 && (
             <button
-              onClick={() => setShowPaymentStatus(true)}
+              onClick={() => {
+                trackingAPI.event('prize_pot_click', {
+                  leagueId,
+                  pot: entryFee * paidCount,
+                  paidCount,
+                  totalMembers: members.length,
+                });
+                setShowPaymentStatus(true);
+              }}
               className="btn-secondary flex items-center gap-1.5 text-sm py-2.5"
             >
               <DollarSign className="w-4 h-4 text-green-500" />

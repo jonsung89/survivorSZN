@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemedLogo } from '../../utils/logo';
+import { trackingAPI } from '../../api';
 
 /**
  * LiveGameFeed — Renders a unified, time-sorted feed of scoring plays
@@ -26,6 +27,15 @@ export default function LiveGameFeed({ feedItems = [], isPolling, maxHeight = '4
     if (isAtTop) setHasNewItems(false);
   }, []);
 
+  // Track feed first load
+  const hasTrackedView = useRef(false);
+  useEffect(() => {
+    if (feedItems.length > 0 && !hasTrackedView.current) {
+      hasTrackedView.current = true;
+      trackingAPI.event('live_feed_view', { initialItemCount: feedItems.length });
+    }
+  }, [feedItems.length]);
+
   // Auto-scroll to top when new items arrive (if user is at top)
   useEffect(() => {
     if (feedItems.length > prevLengthRef.current) {
@@ -41,6 +51,7 @@ export default function LiveGameFeed({ feedItems = [], isPolling, maxHeight = '4
   const scrollToTop = () => {
     feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     setHasNewItems(false);
+    trackingAPI.event('live_feed_new_plays_click', { itemCount: feedItems.length });
   };
 
   if (feedItems.length === 0 && !isPolling) return null;
@@ -194,7 +205,14 @@ function PlayItem({ item, isDark, tl, onGameClick }) {
     <div
       className={`flex items-center gap-4 px-4 sm:gap-5 sm:px-5 py-2.5 cursor-pointer transition-colors ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.03]'}`}
       style={{ borderLeft: `3px solid ${mergedCommentary ? '#f59e0b' : teamColor}` }}
-      onClick={() => onGameClick?.(gameId)}
+      onClick={() => {
+        trackingAPI.event('live_feed_play_click', {
+          gameId,
+          playType: play.scoringPlay ? 'scoring' : play.shootingPlay ? 'shooting' : 'other',
+          hasMergedCommentary: !!mergedCommentary,
+        });
+        onGameClick?.(gameId);
+      }}
     >
       {/* Avatar area */}
       <div className={`flex-shrink-0 relative ${isDualAvatar ? DUAL_CONTAINER : ''}`}>
@@ -324,7 +342,14 @@ function CommentaryItem({ item, isDark, tl, onGameClick }) {
           : (isDark ? 'bg-white/[0.02]' : 'bg-gray-50/50')
       }`}
       style={{ borderLeft: `3px solid ${borderColor}` }}
-      onClick={() => onGameClick?.(gameId)}
+      onClick={() => {
+        trackingAPI.event('live_feed_commentary_click', {
+          gameId,
+          commentaryKind: kind,
+          priority,
+        });
+        onGameClick?.(gameId);
+      }}
     >
       {/* Avatar area */}
       <div className="flex-shrink-0 relative">

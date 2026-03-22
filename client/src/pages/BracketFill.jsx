@@ -453,6 +453,7 @@ export default function BracketFill() {
       {/* Score Dialog (portaled, for submitted brackets) */}
       {showScoreDialog && scoreData && createPortal(
         <div
+          data-modal
           className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4"
           onClick={() => setShowScoreDialog(false)}
           style={{ touchAction: 'none' }}
@@ -633,7 +634,7 @@ export default function BracketFill() {
       )}
 
       {showSubmitConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowSubmitConfirm(false)}>
+        <div data-modal className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowSubmitConfirm(false)}>
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
           <div
             className="relative w-full max-w-sm rounded-2xl p-6 animate-in text-center"

@@ -39,6 +39,9 @@ export default function BracketChallenge() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState('brackets');
+  const hasManuallySetTab = useRef(false);
+  const tabsRef = useRef(null);
+  const tabAnchorRef = useRef(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [fieldAnnounced, setFieldAnnounced] = useState(null); // null = loading, true/false
@@ -69,6 +72,13 @@ export default function BracketChallenge() {
   const entryFee = parseFloat(challenge?.entry_fee) || 0;
   const members = league?.members || [];
   const paymentMethods = league?.paymentMethods || [];
+
+  // Default to recap tab when tournament is locked
+  useEffect(() => {
+    if (isTournamentLocked && !hasManuallySetTab.current) {
+      setActiveTab('recap');
+    }
+  }, [isTournamentLocked]);
 
   // Build userId -> champion team info map from leaderboard data
   const buildChampionsMap = () => {
@@ -535,22 +545,6 @@ export default function BracketChallenge() {
         )}
       </div>
 
-      {/* Tournament Games — show when tournament has started (regardless of challenge status) */}
-      {isTournamentLocked && (
-        <TournamentGames tournamentData={tournamentData} season={challenge?.season} leaderboard={leaderboard} prospects={prospects} myPicks={leaderboard.find(e => e.isCurrentUser)?.picks} />
-      )}
-
-      {/* Daily Recap */}
-      {isTournamentLocked && challenge?.tournament_id && league?.id && (
-        <DailyRecap tournamentId={challenge.tournament_id} leagueId={league.id} />
-      )}
-
-      {/* Prospect Watch — NBA draft prospects in the tournament (hidden for now)
-      {isTournamentLocked && challenge?.season && (
-        <ProspectWatch season={challenge.season} />
-      )}
-      */}
-
       {/* Countdown */}
       {(() => {
         const showCountdown = isOpen && !isTournamentLocked && lockCountdown && fieldAnnounced;
@@ -603,12 +597,20 @@ export default function BracketChallenge() {
         );
       })()}
 
+      {/* Tournament Games — show when tournament has started */}
+      {isTournamentLocked && (
+        <TournamentGames tournamentData={tournamentData} season={challenge?.season} leaderboard={leaderboard} prospects={prospects} myPicks={leaderboard.find(e => e.isCurrentUser)?.picks} />
+      )}
+
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 border-b border-fg/10 pb-px">
-        {['brackets', 'leaderboard', 'members'].map(tab => (
+      <div ref={tabAnchorRef} style={{ height: 0 }} />
+      <div ref={tabsRef} className="sticky z-20 -mx-3 sm:-mx-4 mb-5 border-b border-fg/10" style={{ backgroundColor: 'rgb(var(--color-base))', top: 'var(--navbar-height, 0px)' }}>
+        <div className="flex">
+        {[...(isTournamentLocked ? ['recap'] : []), 'brackets', 'leaderboard', 'members'].map(tab => (
           <button
             key={tab}
             onClick={() => {
+              hasManuallySetTab.current = true;
               trackingAPI.event('bracket_tab_switch', {
                 tab,
                 fromTab: activeTab,
@@ -616,19 +618,33 @@ export default function BracketChallenge() {
                 leagueName: league?.name,
               });
               setActiveTab(tab);
+              requestAnimationFrame(() => {
+                const navbarHeight = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--navbar-height')) || 0;
+                const anchorTop = tabAnchorRef.current?.getBoundingClientRect().top + window.scrollY || 0;
+                window.scrollTo(0, Math.max(0, anchorTop - navbarHeight));
+              });
             }}
-            className={`px-4 py-2 text-sm md:text-base font-medium transition-colors border-b-2 -mb-px ${
+            className={`flex-1 py-3 text-base font-semibold transition-colors border-b-2 -mb-px ${
               activeTab === tab
                 ? 'border-violet-500 text-fg'
-                : 'border-transparent text-fg/50 hover:text-fg/70'
+                : 'border-transparent text-fg/40 hover:text-fg/60'
             }`}
           >
-            {tab === 'brackets' ? 'My Brackets' :
-             tab === 'leaderboard' ? 'Leaderboard' :
-             `Members (${members.length})`}
+            {tab === 'recap' ? 'Recap' :
+             tab === 'brackets' ? 'Brackets' :
+             tab === 'leaderboard' ? 'Board' :
+             `Members`}
           </button>
         ))}
+        </div>
       </div>
+
+      {/* Tab Content */}
+      <div style={{ minHeight: 'calc(100vh - var(--navbar-height, 0px) - 49px)' }}>
+      {/* Daily Recap Tab */}
+      {activeTab === 'recap' && isTournamentLocked && challenge?.tournament_id && league?.id && (
+        <DailyRecap tournamentId={challenge.tournament_id} leagueId={league.id} />
+      )}
 
       {/* My Brackets Tab */}
       {activeTab === 'brackets' && (
@@ -1000,6 +1016,7 @@ export default function BracketChallenge() {
           )}
         </div>
       )}
+      </div>
 
       {/* Settings Modal */}
       {showSettings && isCommissioner && (
@@ -1013,7 +1030,7 @@ export default function BracketChallenge() {
 
       {/* Activity Log Modal */}
       {showActionLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowActionLog(false)}>
+        <div data-modal className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowActionLog(false)}>
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
           <div
             className="relative w-full max-w-lg rounded-2xl p-6 animate-in max-h-[85vh] overflow-y-auto"
@@ -1090,7 +1107,7 @@ export default function BracketChallenge() {
       {/* Share Modal */}
       {/* Payment Status Dialog */}
       {showPaymentStatus && entryFee > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pb-20" onClick={() => setShowPaymentStatus(false)}>
+        <div data-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 pb-20" onClick={() => setShowPaymentStatus(false)}>
           <div className="absolute inset-0 bg-black/50" />
           <div className="relative bg-surface rounded-2xl shadow-2xl w-full max-w-sm max-h-[60vh] overflow-hidden animate-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-fg/10">
@@ -1197,7 +1214,7 @@ function SettingsModal({ challenge, league, onClose, onUpdate }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div data-modal className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
       <div
         className="relative w-full max-w-lg rounded-2xl p-6 animate-in max-h-[85vh] overflow-y-auto"

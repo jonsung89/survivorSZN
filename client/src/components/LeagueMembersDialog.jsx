@@ -57,7 +57,7 @@ export default function LeagueMembersDialog({ leagueId, leagueName, defaultTab, 
   const currentList = data?.[activeTab] || [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center overscroll-none" onClick={onClose}>
+    <div data-modal className="fixed inset-0 z-50 flex items-end sm:items-center justify-center overscroll-none" onClick={onClose}>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         className="bg-elevated border border-fg/10 rounded-t-2xl sm:rounded-2xl p-5 w-full sm:max-w-md relative z-10 animate-in shadow-xl max-h-[80vh] flex flex-col"

@@ -139,7 +139,7 @@ export default function MatchupDetailDialog({
   const mobileCollapsed = isMobile && scrolled;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-8" onClick={onClose}>
+    <div data-modal className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-8" onClick={onClose}>
       <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
 
       <div

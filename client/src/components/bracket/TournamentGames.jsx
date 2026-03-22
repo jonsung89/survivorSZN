@@ -1510,14 +1510,14 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
   const scheduledCount = sorted.length - liveCount - finalCount;
 
   return (
-    <div className="glass-card rounded-xl p-4 sm:p-5 mb-5 animate-in border border-fg/10" style={{ animationDelay: '25ms' }}>
+    <div className="glass-card rounded-xl p-4 mb-5 animate-in border border-fg/10" style={{ animationDelay: '25ms' }}>
       {/* Day Navigation */}
       <div className="flex items-center justify-between mb-3">
         <button onClick={() => navigateDate(-1)} className="p-1.5 rounded-lg hover:bg-fg/10 transition-colors">
           <ChevronLeft className="w-5 h-5 text-fg/60" />
         </button>
         <div className="text-center">
-          <span className="text-sm font-semibold text-fg">{formatDateLabel(selectedDate)}</span>
+          <span className="text-md font-semibold text-fg">{formatDateLabel(selectedDate)}</span>
           {selectedDate !== getLocalDateStr() && (
             <button
               onClick={() => setSelectedDate(getLocalDateStr())}
@@ -1607,6 +1607,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
       {/* Game Detail Dialog — portaled to body, bottom sheet on mobile */}
       {dialogGame && createPortal(
         <div
+          data-modal
           className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center"
           style={{
             backgroundColor: `rgba(0,0,0,${Math.max(0, 0.5 - (sheetTranslateY / (typeof window !== 'undefined' ? window.innerHeight : 800)) * 0.5)})`,
@@ -1694,6 +1695,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
       {/* Pick Breakdown Dialog — portaled to body */}
       {pickBreakdownGame && createPortal(
         <div
+          data-modal
           className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center"
           style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
           onClick={() => setPickBreakdownGame(null)}
@@ -1822,6 +1824,7 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
       {/* NBA Prospect Detail Dialog — portaled to body */}
       {prospectDialogData && createPortal(
         <div
+          data-modal
           className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center"
           style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
           onClick={() => setProspectDialogData(null)}

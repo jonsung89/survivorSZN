@@ -613,7 +613,7 @@ export default function TeamInfoDialog({ team, sport = 'nfl', onClose, data: ext
   );
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div data-modal className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
         className="bg-canvas rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}

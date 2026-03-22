@@ -823,7 +823,7 @@ export default function Dashboard() {
           ? pool / winnersDialog.winners.length
           : 0;
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setWinnersDialog({ open: false, leagueName: '', winners: [], prizePool: 0 })}>
+          <div data-modal className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setWinnersDialog({ open: false, leagueName: '', winners: [], prizePool: 0 })}>
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
             <div className="bg-elevated border border-fg/10 rounded-2xl p-6 max-w-sm w-full relative z-10 animate-in shadow-xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
@@ -873,7 +873,7 @@ export default function Dashboard() {
       {bracketDialog.open && (() => {
         const { brackets, totalSubmitted } = bracketDialog;
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setBracketDialog({ open: false, leagueName: '', brackets: [], totalSubmitted: 0 })}>
+          <div data-modal className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setBracketDialog({ open: false, leagueName: '', brackets: [], totalSubmitted: 0 })}>
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
             <div className="bg-elevated border border-fg/10 rounded-2xl p-6 max-w-sm w-full relative z-10 animate-in shadow-xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">

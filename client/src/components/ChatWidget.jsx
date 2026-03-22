@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { MessageCircle, X, Send, Users, ChevronLeft, ChevronRight, ChevronUp, Smile, Image, Reply, CornerUpLeft, AlertCircle, Search, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Trash2, ShieldX } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
@@ -682,7 +683,8 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   };
 
   // Long press handlers for showing who reacted
-  const handleReactionLongPressStart = (message, emoji, users) => {
+  const handleReactionLongPressStart = (message, emoji, users, e) => {
+    const target = e?.currentTarget;
     longPressTimer.current = setTimeout(() => {
       // Get display names for users who reacted
       const userNames = users.map(userId => {
@@ -690,7 +692,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
         const member = members.find(m => (m.userId || m.user_id) === userId);
         return member?.displayName || member?.display_name || 'Unknown';
       });
-      setReactionDetail({ messageId: message.id, emoji, users: userNames });
+      // Capture anchor position for popover placement
+      const rect = target?.getBoundingClientRect();
+      setReactionDetail({ messageId: message.id, emoji, users: userNames, anchorRect: rect || null });
     }, 500);
   };
 
@@ -1266,10 +1270,10 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                         <button
                           key={emoji}
                           onClick={() => handleReact(message, emoji)}
-                          onTouchStart={() => handleReactionLongPressStart(message, emoji, users)}
+                          onTouchStart={(e) => handleReactionLongPressStart(message, emoji, users, e)}
                           onTouchEnd={handleReactionLongPressEnd}
                           onTouchCancel={handleReactionLongPressEnd}
-                          onMouseDown={() => handleReactionLongPressStart(message, emoji, users)}
+                          onMouseDown={(e) => handleReactionLongPressStart(message, emoji, users, e)}
                           onMouseUp={handleReactionLongPressEnd}
                           onMouseLeave={handleReactionLongPressEnd}
                           className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all active:scale-95 ${
@@ -2121,7 +2125,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                   onClick={() => { setShowMessageMenu(false); setSelectedMessage(null); }}
                 >
                   <div 
-                    className="w-full max-w-sm bg-elevated rounded-t-2xl overflow-hidden animate-slide-up"
+                    className="w-full bg-elevated rounded-t-2xl overflow-hidden animate-slide-up"
                     onClick={e => e.stopPropagation()}
                   >
                     {/* Quick reactions */}
@@ -2197,38 +2201,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 </div>
               )}
               
-              {/* Reaction detail popup (who reacted) */}
-              {reactionDetail && (
-                <div 
-                  className="absolute inset-0 z-50 flex items-center justify-center bg-black/50"
-                  onClick={() => setReactionDetail(null)}
-                >
-                  <div 
-                    className="bg-elevated rounded-2xl overflow-hidden shadow-xl animate-slide-up mx-4 max-w-xs w-full"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <div className="px-4 py-3 border-b border-fg/10 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">{reactionDetail.emoji}</span>
-                        <span className="text-fg font-medium">{reactionDetail.users.length}</span>
-                      </div>
-                      <button 
-                        onClick={() => setReactionDetail(null)}
-                        className="p-1 hover:bg-fg/10 rounded-full"
-                      >
-                        <X className="w-4 h-4 text-fg/50" />
-                      </button>
-                    </div>
-                    <div className="p-2 max-h-60 overflow-y-auto">
-                      {reactionDetail.users.map((name, idx) => (
-                        <div key={idx} className="px-3 py-2 text-fg text-sm">
-                          {name}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Reaction detail popup removed from here — rendered via portal below */}
             </div>
           </>
         )}
@@ -2311,37 +2284,70 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
         </div>
       )}
 
-      {/* Global Reaction Detail popup - desktop only */}
-      {reactionDetail && (
-        <div 
-          className="hidden lg:flex fixed inset-0 z-[100] items-center justify-center"
+      {/* Reaction Detail — bottom sheet on mobile, popover on desktop */}
+      {reactionDetail && createPortal(
+        <div
+          data-modal-mobile
+          className="fixed inset-0 z-[9999] flex items-end lg:items-center justify-center bg-black/50 lg:bg-transparent"
           onClick={() => setReactionDetail(null)}
         >
-          <div 
-            className="bg-elevated rounded-xl overflow-hidden shadow-xl border border-fg/10 max-w-xs w-full mx-4"
+          {/* Mobile: bottom sheet */}
+          <div
+            className="lg:hidden w-full bg-elevated rounded-t-2xl overflow-hidden animate-slide-up"
             onClick={e => e.stopPropagation()}
           >
-            <div className="px-4 py-3 border-b border-fg/10 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{reactionDetail.emoji}</span>
-                <span className="text-fg font-medium">{reactionDetail.users.length}</span>
-              </div>
-              <button 
-                onClick={() => setReactionDetail(null)}
-                className="p-1 hover:bg-fg/10 rounded-full"
-              >
-                <X className="w-4 h-4 text-fg/50" />
-              </button>
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 bg-fg/20 rounded-full" />
+            </div>
+            <div className="px-4 py-3 border-b border-fg/10 flex items-center gap-2">
+              <span className="text-2xl">{reactionDetail.emoji}</span>
+              <span className="text-fg font-medium">{reactionDetail.users.length} {reactionDetail.users.length === 1 ? 'reaction' : 'reactions'}</span>
             </div>
             <div className="p-2 max-h-60 overflow-y-auto">
               {reactionDetail.users.map((name, idx) => (
-                <div key={idx} className="px-3 py-2 text-fg text-sm">
+                <div key={idx} className="px-4 py-3 text-fg">
                   {name}
                 </div>
               ))}
             </div>
+            <div className="p-2 border-t border-fg/10">
+              <button
+                onClick={() => setReactionDetail(null)}
+                className="w-full px-4 py-3 text-fg/60 hover:bg-fg/5 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        </div>
+          {/* Desktop: popover anchored near the reaction — matches message action menu style */}
+          {(() => {
+            const r = reactionDetail.anchorRect;
+            if (!r) return null;
+            return (
+              <div
+                className="hidden lg:block absolute bg-elevated rounded-xl overflow-hidden shadow-2xl border border-fg/10 w-56 animate-scale-in"
+                style={{
+                  top: Math.min(r.bottom + 8, window.innerHeight - 200),
+                  left: Math.min(Math.max(r.left, 16), window.innerWidth - 240),
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="px-3 py-2.5 border-b border-fg/10 flex items-center gap-2">
+                  <span className="text-xl">{reactionDetail.emoji}</span>
+                  <span className="text-fg font-medium text-sm">{reactionDetail.users.length} {reactionDetail.users.length === 1 ? 'reaction' : 'reactions'}</span>
+                </div>
+                <div className="p-1 max-h-60 overflow-y-auto">
+                  {reactionDetail.users.map((name, idx) => (
+                    <div key={idx} className="px-3 py-2 text-fg text-sm hover:bg-fg/5 rounded-lg">
+                      {name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>,
+        document.body
       )}
 
       {/* Recap Dialog */}

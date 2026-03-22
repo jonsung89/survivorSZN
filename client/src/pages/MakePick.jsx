@@ -553,13 +553,13 @@ function TeamInfoDialog({ team, data, loading, onClose }) {
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div 
+    <div data-modal className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
         className="bg-canvas rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div 
+        <div
           className="p-4 flex items-center gap-4 border-b border-fg/10"
           style={{ background: `linear-gradient(135deg, ${team.color || '#374151'}22, transparent)` }}
         >

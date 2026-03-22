@@ -65,6 +65,7 @@ export default function StatRankingDialog({ sport, statKey, statLabel, currentTe
 
   return (
     <div
+      data-modal
       className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >

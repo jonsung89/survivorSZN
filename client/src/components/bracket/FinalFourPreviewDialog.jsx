@@ -88,7 +88,7 @@ export default function FinalFourPreviewDialog({ entry, tournamentData, eliminat
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 overscroll-contain" onClick={onClose}>
+    <div data-modal className="fixed inset-0 z-[60] flex items-center justify-center p-4 overscroll-contain" onClick={onClose}>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         className="relative w-full max-w-sm rounded-2xl overflow-hidden animate-in"

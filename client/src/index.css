@@ -585,8 +585,25 @@ select.input-field:focus {
   overscroll-behavior: contain;
 }
 
-body:has(.modal-overlay) {
+/* Prevent background scroll when any fullscreen overlay/dialog is open */
+body:has(.modal-overlay),
+body:has([data-modal]) {
   overflow: hidden;
+}
+
+[data-modal] {
+  overscroll-behavior: contain;
+}
+
+/* Mobile-only body scroll lock (e.g. small popovers that only need lock on mobile) */
+@media (max-width: 1023px) {
+  body:has([data-modal-mobile]) {
+    overflow: hidden;
+  }
+}
+
+[data-modal-mobile] {
+  overscroll-behavior: contain;
 }
 
 .modal-content {

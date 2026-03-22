@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport, getProspectTournamentStats, syncTournamentFromESPN, buildTournamentDataFromDB, propagateFirstFourWinners } = require('../services/ncaab-tournament');
+const { getTournamentBracket, getTeamBreakdown, getMatchupPrediction, getTournamentResults, getSelectionSundayDate, getFirstGameTime, generateConciseReport, generateMatchupReport, generateAllReports, getStoredReport, getStoredMatchupReport, getProspectTournamentStats, syncTournamentFromESPN, buildTournamentDataFromDB, refreshGameFromESPN, propagateFirstFourWinners } = require('../services/ncaab-tournament');
 const { generateAndStoreRecap } = require('../services/daily-recap');
 const { getDraftProspects, enrichPlayersWithDraftRank, getProspectsFromDB, getCurrentDraftYear } = require('../services/nba-draft');
 const { SCORING_PRESETS, ROUND_BOUNDARIES, calculateBracketScore, calculatePotentialPoints, getSlotRound, getNextSlot, getRegionForSlot, getChildSlots, countPicks, DEFAULT_REGIONS } = require('../utils/bracket-slots');
@@ -1191,9 +1191,9 @@ router.post('/update-results', async (req, res) => {
           if (!slotNum && (result.status === 'final' || result.status === 'in_progress')) {
             await db.run(`
               UPDATE tournament_games SET
-                winning_team_espn_id = CASE WHEN $1 IS NOT NULL THEN $1 ELSE winning_team_espn_id END,
-                losing_team_espn_id = CASE WHEN $2 IS NOT NULL THEN $2 ELSE losing_team_espn_id END,
-                team1_score = COALESCE($3, team1_score), team2_score = COALESCE($4, team2_score),
+                winning_team_espn_id = CASE WHEN $1::text IS NOT NULL THEN $1 ELSE winning_team_espn_id END,
+                losing_team_espn_id = CASE WHEN $2::text IS NOT NULL THEN $2 ELSE losing_team_espn_id END,
+                team1_score = COALESCE($3::int, team1_score), team2_score = COALESCE($4::int, team2_score),
                 status = $5, completed_at = CASE WHEN $5 = 'final' THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
                 updated_at = NOW()
               WHERE tournament_id = $6 AND espn_event_id = $7
@@ -1203,6 +1203,32 @@ router.post('/update-results', async (req, res) => {
 
         // Propagate First Four winners into R64 slots
         await propagateFirstFourWinners(tournamentId);
+
+        // Failsafe: detect stuck games (in_progress but game clock at 0:00 or status looks final)
+        // and auto-refetch from ESPN game summary API
+        const stuckGames = await db.getAll(
+          `SELECT id, espn_event_id, slot_number, status_detail, updated_at
+           FROM tournament_games
+           WHERE tournament_id = $1
+             AND status = 'in_progress'
+             AND espn_event_id IS NOT NULL
+             AND (
+               status_detail ILIKE '%0:00%'
+               OR status_detail ILIKE '%final%'
+               OR status_detail ILIKE '%end of%'
+               OR updated_at < NOW() - INTERVAL '10 minutes'
+             )`,
+          [tournamentId]
+        );
+        for (const stuck of stuckGames) {
+          try {
+            console.log(`[Failsafe] Auto-refetching stuck game ${stuck.id} (slot ${stuck.slot_number}, ESPN ${stuck.espn_event_id}, status_detail: "${stuck.status_detail}", last updated: ${stuck.updated_at})`);
+            await refreshGameFromESPN(tournamentId, stuck.id);
+            totalUpdated++;
+          } catch (err) {
+            console.error(`[Failsafe] Failed to refetch game ${stuck.id}:`, err.message);
+          }
+        }
 
         // Build results map from tournament_games for scoring
         const allGames = await db.getAll(

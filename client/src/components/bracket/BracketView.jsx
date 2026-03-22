@@ -363,10 +363,13 @@ export default function BracketView({
       )}
       <div className="flex-1 flex items-center justify-center px-3">
         <div style={{ width: matchWidth }}>
+          {(() => { const t = teamsFor(semi.slot); return (
           <BracketMatchup
             slot={semi.slot}
-            team1={teamsFor(semi.slot).team1}
-            team2={teamsFor(semi.slot).team2}
+            team1={t.team1}
+            team2={t.team2}
+            bustedPick1={t.bustedPick1}
+            bustedPick2={t.bustedPick2}
             pickedTeamId={pickedFor(semi.slot)}
             result={resultFor(semi.slot)}
             eliminatedTeamIds={eliminatedTeamIds}
@@ -374,7 +377,7 @@ export default function BracketView({
             onDetailClick={() => onMatchupClick?.(semi.slot)}
             isReadOnly={isReadOnly}
             slotData={slotDataFor(semi.slot)}
-          />
+          />); })()}
         </div>
       </div>
     </div>
@@ -505,10 +508,13 @@ export default function BracketView({
               <div className="flex-1 flex items-center justify-center px-3">
                 <div className="flex flex-col items-center gap-4" style={{ width: '234px' }}>
                   <div className="w-full">
+                    {(() => { const ct = teamsFor(champSlot); return (
                     <BracketMatchup
                       slot={champSlot}
-                      team1={teamsFor(champSlot).team1}
-                      team2={teamsFor(champSlot).team2}
+                      team1={ct.team1}
+                      team2={ct.team2}
+                      bustedPick1={ct.bustedPick1}
+                      bustedPick2={ct.bustedPick2}
                       pickedTeamId={pickedFor(champSlot)}
                       result={resultFor(champSlot)}
                       eliminatedTeamIds={eliminatedTeamIds}
@@ -516,7 +522,7 @@ export default function BracketView({
                       onDetailClick={() => onMatchupClick?.(champSlot)}
                       isReadOnly={isReadOnly}
                       slotData={slotDataFor(champSlot)}
-                    />
+                    />); })()}
                   </div>
                   {tiebreakerType === 'total_score' && (
                     <div className="w-full">
@@ -597,17 +603,20 @@ export default function BracketView({
             <div className="flex-1 flex items-center justify-center px-3">
               <div className="flex flex-col items-center gap-4" style={{ width: '234px' }}>
                 <div className="w-full">
+                  {(() => { const ct2 = teamsFor(champSlot); return (
                   <BracketMatchup
                     slot={champSlot}
-                    team1={teamsFor(champSlot).team1}
-                    team2={teamsFor(champSlot).team2}
+                    team1={ct2.team1}
+                    team2={ct2.team2}
+                    bustedPick1={ct2.bustedPick1}
+                    bustedPick2={ct2.bustedPick2}
                     pickedTeamId={pickedFor(champSlot)}
                     result={resultFor(champSlot)}
                     eliminatedTeamIds={eliminatedTeamIds}
                     onPick={(teamId) => onPick?.(champSlot, teamId)}
                     onDetailClick={() => onMatchupClick?.(champSlot)}
                     isReadOnly={isReadOnly}
-                  />
+                  />); })()}
                 </div>
 
                 {/* Tiebreaker + Champion */}
@@ -992,16 +1001,19 @@ export default function BracketView({
                   <div className="flex-1 flex items-center justify-center px-3">
                     <div className="flex flex-col items-center gap-4" style={{ width: mMatchW }}>
                       <div className="w-full">
+                        {(() => { const ct3 = teamsFor(champSlot); return (
                         <BracketMatchup
                           slot={champSlot}
-                          team1={teamsFor(champSlot).team1}
-                          team2={teamsFor(champSlot).team2}
+                          team1={ct3.team1}
+                          team2={ct3.team2}
+                          bustedPick1={ct3.bustedPick1}
+                          bustedPick2={ct3.bustedPick2}
                           pickedTeamId={pickedFor(champSlot)}
                           result={resultFor(champSlot)}
                           onPick={(teamId) => onPick?.(champSlot, teamId)}
                           onDetailClick={() => onMatchupClick?.(champSlot)}
                           isReadOnly={isReadOnly}
-                        />
+                        />); })()}
                       </div>
                       {pickedFor(champSlot) && (
                         <ChampionCard team={tournamentData?.teams?.[pickedFor(champSlot)]} />

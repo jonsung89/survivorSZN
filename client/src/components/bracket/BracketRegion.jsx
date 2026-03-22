@@ -108,7 +108,7 @@ export default function BracketRegion({
         style={{ width: `${cellWidth}px`, minWidth: `${cellWidth}px` }}
       >
         {slots.map((slot) => {
-          const { team1, team2 } = getTeamsForSlot(slot);
+          const { team1, team2, bustedPick1, bustedPick2 } = getTeamsForSlot(slot);
           const result = getResultForSlot(slot);
           const pickedTeam = getPickedTeamForSlot(slot);
 
@@ -130,6 +130,8 @@ export default function BracketRegion({
                 slot={slot}
                 team1={enrichTeam(team1, slot, result)}
                 team2={enrichTeam(team2, slot, result)}
+                bustedPick1={bustedPick1}
+                bustedPick2={bustedPick2}
                 pickedTeamId={pickedTeam}
                 result={result}
                 slotData={slotDataFor(slot)}

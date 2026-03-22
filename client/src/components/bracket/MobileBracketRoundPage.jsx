@@ -73,7 +73,7 @@ export default function MobileBracketRoundPage({
       </div>
 
       {slots.map((slot) => {
-        const { team1, team2 } = getTeamsForSlot(slot);
+        const { team1, team2, bustedPick1, bustedPick2 } = getTeamsForSlot(slot);
         const result = getResultForSlot(slot);
         const pickedTeam = getPickedTeamForSlot(slot);
 
@@ -83,6 +83,8 @@ export default function MobileBracketRoundPage({
             slot={slot}
             team1={enrichTeam(team1, result)}
             team2={enrichTeam(team2, result)}
+            bustedPick1={bustedPick1}
+            bustedPick2={bustedPick2}
             pickedTeamId={pickedTeam}
             result={result}
             slotData={slotDataFor(slot)}

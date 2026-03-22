@@ -27,13 +27,17 @@ export default function BracketFinalFour({
   const champPick = getPickedTeamForSlot(champSlot);
   const champTeam = champPick ? (tournamentData?.teams?.[champPick] || { id: champPick }) : null;
 
-  const renderSemifinal = (semi, label) => (
+  const renderSemifinal = (semi, label) => {
+    const t = getTeamsForSlot(semi.slot);
+    return (
     <div>
       <div className="text-sm text-fg/40 text-center mb-1">{label}</div>
       <BracketMatchup
         slot={semi.slot}
-        team1={getTeamsForSlot(semi.slot).team1}
-        team2={getTeamsForSlot(semi.slot).team2}
+        team1={t.team1}
+        team2={t.team2}
+        bustedPick1={t.bustedPick1}
+        bustedPick2={t.bustedPick2}
         pickedTeamId={getPickedTeamForSlot(semi.slot)}
         result={getResultForSlot(semi.slot)}
         onPick={(teamId) => onPick?.(semi.slot, teamId)}
@@ -41,7 +45,8 @@ export default function BracketFinalFour({
         isReadOnly={isReadOnly}
       />
     </div>
-  );
+    );
+  };
 
   return (
     <div className="flex flex-col items-center gap-4 px-4">
@@ -62,16 +67,19 @@ export default function BracketFinalFour({
               <Trophy className="w-4 h-4 text-amber-400" />
               Championship
             </div>
+            {(() => { const ct = getTeamsForSlot(champSlot); return (
             <BracketMatchup
               slot={champSlot}
-              team1={getTeamsForSlot(champSlot).team1}
-              team2={getTeamsForSlot(champSlot).team2}
+              team1={ct.team1}
+              team2={ct.team2}
+              bustedPick1={ct.bustedPick1}
+              bustedPick2={ct.bustedPick2}
               pickedTeamId={getPickedTeamForSlot(champSlot)}
               result={getResultForSlot(champSlot)}
               onPick={(teamId) => onPick?.(champSlot, teamId)}
               onDetailClick={() => onMatchupClick?.(champSlot)}
               isReadOnly={isReadOnly}
-            />
+            />); })()}
           </div>
 
           {/* Champion Display */}

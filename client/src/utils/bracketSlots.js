@@ -220,15 +220,25 @@ export function getMatchupTeams(slot, picks, tournamentData, results = {}) {
   const childResult1 = results[children[0]] || results[String(children[0])];
   const childResult2 = results[children[1]] || results[String(children[1])];
 
-  const team1Id = (childResult1?.status === 'final' && childResult1.winning_team_id
-    ? String(childResult1.winning_team_id)
-    : null) || picks[children[0]] || picks[String(children[0])];
-  const team2Id = (childResult2?.status === 'final' && childResult2.winning_team_id
-    ? String(childResult2.winning_team_id)
-    : null) || picks[children[1]] || picks[String(children[1])];
+  const pick1Id = picks[children[0]] || picks[String(children[0])];
+  const pick2Id = picks[children[1]] || picks[String(children[1])];
+
+  const actual1Id = childResult1?.status === 'final' && childResult1.winning_team_id
+    ? String(childResult1.winning_team_id) : null;
+  const actual2Id = childResult2?.status === 'final' && childResult2.winning_team_id
+    ? String(childResult2.winning_team_id) : null;
+
+  const team1Id = actual1Id || pick1Id;
+  const team2Id = actual2Id || pick2Id;
 
   const team1 = team1Id ? tournamentData?.teams?.[team1Id] || { id: team1Id } : null;
   const team2 = team2Id ? tournamentData?.teams?.[team2Id] || { id: team2Id } : null;
 
-  return { team1, team2 };
+  // Track user's original pick when it differs from the actual advancing team (busted pick)
+  const bustedPick1 = (actual1Id && pick1Id && String(actual1Id) !== String(pick1Id))
+    ? tournamentData?.teams?.[pick1Id] || { id: pick1Id } : null;
+  const bustedPick2 = (actual2Id && pick2Id && String(actual2Id) !== String(pick2Id))
+    ? tournamentData?.teams?.[pick2Id] || { id: pick2Id } : null;
+
+  return { team1, team2, bustedPick1, bustedPick2 };
 }

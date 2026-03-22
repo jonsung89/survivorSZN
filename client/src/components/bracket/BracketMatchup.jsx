@@ -24,6 +24,8 @@ export default function BracketMatchup({
   slot,
   team1,
   team2,
+  bustedPick1,
+  bustedPick2,
   pickedTeamId,
   result,
   slotData,
@@ -41,7 +43,7 @@ export default function BracketMatchup({
 
   const hasPick = !!pickedTeamId;
 
-  const renderTeamRow = (team, position) => {
+  const renderTeamRow = (team, position, bustedPick = null) => {
     if (!team) {
       const hasHeader = !!slotData;
       let tbdClasses = `flex items-center gap-2 px-2.5 py-2 relative ${compact ? 'min-w-[160px]' : ''} ${isDark ? 'text-white/40' : 'text-black/30'} bg-fg/[0.12]`;
@@ -191,12 +193,21 @@ export default function BracketMatchup({
           <div className="w-8 h-8 flex-shrink-0 rounded-full bg-fg/10 relative z-[2]" />
         )}
 
-        {/* Team name + record */}
-        <span className={`text-sm font-semibold flex-1 truncate relative z-[2] ${(isWrong || isBusted) ? `line-through ${isDark ? 'text-white/40' : 'text-fg/40'}` : isEliminated ? 'line-through text-white/40' : textColorClass}`}>
-          {compact
-            ? (team.abbreviation || team.shortName || team.name)
-            : (team.shortName || team.name || team.abbreviation)}
-        </span>
+        {/* Team name + busted pick (CBS-style stacked) */}
+        <div className="flex-1 min-w-0 relative z-[2]">
+          {bustedPick && (
+            <span className={`text-sm font-semibold line-through truncate block ${isDark ? 'text-white/40' : 'text-black/40'}`}>
+              {compact
+                ? (bustedPick.abbreviation || bustedPick.shortName || bustedPick.name)
+                : (bustedPick.shortName || bustedPick.name || bustedPick.abbreviation)}
+            </span>
+          )}
+          <span className={`text-sm font-semibold truncate block ${(isWrong || isBusted) ? `line-through ${isDark ? 'text-white/40' : 'text-fg/40'}` : isEliminated ? 'line-through text-white/40' : textColorClass}`}>
+            {compact
+              ? (team.abbreviation || team.shortName || team.name)
+              : (team.shortName || team.name || team.abbreviation)}
+          </span>
+        </div>
         {team.record && !isLive && !isDecided && (
           <span className={`text-xs flex-shrink-0 relative z-[2] ${isWrong ? (isDark ? 'text-white/30' : 'text-fg/30') : isGrayedOut ? 'text-fg/40' : hasGrayBg ? 'text-fg/60' : (isFirstFourPlaceholder && isLightMode) ? 'text-fg/60' : 'text-white/80'}`}>
             {team.record}
@@ -220,6 +231,8 @@ export default function BracketMatchup({
       </div>
     );
   };
+
+
 
   // Show info button when not read-only and at least one team is known
   const showInfoButton = !isReadOnly && (team1 || team2) && onDetailClick;
@@ -305,8 +318,8 @@ export default function BracketMatchup({
           return null;
         })()}
 
-        {renderTeamRow(team1, 'top')}
-        {renderTeamRow(team2, 'bottom')}
+        {renderTeamRow(team1, 'top', bustedPick1)}
+        {renderTeamRow(team2, 'bottom', bustedPick2)}
       </div>
 
       {/* Mobile: indicators + info button outside card */}

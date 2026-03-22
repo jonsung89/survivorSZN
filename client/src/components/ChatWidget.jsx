@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { MessageCircle, X, Send, Users, ChevronLeft, ChevronRight, ChevronUp, Smile, Image, Reply, CornerUpLeft, AlertCircle, Search, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Trash2, ShieldX } from 'lucide-react';
+import { MessageCircle, X, Send, Users, ChevronLeft, ChevronRight, ChevronUp, Smile, Image, Reply, CornerUpLeft, AlertCircle, Search, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Trash2, ShieldX, BarChart3 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
 import CommishBadge from './CommishBadge';
 import BracketShareCard from './bracket/BracketShareCard';
 import RecapCard from './chat/RecapCard';
+import PollCard from './chat/PollCard';
+import PollCreateDialog from './chat/PollCreateDialog';
 import RecapDialog from './recap/RecapDialog';
 import { useThemedLogo } from '../utils/logo';
 import { useTheme } from '../context/ThemeContext';
@@ -109,7 +111,7 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const { user, getIdToken } = useAuth();
   const tl = useThemedLogo();
   const { isDark } = useTheme();
-  const { socket, connected, onlineUsers, typingUsers, sendMessage, startTyping, stopTyping, on, joinLeague, leaveLeague } = useSocket();
+  const { socket, connected, onlineUsers, typingUsers, sendMessage, votePoll, addPollOption, endPoll, startTyping, stopTyping, on, joinLeague, leaveLeague } = useSocket();
   
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -155,6 +157,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
   const [swipingMessageId, setSwipingMessageId] = useState(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [reactionDetail, setReactionDetail] = useState(null); // { messageId, emoji, users }
+  const [activePolls, setActivePolls] = useState([]);
+  const [showPollCreate, setShowPollCreate] = useState(false);
+  const [expandedPollId, setExpandedPollId] = useState(null);
   const longPressTimer = useRef(null);
   
   const messagesEndRef = useRef(null);
@@ -258,6 +263,10 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     const unsubscribe = on('new-message', (message) => {
       if (message.leagueId === leagueId) {
         setMessages(prev => [...prev, message]);
+        // Track new poll for pinned banner
+        if (message.messageType === 'poll' || message.message_type === 'poll') {
+          setActivePolls(prev => [message, ...prev]);
+        }
         
         const isDesktop = window.innerWidth >= 1024;
         if (isDesktop || isOpen) {
@@ -305,6 +314,40 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
     });
     return unsubscribe;
   }, [on]);
+
+  // Listen for poll updates
+  useEffect(() => {
+    const unsubscribe = on('poll-update', ({ messageId, metadata }) => {
+      setMessages(prev => prev.map(m =>
+        m.id === messageId ? { ...m, metadata } : m
+      ));
+      setActivePolls(prev => {
+        if (metadata.status === 'ended') return prev.filter(p => p.id !== messageId);
+        return prev.map(p => p.id === messageId ? { ...p, metadata } : p);
+      });
+    });
+    return unsubscribe;
+  }, [on]);
+
+  // Fetch active polls on mount
+  useEffect(() => {
+    if (!leagueId) return;
+    const fetchPolls = async () => {
+      try {
+        const token = await (await import('firebase/auth')).getAuth().currentUser?.getIdToken();
+        const res = await fetch(`${API_URL}/chat/leagues/${leagueId}/active-polls`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setActivePolls(data.polls || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch active polls:', err);
+      }
+    };
+    fetchPolls();
+  }, [leagueId]);
 
   // Fetch unread count on mount
   useEffect(() => {
@@ -1121,6 +1164,19 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               );
             }
 
+            // Poll messages — show as system message in feed, full poll is pinned above input
+            if (message.messageType === 'poll' || message.message_type === 'poll') {
+              const pollMeta = typeof message.metadata === 'string' ? JSON.parse(message.metadata) : message.metadata;
+              const creatorName = message.display_name || message.displayName || 'Someone';
+              return (
+                <div key={message.id} className="flex items-center justify-center my-3">
+                  <span className="text-sm text-fg/40">
+                    📊 {creatorName} created a poll: "{pollMeta.question}"
+                  </span>
+                </div>
+              );
+            }
+
             const isOwn = message.user_id === user?.id || message.userId === user?.id;
             const messageUserId = message.user_id || message.userId;
             const isMessageFromCommissioner = messageUserId === commissionerId;
@@ -1550,6 +1606,60 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               </div>
             )}
             
+            {/* Pinned poll (desktop) */}
+            {(() => {
+              const activePoll = activePolls.find(p => {
+                const meta = typeof p.metadata === 'string' ? JSON.parse(p.metadata) : p.metadata;
+                return meta.status === 'active';
+              });
+              if (!activePoll) return null;
+              const meta = typeof activePoll.metadata === 'string' ? JSON.parse(activePoll.metadata) : activePoll.metadata;
+              const hasVoted = !!(meta.votes || {})[user?.id];
+              const isExpanded = expandedPollId === activePoll.id;
+
+              if (!hasVoted) {
+                return (
+                  <div className="border-t border-fg/10">
+                    <PollCard
+                      message={activePoll}
+                      currentUserId={user?.id}
+                      commissionerId={commissionerId}
+                      onVote={(optionIds) => votePoll(leagueId, activePoll.id, optionIds)}
+                      onAddOption={(text) => addPollOption(leagueId, activePoll.id, text)}
+                      onEndPoll={() => endPoll(leagueId, activePoll.id)}
+                        members={members}
+                    />
+                  </div>
+                );
+              }
+
+              if (isExpanded) {
+                return (
+                  <div className="border-t border-fg/10">
+                    <PollCard
+                      message={activePoll}
+                      currentUserId={user?.id}
+                      commissionerId={commissionerId}
+                      onVote={(optionIds) => votePoll(leagueId, activePoll.id, optionIds)}
+                      onAddOption={(text) => addPollOption(leagueId, activePoll.id, text)}
+                      onEndPoll={() => endPoll(leagueId, activePoll.id)}
+                      members={members}
+                      onCollapse={() => setExpandedPollId(null)}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  className="cursor-pointer"
+                  onClick={() => setExpandedPollId(activePoll.id)}
+                >
+                  <PollCard message={activePoll} currentUserId={user?.id} isPinned isVoted members={members} />
+                </div>
+              );
+            })()}
+
             {/* Input row */}
             <div className="p-3 flex gap-2 items-center">
               {/* Emoji button */}
@@ -1571,6 +1681,14 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                 className={`p-2.5 rounded-xl transition-colors flex items-center justify-center ${showGifPicker ? 'bg-nfl-blue text-white' : 'text-fg/50 hover:bg-fg/10'}`}
               >
                 <span className="text-xs font-bold">GIF</span>
+              </button>
+              {/* Poll button */}
+              <button
+                onClick={() => setShowPollCreate(true)}
+                className="p-2.5 rounded-xl transition-colors flex items-center justify-center text-fg/50 hover:bg-fg/10"
+                title="Create poll"
+              >
+                <BarChart3 className="w-5 h-5" />
               </button>
               <textarea
                 ref={inputRef}
@@ -1713,7 +1831,9 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                           ? 'Sent a GIF 🎞️'
                           : (messages[messages.length - 1]?.messageType === 'bracket_share' || messages[messages.length - 1]?.message_type === 'bracket_share')
                             ? 'Shared their bracket picks 🏀'
-                            : messages[messages.length - 1]?.message || 'No messages yet'
+                            : (messages[messages.length - 1]?.messageType === 'poll' || messages[messages.length - 1]?.message_type === 'poll')
+                              ? 'Created a poll 📊'
+                              : messages[messages.length - 1]?.message || 'No messages yet'
                       }
                     </p>
                   </>
@@ -1861,6 +1981,61 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
               >
                 {renderMessages()}
               </div>
+
+              {/* Pinned poll */}
+              {(() => {
+                const activePoll = activePolls.find(p => {
+                  const meta = typeof p.metadata === 'string' ? JSON.parse(p.metadata) : p.metadata;
+                  return meta.status === 'active';
+                });
+                if (!activePoll) return null;
+                const meta = typeof activePoll.metadata === 'string' ? JSON.parse(activePoll.metadata) : activePoll.metadata;
+                const hasVoted = !!(meta.votes || {})[user?.id];
+                const isExpanded = expandedPollId === activePoll.id;
+
+                if (!hasVoted) {
+                  // Show full poll card for non-voters
+                  return (
+                    <div className="border-t border-fg/10">
+                      <PollCard
+                        message={activePoll}
+                        currentUserId={user?.id}
+                        commissionerId={commissionerId}
+                        onVote={(optionIds) => votePoll(leagueId, activePoll.id, optionIds)}
+                        onAddOption={(text) => addPollOption(leagueId, activePoll.id, text)}
+                        onEndPoll={() => endPoll(leagueId, activePoll.id)}
+                      />
+                    </div>
+                  );
+                }
+
+                // Voted: show compact bar or expanded results
+                if (isExpanded) {
+                  return (
+                    <div className="border-t border-fg/10">
+                      <PollCard
+                        message={activePoll}
+                        currentUserId={user?.id}
+                        commissionerId={commissionerId}
+                        onVote={(optionIds) => votePoll(leagueId, activePoll.id, optionIds)}
+                        onAddOption={(text) => addPollOption(leagueId, activePoll.id, text)}
+                        onEndPoll={() => endPoll(leagueId, activePoll.id)}
+                        members={members}
+                        onCollapse={() => setExpandedPollId(null)}
+                      />
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    className="cursor-pointer"
+                    onClick={() => setExpandedPollId(activePoll.id)}
+                  >
+                    <PollCard message={activePoll} currentUserId={user?.id} isPinned isVoted members={members} />
+                  </div>
+                );
+              })()}
 
               {/* Input area - always shown, simplified in half mode */}
               <div className="border-t border-fg/10 bg-elevated/50">
@@ -2052,7 +2227,17 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
                       <span className="text-xs font-bold">GIF</span>
                     </button>
                   )}
-                  
+
+                  {/* Poll button - only in full mode */}
+                  {sheetSize === 'full' && (
+                    <button
+                      onClick={() => setShowPollCreate(true)}
+                      className="p-2.5 rounded-xl transition-colors bg-fg/10 text-fg/60 hover:bg-fg/20"
+                    >
+                      <BarChart3 className="w-5 h-5" />
+                    </button>
+                  )}
+
                   {/* Text input with mention highlighting */}
                   {/* Text input */}
                   <textarea
@@ -2358,6 +2543,16 @@ export default function ChatWidget({ leagueId, leagueName, commissionerId, membe
         leagueId={leagueId}
         recapDate={recapDialogDate}
       />
+
+      {/* Poll Create Dialog */}
+      {showPollCreate && (
+        <PollCreateDialog
+          onClose={() => setShowPollCreate(false)}
+          onSubmit={(pollMetadata) => {
+            sendMessage(leagueId, null, null, null, { messageType: 'poll', metadata: pollMetadata });
+          }}
+        />
+      )}
     </>
   );
 }

@@ -138,6 +138,25 @@ export function SocketProvider({ children }) {
     }
   }, [socket, connected]);
 
+  // Poll actions
+  const votePoll = useCallback((leagueId, messageId, optionIds) => {
+    if (socket && connected) {
+      socket.emit('poll-vote', { leagueId, messageId, optionIds });
+    }
+  }, [socket, connected]);
+
+  const addPollOption = useCallback((leagueId, messageId, optionText) => {
+    if (socket && connected) {
+      socket.emit('poll-add-option', { leagueId, messageId, optionText });
+    }
+  }, [socket, connected]);
+
+  const endPoll = useCallback((leagueId, messageId) => {
+    if (socket && connected) {
+      socket.emit('poll-end', { leagueId, messageId });
+    }
+  }, [socket, connected]);
+
   // Typing indicators
   const startTyping = useCallback((leagueId) => {
     if (socket && connected) {
@@ -177,6 +196,9 @@ export function SocketProvider({ children }) {
     joinLeague,
     leaveLeague,
     sendMessage,
+    votePoll,
+    addPollOption,
+    endPoll,
     startTyping,
     stopTyping,
     on,

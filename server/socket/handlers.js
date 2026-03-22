@@ -339,6 +339,119 @@ function setupSocketHandlers(io) {
       }
     });
 
+    // Poll vote
+    socket.on('poll-vote', async ({ leagueId, messageId, optionIds }) => {
+      try {
+        const message = await db.getOne(
+          `SELECT id, user_id, metadata, message_type FROM chat_messages WHERE id = $1 AND league_id = $2`,
+          [messageId, leagueId]
+        );
+        if (!message || message.message_type !== 'poll') {
+          socket.emit('error', { message: 'Poll not found' });
+          return;
+        }
+        const metadata = typeof message.metadata === 'string' ? JSON.parse(message.metadata) : message.metadata;
+        if (metadata.status !== 'active') {
+          socket.emit('error', { message: 'Poll has ended' });
+          return;
+        }
+        // Validate option IDs exist
+        const validIds = metadata.options.map(o => o.id);
+        if (!optionIds.every(id => validIds.includes(id))) {
+          socket.emit('error', { message: 'Invalid option' });
+          return;
+        }
+        // Enforce single answer if configured
+        if (!metadata.config.allowMultiple && optionIds.length > 1) {
+          socket.emit('error', { message: 'Only one answer allowed' });
+          return;
+        }
+        metadata.votes[socket.userId] = optionIds;
+        await db.run(
+          'UPDATE chat_messages SET metadata = $1 WHERE id = $2',
+          [JSON.stringify(metadata), messageId]
+        );
+        io.to(`league:${leagueId}`).emit('poll-update', { messageId, metadata });
+      } catch (error) {
+        console.error('Poll vote error:', error);
+        socket.emit('error', { message: 'Failed to vote' });
+      }
+    });
+
+    // Poll add option
+    socket.on('poll-add-option', async ({ leagueId, messageId, optionText }) => {
+      try {
+        const message = await db.getOne(
+          `SELECT id, metadata, message_type FROM chat_messages WHERE id = $1 AND league_id = $2`,
+          [messageId, leagueId]
+        );
+        if (!message || message.message_type !== 'poll') {
+          socket.emit('error', { message: 'Poll not found' });
+          return;
+        }
+        const metadata = typeof message.metadata === 'string' ? JSON.parse(message.metadata) : message.metadata;
+        if (metadata.status !== 'active' || !metadata.config.allowAddOptions) {
+          socket.emit('error', { message: 'Cannot add options to this poll' });
+          return;
+        }
+        const trimmed = optionText.trim();
+        if (!trimmed || trimmed.length > 100) {
+          socket.emit('error', { message: 'Invalid option text' });
+          return;
+        }
+        if (metadata.options.some(o => o.text.toLowerCase() === trimmed.toLowerCase())) {
+          socket.emit('error', { message: 'Option already exists' });
+          return;
+        }
+        const newId = 'opt_' + Math.random().toString(36).slice(2, 8);
+        metadata.options.push({ id: newId, text: trimmed, addedBy: socket.userId });
+        await db.run(
+          'UPDATE chat_messages SET metadata = $1 WHERE id = $2',
+          [JSON.stringify(metadata), messageId]
+        );
+        io.to(`league:${leagueId}`).emit('poll-update', { messageId, metadata });
+      } catch (error) {
+        console.error('Poll add option error:', error);
+        socket.emit('error', { message: 'Failed to add option' });
+      }
+    });
+
+    // Poll end
+    socket.on('poll-end', async ({ leagueId, messageId }) => {
+      try {
+        const message = await db.getOne(
+          `SELECT id, user_id, metadata, message_type FROM chat_messages WHERE id = $1 AND league_id = $2`,
+          [messageId, leagueId]
+        );
+        if (!message || message.message_type !== 'poll') {
+          socket.emit('error', { message: 'Poll not found' });
+          return;
+        }
+        const metadata = typeof message.metadata === 'string' ? JSON.parse(message.metadata) : message.metadata;
+        if (metadata.status !== 'active') {
+          socket.emit('error', { message: 'Poll already ended' });
+          return;
+        }
+        // Only poll creator or commissioner can end
+        const league = await db.getOne('SELECT commissioner_id FROM leagues WHERE id = $1', [leagueId]);
+        if (message.user_id !== socket.userId && league?.commissioner_id !== socket.userId) {
+          socket.emit('error', { message: 'Only poll creator or commissioner can end the poll' });
+          return;
+        }
+        metadata.status = 'ended';
+        metadata.endedBy = socket.userId;
+        metadata.endedAt = new Date().toISOString();
+        await db.run(
+          'UPDATE chat_messages SET metadata = $1 WHERE id = $2',
+          [JSON.stringify(metadata), messageId]
+        );
+        io.to(`league:${leagueId}`).emit('poll-update', { messageId, metadata });
+      } catch (error) {
+        console.error('Poll end error:', error);
+        socket.emit('error', { message: 'Failed to end poll' });
+      }
+    });
+
     // Typing indicator
     socket.on('typing-start', (leagueId) => {
       if (!typingUsers.has(leagueId)) {

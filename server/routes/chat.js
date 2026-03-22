@@ -81,6 +81,39 @@ router.get('/leagues/:leagueId/messages', async (req, res) => {
   }
 });
 
+// Get active polls for a league
+router.get('/leagues/:leagueId/active-polls', async (req, res) => {
+  try {
+    const user = await getUser(req);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { leagueId } = req.params;
+
+    const membership = await db.getOne(
+      'SELECT id FROM league_members WHERE league_id = $1 AND user_id = $2',
+      [leagueId, user.id]
+    );
+    if (!membership) return res.status(403).json({ error: 'Not a member of this league' });
+
+    const polls = await db.getAll(`
+      SELECT cm.id, cm.user_id, cm.message, cm.message_type, cm.metadata, cm.created_at,
+             u.display_name, u.profile_image_url
+      FROM chat_messages cm
+      LEFT JOIN users u ON cm.user_id = u.id
+      WHERE cm.league_id = $1
+        AND cm.message_type = 'poll'
+        AND cm.deleted_at IS NULL
+        AND (cm.metadata->>'status') = 'active'
+      ORDER BY cm.created_at DESC
+    `, [leagueId]);
+
+    res.json({ polls: polls.map(p => ({ ...p, messageType: 'poll' })) });
+  } catch (error) {
+    console.error('Get active polls error:', error);
+    res.status(500).json({ error: 'Failed to fetch polls' });
+  }
+});
+
 // Get unread count for a league
 router.get('/leagues/:leagueId/unread', async (req, res) => {
   try {

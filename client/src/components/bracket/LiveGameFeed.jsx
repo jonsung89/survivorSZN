@@ -278,14 +278,19 @@ function PlayItem({ item, isDark, tl, onGameClick }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1.5 flex-wrap">
           <span className={`text-base text-fg ${mergedCommentary ? 'font-semibold' : ''}`}>
-            {mergedCommentary?.icon && <span className="mr-1">{mergedCommentary.icon}</span>}
-            {participant && (
+            {mergedCommentary?.prospectInfo ? (
+              <img src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nba.png&w=40&h=40" alt="NBA" className="inline w-4 h-4 mr-1" style={{ verticalAlign: '-2px' }} />
+            ) : mergedCommentary?.icon ? (
+              <span className="mr-1">{mergedCommentary.icon}</span>
+            ) : null}
+            {(participant || playTeam) && (
               <span className="font-semibold">
-                {participant.jersey ? `#${participant.jersey} ` : ''}
-                {participant.shortName || participant.name || ''}
+                {participant
+                  ? `${participant.jersey ? `#${participant.jersey} ` : ''}${participant.shortName || participant.name || ''}`
+                  : (playTeam?.abbreviation || playTeam?.shortName || '')}
               </span>
             )}
-            {participant && ' '}
+            {(participant || playTeam) && ' '}
             <span className={mergedCommentary
               ? 'font-semibold text-fg'
               : `${isScoring ? 'font-medium text-fg/80' : isMiss ? 'text-fg/60' : isBlock || isSteal ? 'text-fg font-medium' : isTurnover ? 'text-fg/70' : 'text-fg/80'}`
@@ -328,7 +333,7 @@ function PlayItem({ item, isDark, tl, onGameClick }) {
 // ── Commentary Item ──────────────────────────────────────────────────────
 function CommentaryItem({ item, isDark, tl, onGameClick }) {
   const { commentary, gameId, homeTeam, awayTeam, homeScore, awayScore, period, clock } = item;
-  const { kind, text, subtext, icon, teamColor, teamLogo, priority, playerHeadshot, playerTeamColor, playerTeamLogo } = commentary;
+  const { kind, text, subtext, icon, teamColor, teamLogo, priority, playerHeadshot, playerTeamColor, playerTeamLogo, prospectInfo } = commentary;
 
   const isHighPriority = priority >= 8;
   const borderColor = isHighPriority ? '#f59e0b' : (teamColor || '#6b7280');
@@ -408,7 +413,11 @@ function CommentaryItem({ item, isDark, tl, onGameClick }) {
       {/* Commentary content */}
       <div className="flex-1 min-w-0">
         <div className={`text-base ${isHighPriority ? 'font-semibold text-fg' : 'font-medium text-fg'}`}>
-          {icon && <span className="mr-1.5">{icon}</span>}
+          {prospectInfo ? (
+            <img src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nba.png&w=40&h=40" alt="NBA" className="inline w-4 h-4 mr-1.5" style={{ verticalAlign: '-2px' }} />
+          ) : icon ? (
+            <span className="mr-1.5">{icon}</span>
+          ) : null}
           {text}
         </div>
         {subtext && (
@@ -506,7 +515,7 @@ function getGameContext(play, homeScore, awayScore, period, clock) {
   const isSecondHalf = periodNum >= 2;
   const isLateGame = isSecondHalf && secondsLeft != null && secondsLeft <= 120;
   const isVeryLate = isSecondHalf && secondsLeft != null && secondsLeft <= 30;
-  const isEndOfHalf = periodNum === 1 && secondsLeft != null && secondsLeft <= 60;
+  const isEndOfHalf = false; // Removed — "heading into the half" context felt forced
 
   // Tied
   if (diff === 0) {
@@ -614,6 +623,38 @@ function getEnrichedPlayAction(play, mergedCommentary, gameCtx) {
         `clutch ${baseAction.toLowerCase()} to grab the lead!`,
       ], play);
     }
+    case 'largest_lead': {
+      const { margin, teamName } = enrichData;
+      return `${baseAction} — ${teamName} extends to their largest lead, ${margin} points`;
+    }
+    case 'blowout': {
+      const { margin, teamName } = enrichData;
+      return pick([
+        `${baseAction} — ${margin}-point lead for ${teamName}`,
+        `${baseAction} — ${teamName} up ${margin}`,
+      ], play);
+    }
+    case 'prospect': {
+      const { statLine } = enrichData;
+      return `${baseAction} — ${statLine}`;
+    }
+    case 'prospect_milestone': {
+      const { points } = enrichData;
+      return `${baseAction} — ${points} PTS on the night`;
+    }
+    case 'first_lead': {
+      const { teamName } = enrichData;
+      return `${baseAction} — ${teamName} takes the first lead of the game!`;
+    }
+    case 'lead_change': {
+      const { teamName, leadChanges } = enrichData;
+      const suffix = leadChanges >= 5 ? ` (${leadChanges} lead changes)` : '';
+      return `${baseAction} — ${teamName} takes the lead!${suffix}`;
+    }
+    case 'game_tied': {
+      const { score } = enrichData;
+      return `${baseAction} to tie it at ${score}!`;
+    }
     default:
       return baseAction;
   }
@@ -633,7 +674,7 @@ function getPlayAction(play, { homeScore, awayScore, period, clock } = {}) {
     if (zone === 'deep_three' || distance >= 30) {
       shot = pick(['drills it from WAY downtown', 'from deep — BANG', 'pulls up from the logo'], play) + `! ${distTag}`;
     } else if (zone === 'corner_three') {
-      shot = pick(['knocks down the corner three', 'buries it from the corner', 'corner three — cash'], play) + distTag;
+      shot = pick(['knocks down the corner three', 'buries it from the corner', 'corner three'], play) + distTag;
     } else if (text.includes('step back')) {
       shot = pick(['step-back three — SPLASH', 'hits the step-back three'], play) + distTag;
     } else if (text.includes('pullup') || text.includes('pull-up') || text.includes('pull up')) {

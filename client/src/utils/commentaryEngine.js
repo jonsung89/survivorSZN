@@ -322,7 +322,21 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
           gameState.lastTiedScore = homeScore;
           commentary.push(makeCommentary('tied',
             `We're all tied up at ${homeScore}!`,
-            { icon: '⚖️', priority: 7 }
+            { icon: '⚖️', priority: 7,
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'game_tied', enrichData: { score: homeScore } }
+          ));
+        }
+      } else if (prevLeader === null && leadTeamId !== null) {
+        // First lead of the game
+        const leaderTeam = leadTeamId === homeTeam?.id ? homeTeam : awayTeam;
+        gameState.leadChanges++;
+        if (canEmit(gameState, 'lead_change', now)) {
+          commentary.push(makeCommentary('lead_change',
+            `${teamName(leaderTeam)} takes the first lead of the game!`,
+            { icon: '🔥', teamColor: leaderTeam.color, teamLogo: leaderTeam.logo, priority: 8,
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'first_lead', enrichData: { teamName: teamName(leaderTeam) } }
           ));
         }
       } else if (prevLeader !== null && prevLeader !== leadTeamId) {
@@ -336,6 +350,8 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
           }
           commentary.push(makeCommentary('lead_change', text, {
             icon: '🔄', teamColor: leaderTeam.color, teamLogo: leaderTeam.logo, priority: 7,
+            mergeWithPlay: true, triggerPlayId: play.id,
+            enrichType: 'lead_change', enrichData: { teamName: teamName(leaderTeam), leadChanges: gameState.leadChanges },
           }));
         }
       }
@@ -349,7 +365,9 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
       if (canEmit(gameState, 'largest_lead', now, 30000)) {
         commentary.push(makeCommentary('largest_lead',
           `${teamName(leaderTeam)} extends to their largest lead — ${margin} points`,
-          { icon: '📈', teamColor: leaderTeam.color, teamLogo: leaderTeam.logo, priority: 5 }
+          { icon: '📈', teamColor: leaderTeam.color, teamLogo: leaderTeam.logo, priority: 5,
+            mergeWithPlay: true, triggerPlayId: play.id,
+            enrichType: 'largest_lead', enrichData: { margin, teamName: teamName(leaderTeam) } }
         ));
       }
     }
@@ -357,10 +375,18 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
     // ── Blowout Alert ────────────────────────────────────────────────
     if (play.scoringPlay && margin >= 20) {
       const leaderTeam = leadTeamId === homeTeam?.id ? homeTeam : awayTeam;
-      if (canEmit(gameState, 'blowout', now, 60000)) {
-        commentary.push(makeCommentary('blowout',
+      if (canEmit(gameState, 'blowout', now, 180000)) {
+        const blowoutTexts = [
           `This one's getting out of hand — ${teamName(leaderTeam)} leads by ${margin}`,
-          { icon: '💨', teamColor: leaderTeam.color, teamLogo: leaderTeam.logo, priority: 4 }
+          `${teamName(leaderTeam)} running away with it — up ${margin}`,
+          `${margin}-point lead for ${teamName(leaderTeam)}`,
+        ];
+        const blowoutCount = gameState._blowoutCount = (gameState._blowoutCount || 0) + 1;
+        const blowoutText = blowoutTexts[Math.min(blowoutCount - 1, blowoutTexts.length - 1)];
+        commentary.push(makeCommentary('blowout', blowoutText,
+          { icon: '💨', teamColor: leaderTeam.color, teamLogo: leaderTeam.logo, priority: 4,
+            mergeWithPlay: true, triggerPlayId: play.id,
+            enrichType: 'blowout', enrichData: { margin, teamName: teamName(leaderTeam) } }
         ));
       }
     }
@@ -768,32 +794,37 @@ export function analyzeNewPlays(allPlays, gameState, ctx) {
           statLine += ` · ${ps.fgMade}/${ps.fgAttempted} FG`;
 
           commentary.push(makeCommentary('prospect',
-            `#${prospect.rank} Pick ${prospect.name} ${play.scoreValue === 3 ? 'drains a three' : 'scores'} — ${statLine}`,
+            `${prospect.name} (#${prospect.rank} prospect) ${play.scoreValue === 3 ? 'drains a three' : 'scores'} — ${statLine}`,
             {
               icon: '🏀',
               teamColor: playTeam?.color,
               teamLogo: playTeam?.logo,
               priority: 7,
               prospectInfo: { rank: prospect.rank, name: prospect.name },
+              mergeWithPlay: true, triggerPlayId: play.id,
+              enrichType: 'prospect', enrichData: { rank: prospect.rank, name: prospect.name, statLine },
               ...playerVisuals(play, playTeam),
             }
           ));
         }
 
-        // Prospect milestone
-        if (play.scoringPlay) {
+        // Prospect milestone — only emit if prospect scoring play didn't already fire for this play
+        const prospectScoringAlreadyEmitted = commentary.some(c => c.kind === 'prospect' && c.triggerPlayId === play.id);
+        if (play.scoringPlay && !prospectScoringAlreadyEmitted) {
           const prospectMilestones = [30, 25, 20, 15];
           for (const m of prospectMilestones) {
             if (ps.points >= m && ps.points - (play.scoreValue || 0) < m) {
               if (canEmit(gameState, `prospect_milestone_${pid}_${m}`, now, 0)) {
                 commentary.push(makeCommentary('prospect_milestone',
-                  `Draft stock ${m >= 25 ? 'soaring' : 'rising'}! ${prospect.name} up to ${ps.points} points`,
+                  `${prospect.name} hits ${ps.points} points`,
                   {
                     icon: '📈',
                     teamColor: playTeam?.color,
                     teamLogo: playTeam?.logo,
                     priority: 8,
                     prospectInfo: { rank: prospect.rank, name: prospect.name },
+                    mergeWithPlay: true, triggerPlayId: play.id,
+                    enrichType: 'prospect_milestone', enrichData: { points: ps.points, milestone: m },
                     ...playerVisuals(play, playTeam),
                   }
                 ));

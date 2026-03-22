@@ -163,6 +163,19 @@ export default function useLiveGameFeed(sport, games, options = {}) {
 
         if (!isScoring && !isBlock && !isSteal && !isTurnover && !isEndPeriod) continue;
 
+        // Content-based dedup: skip plays with same player + action type + clock time
+        const playerId = play.participants?.[0]?.playerId;
+        const clockVal = play.clock?.displayValue || '';
+        const actionKey = isBlock ? 'block' : isSteal ? 'steal' : isTurnover ? 'turnover' : '';
+        if (actionKey && playerId) {
+          const contentKey = `${gameId}-${playerId}-${actionKey}-${clockVal}`;
+          if (!seenPlayIdsRef.current.has(contentKey)) {
+            seenPlayIdsRef.current.add(contentKey);
+          } else {
+            continue; // duplicate content, skip
+          }
+        }
+
         // Get player stat line for display
         const pid = play.participants?.[0]?.playerId;
         const playerStatLine = pid ? getPlayerStatLine(gameState, pid, play) : null;

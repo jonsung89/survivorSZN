@@ -80,6 +80,16 @@ export default function BracketChallenge() {
     }
   }, [isTournamentLocked]);
 
+  // Track tab pageviews
+  useEffect(() => {
+    if (!league?.id) return;
+    trackingAPI.event('bracket_tab_view', {
+      tab: activeTab,
+      leagueId: league.id,
+      leagueName: league.name,
+    });
+  }, [activeTab, league?.id]);
+
   // Build userId -> champion team info map from leaderboard data
   const buildChampionsMap = () => {
     if (!leaderboard?.length || !tournamentData?.teams) return null;

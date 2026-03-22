@@ -23,7 +23,7 @@ export default function MobileBracketRoundPage({
   tiebreakerScores,
   onTiebreakerChange,
 }) {
-  const getTeamsForSlot = (slot) => getMatchupTeams(slot, picks, tournamentData);
+  const getTeamsForSlot = (slot) => getMatchupTeams(slot, picks, tournamentData, results);
 
   const getResultForSlot = (slot) =>
     results?.[slot] || results?.[String(slot)] || null;
@@ -50,6 +50,13 @@ export default function MobileBracketRoundPage({
     const competitors = result.competitors || [];
     const comp = competitors.find((c) => String(c.teamId) === String(team.id));
     if (comp) return { ...team, score: comp.score };
+    // Fall back to winning/losing scores from result
+    if (String(result.winning_team_id) === String(team.id) && result.winning_score != null) {
+      return { ...team, score: result.winning_score };
+    }
+    if (String(result.losing_team_id) === String(team.id) && result.losing_score != null) {
+      return { ...team, score: result.losing_score };
+    }
     return team;
   };
 

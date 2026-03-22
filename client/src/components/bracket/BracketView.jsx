@@ -248,7 +248,7 @@ export default function BracketView({
   );
 
   // Slot helpers for desktop Final Four rendering
-  const teamsFor = (slot) => getMatchupTeams(slot, picks, tournamentData);
+  const teamsFor = (slot) => getMatchupTeams(slot, picks, tournamentData, results);
   const resultFor = (slot) => results?.[slot] || results?.[String(slot)] || null;
   const pickedFor = (slot) => picks?.[slot] || picks?.[String(slot)] || null;
 

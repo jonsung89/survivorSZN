@@ -203,7 +203,7 @@ export function countPicks(picks) {
 }
 
 // Get the two teams that should play in a given slot
-export function getMatchupTeams(slot, picks, tournamentData) {
+export function getMatchupTeams(slot, picks, tournamentData, results = {}) {
   const round = getSlotRound(slot);
 
   if (round === 0) {
@@ -216,8 +216,16 @@ export function getMatchupTeams(slot, picks, tournamentData) {
   const children = getChildSlots(slot);
   if (!children) return { team1: null, team2: null };
 
-  const team1Id = picks[children[0]] || picks[String(children[0])];
-  const team2Id = picks[children[1]] || picks[String(children[1])];
+  // Prefer actual winner from results when game is decided; fall back to user's pick
+  const childResult1 = results[children[0]] || results[String(children[0])];
+  const childResult2 = results[children[1]] || results[String(children[1])];
+
+  const team1Id = (childResult1?.status === 'final' && childResult1.winning_team_id
+    ? String(childResult1.winning_team_id)
+    : null) || picks[children[0]] || picks[String(children[0])];
+  const team2Id = (childResult2?.status === 'final' && childResult2.winning_team_id
+    ? String(childResult2.winning_team_id)
+    : null) || picks[children[1]] || picks[String(children[1])];
 
   const team1 = team1Id ? tournamentData?.teams?.[team1Id] || { id: team1Id } : null;
   const team2 = team2Id ? tournamentData?.teams?.[team2Id] || { id: team2Id } : null;

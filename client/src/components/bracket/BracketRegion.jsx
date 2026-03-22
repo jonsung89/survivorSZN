@@ -42,7 +42,7 @@ export default function BracketRegion({
   const rounds = region.rounds;
 
   const getTeamsForSlot = (slot) => {
-    return getMatchupTeams(slot, picks, tournamentData);
+    return getMatchupTeams(slot, picks, tournamentData, results);
   };
 
   const getResultForSlot = (slot) => {
@@ -74,10 +74,18 @@ export default function BracketRegion({
   // Enhance team objects with live scores from results
   const enrichTeam = (team, slot, result) => {
     if (!team || !result) return team;
+    // Try competitors array first (from live data)
     const competitors = result.competitors || [];
     const comp = competitors.find(c => String(c.teamId) === String(team.id));
     if (comp) {
       return { ...team, score: comp.score };
+    }
+    // Fall back to winning/losing scores from result
+    if (String(result.winning_team_id) === String(team.id) && result.winning_score != null) {
+      return { ...team, score: result.winning_score };
+    }
+    if (String(result.losing_team_id) === String(team.id) && result.losing_score != null) {
+      return { ...team, score: result.losing_score };
     }
     return team;
   };

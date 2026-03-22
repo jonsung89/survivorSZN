@@ -11,7 +11,7 @@ export default function BracketFinalFour({
   isReadOnly,
   finalFour, // { semifinals: [61, 62], championship: 63, semifinalRegions: [...] }
 }) {
-  const getTeamsForSlot = (slot) => getMatchupTeams(slot, picks, tournamentData);
+  const getTeamsForSlot = (slot) => getMatchupTeams(slot, picks, tournamentData, results);
   const getResultForSlot = (slot) => results?.[slot] || results?.[String(slot)] || null;
   const getPickedTeamForSlot = (slot) => picks?.[slot] || picks?.[String(slot)] || null;
 

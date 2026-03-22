@@ -2,7 +2,7 @@
 // Fetches bracket structure, team breakdowns, and live results from ESPN API
 
 const { fetchWithCache } = require('./espn');
-const { SEED_MATCHUPS, getSlotRound, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
+const { SEED_MATCHUPS, getSlotRound, getNextSlot, ROUND_BOUNDARIES } = require('../utils/bracket-slots');
 const { getDraftProspects, normalizeName } = require('./nba-draft');
 const Anthropic = require('@anthropic-ai/sdk');
 const { db } = require('../db/supabase');
@@ -338,11 +338,30 @@ async function getTournamentBracket(season) {
     }
   }
 
-  // Map later-round games using espn event data
-  for (const [eventId, game] of Object.entries(eventMap)) {
-    if (game.round === null || game.round === 0) continue;
+  // Build a lookup: teamId → slot number in the previous round
+  // This lets us place later-round games in the correct slot by tracing
+  // which earlier-round slot each team came from, then using getNextSlot().
+  function buildTeamSlotMap(upToRound) {
+    const map = {}; // teamId → slot number
+    for (const [slotKey, slot] of Object.entries(slots)) {
+      const s = parseInt(slotKey);
+      if (isNaN(s)) continue;
+      const slotRound = getSlotRound(s);
+      if (slotRound < upToRound) {
+        if (slot.team1?.id) map[String(slot.team1.id)] = s;
+        if (slot.team2?.id) map[String(slot.team2.id)] = s;
+      }
+    }
+    return map;
+  }
 
-    // For rounds > 0, find the correct slot by region and round
+  // Sort later-round games by round so we process R32 before S16, etc.
+  const laterRoundGames = Object.entries(eventMap)
+    .filter(([, g]) => g.round !== null && g.round > 0)
+    .sort((a, b) => a[1].round - b[1].round);
+
+  // Map later-round games using team-based slot matching
+  for (const [eventId, game] of laterRoundGames) {
     const rb = ROUND_BOUNDARIES[game.round];
     if (!rb) continue;
 
@@ -352,36 +371,85 @@ async function getTournamentBracket(season) {
       if (regionIdx < 0) continue;
       const regionSlotBase = rb.start + regionIdx * rb.gamesPerRegion;
 
-      // Try to find slot by matching seeds/teams against the bracket structure
-      // For now, assign sequentially within the region for this round
-      for (let i = 0; i < rb.gamesPerRegion; i++) {
-        const slotNum = regionSlotBase + i;
-        if (!slots[slotNum]) {
-          slots[slotNum] = {
-            team1: game.team1,
-            team2: game.team2,
-            espnEventId: game.espnEventId,
-            status: game.status,
-            startDate: game.startDate,
-            broadcast: game.broadcast,
-            venue: game.venue,
-          };
-          break;
+      // Find correct slot by tracing teams back to their previous-round slot
+      const teamSlotMap = buildTeamSlotMap(game.round);
+      const t1Id = game.team1?.id ? String(game.team1.id) : null;
+      const t2Id = game.team2?.id ? String(game.team2.id) : null;
+      const prevSlot1 = t1Id ? teamSlotMap[t1Id] : null;
+      const prevSlot2 = t2Id ? teamSlotMap[t2Id] : null;
+      const prevSlot = prevSlot1 ?? prevSlot2;
+
+      let targetSlot = null;
+      if (prevSlot != null) {
+        targetSlot = getNextSlot(prevSlot);
+      }
+
+      // Validate target slot is within this region's range for this round
+      if (targetSlot != null && targetSlot >= regionSlotBase && targetSlot < regionSlotBase + rb.gamesPerRegion) {
+        slots[targetSlot] = {
+          team1: game.team1,
+          team2: game.team2,
+          espnEventId: game.espnEventId,
+          status: game.status,
+          startDate: game.startDate,
+          broadcast: game.broadcast,
+          venue: game.venue,
+        };
+      } else {
+        // Fallback: assign to first empty slot in this region (for games with unknown teams)
+        for (let i = 0; i < rb.gamesPerRegion; i++) {
+          const slotNum = regionSlotBase + i;
+          if (!slots[slotNum]) {
+            slots[slotNum] = {
+              team1: game.team1,
+              team2: game.team2,
+              espnEventId: game.espnEventId,
+              status: game.status,
+              startDate: game.startDate,
+              broadcast: game.broadcast,
+              venue: game.venue,
+            };
+            break;
+          }
         }
       }
     } else if (game.round === 4) {
-      // Final Four
-      for (let s = 61; s <= 62; s++) {
-        if (!slots[s]) {
-          slots[s] = {
-            team1: game.team1,
-            team2: game.team2,
-            espnEventId: game.espnEventId,
-            status: game.status,
-            startDate: game.startDate,
-            broadcast: game.broadcast,
-          };
-          break;
+      // Final Four — match by tracing E8 winners
+      const teamSlotMap = buildTeamSlotMap(4);
+      const t1Id = game.team1?.id ? String(game.team1.id) : null;
+      const t2Id = game.team2?.id ? String(game.team2.id) : null;
+      const prevSlot1 = t1Id ? teamSlotMap[t1Id] : null;
+      const prevSlot2 = t2Id ? teamSlotMap[t2Id] : null;
+      const prevSlot = prevSlot1 ?? prevSlot2;
+
+      let targetSlot = null;
+      if (prevSlot != null) {
+        targetSlot = getNextSlot(prevSlot);
+      }
+
+      if (targetSlot != null && targetSlot >= 61 && targetSlot <= 62) {
+        slots[targetSlot] = {
+          team1: game.team1,
+          team2: game.team2,
+          espnEventId: game.espnEventId,
+          status: game.status,
+          startDate: game.startDate,
+          broadcast: game.broadcast,
+        };
+      } else {
+        // Fallback: first empty FF slot
+        for (let s = 61; s <= 62; s++) {
+          if (!slots[s]) {
+            slots[s] = {
+              team1: game.team1,
+              team2: game.team2,
+              espnEventId: game.espnEventId,
+              status: game.status,
+              startDate: game.startDate,
+              broadcast: game.broadcast,
+            };
+            break;
+          }
         }
       }
     } else if (game.round === 5) {

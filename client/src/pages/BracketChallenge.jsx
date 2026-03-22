@@ -537,7 +537,7 @@ export default function BracketChallenge() {
 
       {/* Tournament Games — show when tournament has started (regardless of challenge status) */}
       {isTournamentLocked && (
-        <TournamentGames tournamentData={tournamentData} season={challenge?.season} leaderboard={leaderboard} prospects={prospects} />
+        <TournamentGames tournamentData={tournamentData} season={challenge?.season} leaderboard={leaderboard} prospects={prospects} myPicks={leaderboard.find(e => e.isCurrentUser)?.picks} />
       )}
 
       {/* Daily Recap */}

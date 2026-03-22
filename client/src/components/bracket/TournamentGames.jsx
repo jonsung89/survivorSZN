@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, X, ChevronDown, TrendingUp, TrendingDown, Minus, Target, Users, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, ChevronDown, TrendingUp, TrendingDown, Minus, Target, Users, Info, Check } from 'lucide-react';
 import { scheduleAPI, trackingAPI } from '../../api';
 import { useTheme } from '../../context/ThemeContext';
 import { useThemedLogo, useThemedColor } from '../../utils/logo';
@@ -141,7 +141,7 @@ const SEASON_STATS_CONFIG = [
   { key: 'avgAssists', label: 'APG' },
 ];
 
-export default function TournamentGames({ tournamentData, season, leaderboard = [], prospects = [] }) {
+export default function TournamentGames({ tournamentData, season, leaderboard = [], prospects = [], myPicks = {} }) {
   const { isDark } = useTheme();
   const tl = useThemedLogo();
   const tc = useThemedColor();
@@ -276,6 +276,35 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
       total,
     };
   }, [eventToSlot, pickDistribution, tournamentData]);
+
+  // Get user's pick status for a team in a game
+  // Uses pickDistribution (which handles stale IDs) to check if current user picked a team
+  // Returns: 'correct' | 'wrong' | 'picked' | null
+  const getMyPickStatus = useCallback((game, teamId) => {
+    if (!myPicks || !teamId) return null;
+    const slot = eventToSlot[String(game.id)];
+    if (slot == null) return null;
+    const dist = pickDistribution[slot];
+    if (!dist) return null;
+
+    const teamStr = String(teamId);
+    const pickers = dist[teamStr] || [];
+    const myEntry = leaderboard.find(e => e.isCurrentUser);
+    if (!myEntry) return null;
+    const isPicked = pickers.some(p => p.displayName === myEntry.displayName && p.bracketName === myEntry.bracketName);
+    if (!isPicked) return null;
+
+    const isPast = isGamePast(game);
+    const live = isGameLive(game);
+    if (!isPast && !live) return 'picked';
+    if (live) return 'picked';
+    const awayScore = getScore(game.awayTeam);
+    const homeScore = getScore(game.homeTeam);
+    const isAway = String(game.awayTeam?.id) === teamStr;
+    const pickedScore = isAway ? awayScore : homeScore;
+    const opponentScore = isAway ? homeScore : awayScore;
+    return pickedScore > opponentScore ? 'correct' : 'wrong';
+  }, [myPicks, eventToSlot, pickDistribution, leaderboard]);
 
   // Map prospects to games by team ID
   const prospectsByGame = useMemo(() => {
@@ -702,6 +731,8 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
     const live = isGameLive(game);
     const gameDate = new Date(game.date);
     const timeStr = gameDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const awayFade = isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : '';
+    const homeFade = isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : '';
 
     return (
       <button
@@ -726,42 +757,60 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
         )}
         <div className="space-y-2 sm:space-y-2.5">
           {/* Away Team */}
-          <div className={`flex items-center gap-2 sm:gap-2.5 ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'opacity-50' : ''}`}>
+          <div className="flex items-center gap-2 sm:gap-2.5">
             {game.awayTeam?.logo ? (
-              <img src={tl(game.awayTeam.logo)} alt={game.awayTeam.abbreviation} className="w-7 h-7 sm:w-8 sm:h-8 object-contain flex-shrink-0" />
+              <img src={tl(game.awayTeam.logo)} alt={game.awayTeam.abbreviation} className={`w-7 h-7 sm:w-8 sm:h-8 object-contain flex-shrink-0 ${awayFade}`} />
             ) : (
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] flex-shrink-0" style={{ backgroundColor: game.awayTeam?.color || '#666' }}>
+              <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] flex-shrink-0 ${awayFade}`} style={{ backgroundColor: game.awayTeam?.color || '#666' }}>
                 {(game.awayTeam?.abbreviation || '?').slice(0, 3)}
               </div>
             )}
-            <TeamRankBadge team={game.awayTeam} />
-            <span className="text-fg font-semibold text-base sm:text-lg truncate flex-1">
-              {game.awayTeam?.abbreviation || game.awayTeam?.name || 'TBD'}
-            </span>
+            <span className={awayFade}><TeamRankBadge team={game.awayTeam} /></span>
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              <span className={`text-fg font-semibold text-base sm:text-lg truncate ${awayFade}`}>
+                {game.awayTeam?.abbreviation || game.awayTeam?.name || 'TBD'}
+              </span>
+              {(() => {
+                const status = getMyPickStatus(game, game.awayTeam?.id);
+                if (status === 'correct') return <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0"><Check className="w-3 h-3 text-white" strokeWidth={3} /></span>;
+                if (status === 'wrong') return <span className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0"><X className="w-3 h-3 text-white" strokeWidth={3} /></span>;
+                if (status === 'picked') return <Check className="w-5 h-5 text-fg/60 flex-shrink-0" strokeWidth={2.5} />;
+                return null;
+              })()}
+            </div>
             {(isPast || live) && (
               <ScoreDisplay
                 score={getScore(game.awayTeam)}
-                className={`font-bold text-base sm:text-lg ${isPast && getScore(game.awayTeam) < getScore(game.homeTeam) ? 'text-fg/40' : 'text-fg'}`}
+                className={`font-bold text-base sm:text-lg ${awayFade ? 'text-fg/40' : 'text-fg'}`}
               />
             )}
           </div>
           {/* Home Team */}
-          <div className={`flex items-center gap-2 sm:gap-2.5 ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'opacity-50' : ''}`}>
+          <div className="flex items-center gap-2 sm:gap-2.5">
             {game.homeTeam?.logo ? (
-              <img src={tl(game.homeTeam.logo)} alt={game.homeTeam.abbreviation} className="w-7 h-7 sm:w-8 sm:h-8 object-contain flex-shrink-0" />
+              <img src={tl(game.homeTeam.logo)} alt={game.homeTeam.abbreviation} className={`w-7 h-7 sm:w-8 sm:h-8 object-contain flex-shrink-0 ${homeFade}`} />
             ) : (
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] flex-shrink-0" style={{ backgroundColor: game.homeTeam?.color || '#666' }}>
+              <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] flex-shrink-0 ${homeFade}`} style={{ backgroundColor: game.homeTeam?.color || '#666' }}>
                 {(game.homeTeam?.abbreviation || '?').slice(0, 3)}
               </div>
             )}
-            <TeamRankBadge team={game.homeTeam} />
-            <span className="text-fg font-semibold text-base sm:text-lg truncate flex-1">
-              {game.homeTeam?.abbreviation || game.homeTeam?.name || 'TBD'}
-            </span>
+            <span className={homeFade}><TeamRankBadge team={game.homeTeam} /></span>
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              <span className={`text-fg font-semibold text-base sm:text-lg truncate ${homeFade}`}>
+                {game.homeTeam?.abbreviation || game.homeTeam?.name || 'TBD'}
+              </span>
+              {(() => {
+                const status = getMyPickStatus(game, game.homeTeam?.id);
+                if (status === 'correct') return <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0"><Check className="w-3 h-3 text-white" strokeWidth={3} /></span>;
+                if (status === 'wrong') return <span className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0"><X className="w-3 h-3 text-white" strokeWidth={3} /></span>;
+                if (status === 'picked') return <Check className="w-5 h-5 text-fg/60 flex-shrink-0" strokeWidth={2.5} />;
+                return null;
+              })()}
+            </div>
             {(isPast || live) && (
               <ScoreDisplay
                 score={getScore(game.homeTeam)}
-                className={`font-bold text-base sm:text-lg ${isPast && getScore(game.homeTeam) < getScore(game.awayTeam) ? 'text-fg/40' : 'text-fg'}`}
+                className={`font-bold text-base sm:text-lg ${homeFade ? 'text-fg/40' : 'text-fg'}`}
               />
             )}
           </div>

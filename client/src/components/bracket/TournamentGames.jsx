@@ -620,7 +620,8 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    requestAnimationFrame(updateScrollArrows);
+    // Double rAF to ensure cards have rendered before measuring
+    requestAnimationFrame(() => requestAnimationFrame(updateScrollArrows));
     el.addEventListener('scroll', updateScrollArrows, { passive: true });
     const observer = new ResizeObserver(updateScrollArrows);
     observer.observe(el);
@@ -1571,26 +1572,22 @@ export default function TournamentGames({ tournamentData, season, leaderboard = 
         <div className="text-center text-fg/40 text-sm py-4">No {gameFilter} games</div>
       ) : (
         <div className="relative">
-          {/* Desktop scroll arrows */}
-          {canScrollLeft && (
-            <button
-              className="hidden sm:flex absolute -left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-canvas shadow-md border border-fg/10 hover:bg-fg/6 transition-colors"
-              onClick={() => scrollRef.current?.scrollBy({ left: -260, behavior: 'smooth' })}
-            >
-              <ChevronLeft className="w-4 h-4 text-fg/60" />
-            </button>
-          )}
+          {/* Desktop scroll arrows — always rendered, toggled via opacity for smooth transitions */}
+          <button
+            className={`hidden sm:flex absolute -left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-canvas shadow-md border border-fg/10 hover:bg-fg/6 transition-opacity ${canScrollLeft ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            onClick={() => scrollRef.current?.scrollBy({ left: -260, behavior: 'smooth' })}
+          >
+            <ChevronLeft className="w-4 h-4 text-fg/60" />
+          </button>
           <div ref={scrollRef} className="relative z-0 flex items-start gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
             {filtered.map(game => renderMiniCard(game))}
           </div>
-          {canScrollRight && (
-            <button
-              className="hidden sm:flex absolute -right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-canvas shadow-md border border-fg/10 hover:bg-fg/6 transition-colors"
-              onClick={() => scrollRef.current?.scrollBy({ left: 260, behavior: 'smooth' })}
-            >
-              <ChevronRight className="w-4 h-4 text-fg/60" />
-            </button>
-          )}
+          <button
+            className={`hidden sm:flex absolute -right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-canvas shadow-md border border-fg/10 hover:bg-fg/6 transition-opacity ${canScrollRight ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            onClick={() => scrollRef.current?.scrollBy({ left: 260, behavior: 'smooth' })}
+          >
+            <ChevronRight className="w-4 h-4 text-fg/60" />
+          </button>
         </div>
       )}
 

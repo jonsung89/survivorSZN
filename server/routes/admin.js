@@ -2518,13 +2518,28 @@ router.post('/tournaments/:id/games/:gameId/result', async (req, res) => {
     const { winningTeamId, losingTeamId, winningScore, losingScore } = req.body;
     if (!winningTeamId) return res.status(400).json({ error: 'winningTeamId is required' });
 
+    // Look up existing team order to assign scores to correct team1/team2
+    const existing = await db.getOne('SELECT team1_espn_id, team2_espn_id FROM tournament_games WHERE tournament_id = $1 AND id = $2', [req.params.id, req.params.gameId]);
+    let t1Score = winningScore || null;
+    let t2Score = losingScore || null;
+    if (existing && winningTeamId) {
+      // Assign the winning score to whichever team won
+      if (String(winningTeamId) === String(existing.team1_espn_id)) {
+        t1Score = winningScore || null;
+        t2Score = losingScore || null;
+      } else if (String(winningTeamId) === String(existing.team2_espn_id)) {
+        t1Score = losingScore || null;
+        t2Score = winningScore || null;
+      }
+    }
+
     const game = await db.getOne(
       `UPDATE tournament_games SET
         winning_team_espn_id = $1, losing_team_espn_id = $2,
         team1_score = $3, team2_score = $4,
         status = 'final', completed_at = COALESCE(completed_at, NOW()), updated_at = NOW()
        WHERE tournament_id = $5 AND id = $6 RETURNING *`,
-      [winningTeamId, losingTeamId || null, winningScore || null, losingScore || null, req.params.id, req.params.gameId]
+      [winningTeamId, losingTeamId || null, t1Score, t2Score, req.params.id, req.params.gameId]
     );
     if (!game) return res.status(404).json({ error: 'Game not found' });
 

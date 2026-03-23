@@ -2203,8 +2203,8 @@ async function refreshGameFromESPN(tournamentId, gameId) {
   if (updated.slot_number && gameStatus === 'final' && winnerId) {
     const challenges = await db.getAll('SELECT id FROM bracket_challenges WHERE tournament_id = $1', [tournamentId]);
     for (const c of challenges) {
-      const wScore = comp1.winner ? team1Score : team2Score;
-      const lScore = comp1.winner ? team2Score : team1Score;
+      const wScore = winnerId === team1EspnId ? team1Score : team2Score;
+      const lScore = winnerId === team1EspnId ? team2Score : team1Score;
       await db.run(`
         INSERT INTO bracket_results (challenge_id, slot_number, espn_event_id, winning_team_id, losing_team_id, winning_score, losing_score, round, status, completed_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'final', NOW())

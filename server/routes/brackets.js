@@ -1159,11 +1159,15 @@ router.post('/update-results', async (req, res) => {
       // Sync to tournament_games if any challenge has tournament_id
       const tournamentId = challenges.find(c => c.tournament_id)?.tournament_id;
       if (tournamentId) {
-        // Build event→slot map from tournament_games
-        const tGames = await db.getAll('SELECT slot_number, espn_event_id FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL', [tournamentId]);
+        // Build event→slot map and team mapping from tournament_games
+        const tGames = await db.getAll('SELECT slot_number, espn_event_id, team1_espn_id, team2_espn_id FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL', [tournamentId]);
         const eventToSlot = {};
+        const eventToGame = {};
         for (const g of tGames) {
-          if (g.espn_event_id) eventToSlot[g.espn_event_id] = g.slot_number;
+          if (g.espn_event_id) {
+            eventToSlot[g.espn_event_id] = g.slot_number;
+            eventToGame[g.espn_event_id] = g;
+          }
         }
 
         let hasFirstGameStarted = false;
@@ -1172,13 +1176,23 @@ router.post('/update-results', async (req, res) => {
           if (result.status !== 'pending') hasFirstGameStarted = true;
 
           if (result.status === 'final' && result.winningTeamId && slotNum) {
+            // Map scores to correct team1/team2 using ESPN IDs
+            const gameRow = eventToGame[eventId];
+            let t1Score = result.winningScore;
+            let t2Score = result.losingScore;
+            if (gameRow && result.competitors) {
+              const c1 = result.competitors.find(c => String(c.teamId) === String(gameRow.team1_espn_id));
+              const c2 = result.competitors.find(c => String(c.teamId) === String(gameRow.team2_espn_id));
+              if (c1) t1Score = c1.score;
+              if (c2) t2Score = c2.score;
+            }
             await db.run(`
               UPDATE tournament_games SET
                 winning_team_espn_id = $1, losing_team_espn_id = $2,
                 team1_score = $3, team2_score = $4,
                 status = 'final', completed_at = COALESCE(completed_at, NOW()), updated_at = NOW()
               WHERE tournament_id = $5 AND slot_number = $6
-            `, [result.winningTeamId, result.losingTeamId, result.winningScore, result.losingScore, tournamentId, slotNum]);
+            `, [result.winningTeamId, result.losingTeamId, t1Score, t2Score, tournamentId, slotNum]);
             totalUpdated++;
           } else if (result.status === 'in_progress' && slotNum) {
             await db.run(`
@@ -1189,6 +1203,16 @@ router.post('/update-results', async (req, res) => {
 
           // Also update by espn_event_id for First Four games (no slot_number)
           if (!slotNum && (result.status === 'final' || result.status === 'in_progress')) {
+            // Look up existing team order to assign scores correctly
+            const ff = await db.getOne('SELECT team1_espn_id, team2_espn_id FROM tournament_games WHERE tournament_id = $1 AND espn_event_id = $2', [tournamentId, eventId]);
+            let ffT1Score = result.winningScore;
+            let ffT2Score = result.losingScore;
+            if (ff && result.competitors) {
+              const c1 = result.competitors.find(c => String(c.teamId) === String(ff.team1_espn_id));
+              const c2 = result.competitors.find(c => String(c.teamId) === String(ff.team2_espn_id));
+              if (c1) ffT1Score = c1.score;
+              if (c2) ffT2Score = c2.score;
+            }
             await db.run(`
               UPDATE tournament_games SET
                 winning_team_espn_id = CASE WHEN $1::text IS NOT NULL THEN $1 ELSE winning_team_espn_id END,
@@ -1197,7 +1221,7 @@ router.post('/update-results', async (req, res) => {
                 status = $5, completed_at = CASE WHEN $5 = 'final' THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
                 updated_at = NOW()
               WHERE tournament_id = $6 AND espn_event_id = $7
-            `, [result.winningTeamId || null, result.losingTeamId || null, result.winningScore, result.losingScore, result.status, tournamentId, eventId]);
+            `, [result.winningTeamId || null, result.losingTeamId || null, ffT1Score, ffT2Score, result.status, tournamentId, eventId]);
           }
         }
 

@@ -372,9 +372,10 @@ async function getTournamentBracket(season) {
       const regionSlotBase = rb.start + regionIdx * rb.gamesPerRegion;
 
       // Find correct slot by tracing teams back to their previous-round slot
+      // Skip placeholder IDs (negative values like "-1", "-2") — they're TBD teams
       const teamSlotMap = buildTeamSlotMap(game.round);
-      const t1Id = game.team1?.id ? String(game.team1.id) : null;
-      const t2Id = game.team2?.id ? String(game.team2.id) : null;
+      const t1Id = game.team1?.id && parseInt(game.team1.id) > 0 ? String(game.team1.id) : null;
+      const t2Id = game.team2?.id && parseInt(game.team2.id) > 0 ? String(game.team2.id) : null;
       const prevSlot1 = t1Id ? teamSlotMap[t1Id] : null;
       const prevSlot2 = t2Id ? teamSlotMap[t2Id] : null;
       const prevSlot = prevSlot1 ?? prevSlot2;
@@ -415,9 +416,10 @@ async function getTournamentBracket(season) {
       }
     } else if (game.round === 4) {
       // Final Four — match by tracing E8 winners
+      // Skip placeholder IDs (negative values) — they're TBD teams
       const teamSlotMap = buildTeamSlotMap(4);
-      const t1Id = game.team1?.id ? String(game.team1.id) : null;
-      const t2Id = game.team2?.id ? String(game.team2.id) : null;
+      const t1Id = game.team1?.id && parseInt(game.team1.id) > 0 ? String(game.team1.id) : null;
+      const t2Id = game.team2?.id && parseInt(game.team2.id) > 0 ? String(game.team2.id) : null;
       const prevSlot1 = t1Id ? teamSlotMap[t1Id] : null;
       const prevSlot2 = t2Id ? teamSlotMap[t2Id] : null;
       const prevSlot = prevSlot1 ?? prevSlot2;
@@ -427,7 +429,8 @@ async function getTournamentBracket(season) {
         targetSlot = getNextSlot(prevSlot);
       }
 
-      if (targetSlot != null && targetSlot >= 61 && targetSlot <= 62) {
+      // Don't overwrite if the target slot is already occupied
+      if (targetSlot != null && targetSlot >= 61 && targetSlot <= 62 && !slots[targetSlot]) {
         slots[targetSlot] = {
           team1: game.team1,
           team2: game.team2,

@@ -256,7 +256,7 @@ function TeamRow({ team, isWinner, isEliminated, score, isDark }) {
         )}
         <span className={`text-base font-medium truncate ${
           isEliminated ? 'text-fg/30 line-through' :
-          isLoser ? 'text-fg/35 line-through' :
+          isLoser ? 'text-fg/50' :
           'text-fg'
         }`}>
           {team.shortName || team.abbreviation || team.name}
@@ -312,7 +312,7 @@ function SemiTeamRow({ team, isWinner, isEliminated, isDark }) {
         )}
         <span className={`text-base truncate ${
           isEliminated ? 'text-fg/30 line-through' :
-          isLoser ? 'text-fg/35 line-through' :
+          isLoser ? 'text-fg/50' :
           isWinner ? 'text-fg font-medium' : 'text-fg/80'
         }`}>
           {team.abbreviation || team.shortName || team.name}

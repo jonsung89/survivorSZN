@@ -90,7 +90,16 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
         correctPicks.push({ team: game.winning_team_espn_id === game.team1_espn_id ? game.team1_name : game.team2_name, seed: game.winning_team_espn_id === game.team1_espn_id ? game.team1_seed : game.team2_seed });
       } else {
         incorrect++;
-        const pickedTeam = String(pick) === String(game.team1_espn_id) ? game.team1_name : game.team2_name;
+        // Check if the pick matches either team in this game — if not, their bracket was already busted
+        // (they picked a team that was eliminated in an earlier round)
+        let pickedTeam;
+        if (String(pick) === String(game.team1_espn_id)) {
+          pickedTeam = game.team1_name;
+        } else if (String(pick) === String(game.team2_espn_id)) {
+          pickedTeam = game.team2_name;
+        } else {
+          pickedTeam = '(bracket busted — picked a team eliminated earlier)';
+        }
         incorrectPicks.push({ picked: pickedTeam, winner: game.winning_team_espn_id === game.team1_espn_id ? game.team1_name : game.team2_name });
       }
     }
@@ -334,24 +343,30 @@ async function generateRecap(data, customPrompt) {
 
     const pickedWinner = [];
     const pickedLoser = [];
+    const bracketBusted = [];
     const noPick = [];
+    const losingTeamId = winner ? g.team2_espn_id : g.team1_espn_id;
     for (const m of data.memberScores) {
       const pick = m.picks[g.slot_number] || m.picks[String(g.slot_number)];
       if (!pick) { noPick.push(m.displayName); continue; }
       if (String(pick) === String(g.winning_team_espn_id)) {
         pickedWinner.push(m.displayName);
-      } else {
+      } else if (String(pick) === String(losingTeamId)) {
         pickedLoser.push(m.displayName);
+      } else {
+        // Picked a team that was eliminated earlier — bracket was busted for this slot
+        bracketBusted.push(m.displayName);
       }
     }
-    const total = pickedWinner.length + pickedLoser.length + noPick.length;
-    const winnerPct = total > 0 ? Math.round((pickedWinner.length / total) * 100) : 0;
+    const validPickers = pickedWinner.length + pickedLoser.length;
+    const winnerPct = validPickers > 0 ? Math.round((pickedWinner.length / validPickers) * 100) : 0;
 
     let narrative = `(${winnerSeed}) ${winnerName} ${winScore} - (${loserSeed}) ${loserName} ${loseScore} [margin: ${margin}]`;
     if (isUpset) narrative += ' [UPSET]';
     if (isClose) narrative += ' [CLOSE GAME]';
     narrative += `\n  Picked ${winnerName} (${winnerPct}%): ${pickedWinner.length > 0 ? pickedWinner.join(', ') : 'nobody'}`;
     narrative += `\n  Picked ${loserName} (${100 - winnerPct}%): ${pickedLoser.length > 0 ? pickedLoser.join(', ') : 'nobody'}`;
+    if (bracketBusted.length > 0) narrative += `\n  Bracket already busted (picked a team eliminated earlier): ${bracketBusted.join(', ')}`;
     if (noPick.length > 0) narrative += `\n  No pick (counts as wrong): ${noPick.join(', ')}`;
     if (pickedLoser.length > 0 && pickedLoser.length <= 3 && isUpset) {
       narrative += `\n  NOTE: ${pickedLoser.join(', ')} made a contrarian pick on the losing upset side`;

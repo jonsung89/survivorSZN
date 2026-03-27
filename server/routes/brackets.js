@@ -661,9 +661,21 @@ router.get('/:bracketId', authMiddleware, async (req, res) => {
 // ─── Tournament Data (Public) ────────────────────────────────────────────────
 
 // Get tournament bracket structure
+// Uses buildTournamentDataFromDB when a tournament exists in the DB, so that
+// slot numbering is consistent with the canonical region ordering used when
+// users filled their brackets. Falls back to getTournamentBracket (live ESPN
+// data) when no DB tournament exists yet (pre-bracket-set).
 router.get('/tournament/:season', async (req, res) => {
   try {
-    const bracket = await getTournamentBracket(parseInt(req.params.season));
+    const season = parseInt(req.params.season);
+    // Check if we have a DB tournament for this season
+    const tournament = await db.getOne('SELECT id FROM tournaments WHERE season = $1', [season]);
+    if (tournament) {
+      const data = await buildTournamentDataFromDB(tournament.id);
+      return res.json(data);
+    }
+    // No DB tournament yet — use live ESPN data
+    const bracket = await getTournamentBracket(season);
     res.json(bracket);
   } catch (error) {
     console.error('Error fetching tournament data:', error);

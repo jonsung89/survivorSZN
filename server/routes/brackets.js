@@ -1611,10 +1611,10 @@ router.post('/tournaments/:tournamentId/generate-recap', authMiddleware, async (
     if (!user?.is_admin) return res.status(403).json({ error: 'Admin only' });
 
     const { tournamentId } = req.params;
-    const { leagueId, date } = req.body;
+    const { leagueId, date, customPrompt } = req.body;
     if (!leagueId || !date) return res.status(400).json({ error: 'leagueId and date required' });
 
-    const recap = await generateAndStoreRecap(tournamentId, leagueId, date);
+    const recap = await generateAndStoreRecap(tournamentId, leagueId, date, customPrompt || null);
 
     // Send TL;DR to league chat as ai_recap message (one per date per league)
     const io = req.app.get('io');

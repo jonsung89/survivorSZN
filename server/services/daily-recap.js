@@ -271,7 +271,7 @@ async function gatherRecapData(tournamentId, leagueId, recapDate) {
 /**
  * Generate a recap using Claude API.
  */
-async function generateRecap(data) {
+async function generateRecap(data, customPrompt) {
   const dotenvResult = require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
   const apiKey = dotenvResult.parsed?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
@@ -315,8 +315,55 @@ async function generateRecap(data) {
 
   const memberHighlights = data.memberScores.map(m => {
     const boldPicks = m.correctPicks.filter(p => p.seed >= 8).map(p => `(${p.seed}) ${p.team}`);
-    return `${m.displayName}: ${m.dailyCorrect}/${m.totalGamesForDay} correct${boldPicks.length > 0 ? ` | Bold correct: ${boldPicks.join(', ')}` : ''}`;
+    const wrongPicks = (m.incorrectPicks || []).map(p => `picked ${p.picked}, lost to ${p.winner}`);
+    return `${m.displayName}: ${m.dailyCorrect}/${m.totalGamesForDay} correct${boldPicks.length > 0 ? ` | Bold correct: ${boldPicks.join(', ')}` : ''}${wrongPicks.length > 0 ? ` | Missed: ${wrongPicks.join('; ')}` : ''}`;
   }).join('\n');
+
+  // Build per-game pick breakdown showing who picked which team
+  const perGamePickBreakdown = data.games.map(g => {
+    const winner = g.winning_team_espn_id === g.team1_espn_id;
+    const winnerName = winner ? g.team1_name : g.team2_name;
+    const winnerSeed = winner ? g.team1_seed : g.team2_seed;
+    const loserName = winner ? g.team2_name : g.team1_name;
+    const loserSeed = winner ? g.team2_seed : g.team1_seed;
+    const winScore = winner ? g.team1_score : g.team2_score;
+    const loseScore = winner ? g.team2_score : g.team1_score;
+    const margin = winScore - loseScore;
+    const isUpset = winnerSeed > loserSeed;
+    const isClose = margin <= 5;
+
+    const pickedWinner = [];
+    const pickedLoser = [];
+    const noPick = [];
+    for (const m of data.memberScores) {
+      const pick = m.picks[g.slot_number] || m.picks[String(g.slot_number)];
+      if (!pick) { noPick.push(m.displayName); continue; }
+      if (String(pick) === String(g.winning_team_espn_id)) {
+        pickedWinner.push(m.displayName);
+      } else {
+        pickedLoser.push(m.displayName);
+      }
+    }
+    const total = pickedWinner.length + pickedLoser.length + noPick.length;
+    const winnerPct = total > 0 ? Math.round((pickedWinner.length / total) * 100) : 0;
+
+    let narrative = `(${winnerSeed}) ${winnerName} ${winScore} - (${loserSeed}) ${loserName} ${loseScore} [margin: ${margin}]`;
+    if (isUpset) narrative += ' [UPSET]';
+    if (isClose) narrative += ' [CLOSE GAME]';
+    narrative += `\n  Picked ${winnerName} (${winnerPct}%): ${pickedWinner.length > 0 ? pickedWinner.join(', ') : 'nobody'}`;
+    narrative += `\n  Picked ${loserName} (${100 - winnerPct}%): ${pickedLoser.length > 0 ? pickedLoser.join(', ') : 'nobody'}`;
+    if (noPick.length > 0) narrative += `\n  No pick (counts as wrong): ${noPick.join(', ')}`;
+    if (pickedLoser.length > 0 && pickedLoser.length <= 3 && isUpset) {
+      narrative += `\n  NOTE: ${pickedLoser.join(', ')} made a contrarian pick on the losing upset side`;
+    }
+    if (pickedWinner.length > 0 && pickedWinner.length <= 3 && isUpset) {
+      narrative += `\n  NOTE: ${pickedWinner.join(', ')} correctly called this upset — only ${winnerPct}% of the group had it`;
+    }
+    if (isClose) {
+      narrative += `\n  NOTE: This was a close game (${margin}-point margin). ${pickedLoser.length > 0 ? `If ${loserName} had won, it would have helped ${pickedLoser.join(', ')}.` : ''}`;
+    }
+    return narrative;
+  }).join('\n\n');
 
   // Build prospect summary with regular season averages
   const prospectsSummary = data.prospects.map(p => {
@@ -373,6 +420,9 @@ ${leaderboardSummary || 'No brackets submitted yet'}
 
 MEMBER PERFORMANCE:
 ${memberHighlights || 'No member data'}
+
+PER-GAME PICK BREAKDOWN (who picked which team in each game):
+${perGamePickBreakdown || 'No data'}
 ${data.prospects.length > 0 ? `\nNBA PROSPECTS WHO PLAYED (with actual game stats and season averages):\n${prospectsSummary}` : ''}
 ${keyPlayersSummary ? `\nKEY PLAYER PERFORMANCES (box scores):\n${keyPlayersSummary}` : ''}
 ${data.todaysGames.length > 0 ? `\nTODAY'S GAMES:\n${todayGamesSummary}\n\nMEMBER PICKS FOR TODAY:\n${todayPicksSummary || 'No data'}${data.todayProspects.length > 0 ? `\n\nPROSPECTS PLAYING TODAY:\n${todayProspectsSummary}` : ''}` : ''}
@@ -392,7 +442,25 @@ SECTION 1 (TLDR for chat): 2-3 casual, SHORT sentences for the group chat. Lead 
 
 SECTION 2 (MEMBERS TAB): This tab is ONLY about the members — their picks, their standings, their wins and losses. Do NOT include game recaps, game summaries, or NBA prospect watch sections here. Those belong in the Games tab.
 
-Start with a ## header for the leaderboard standings. Show the current standings as a MARKDOWN NUMBERED LIST with ONE MEMBER PER LINE. Each member MUST be on its own separate line. Use SEQUENTIAL numbers (1. 2. 3. 4. 5. etc.) for every line — this is required for valid markdown. If members are tied, add "(T-N)" after their points to show the tie rank. Then use ### headers per member (or group of members) to break up the analysis. For each member, talk about their record, which picks hit, bold calls, painful misses. Frame everything from the member's perspective — "PlayerA nailed the #12 upset pick" not "Team X pulled the upset."
+Start with a ## header for the leaderboard standings. Show the current standings as a MARKDOWN NUMBERED LIST with ONE MEMBER PER LINE. Each member MUST be on its own separate line. Use SEQUENTIAL numbers (1. 2. 3. 4. 5. etc.) for every line — this is required for valid markdown. If members are tied, add "(T-N)" after their points to show the tie rank. Then use ### headers per member (or group of members) to break up the analysis.
+
+CRITICAL — YOU MUST USE THE "PER-GAME PICK BREAKDOWN" DATA BELOW. This is the most important data for this section. DO NOT write generic summaries like "went 2-for-4" or "had a rough day." Instead, for EVERY member, reference their SPECIFIC picks by name:
+
+For each member or group, you MUST mention:
+1. Which specific teams they picked correctly and incorrectly (by name, with seed)
+2. Whether their pick was contrarian (few others picked it) or consensus (everyone picked it)
+3. For close games, mention that if the game went the other way it would've helped/hurt them
+4. For members who were the ONLY person (or one of few) to pick a certain team, call that out specifically — that's a great story
+
+Example of GOOD writing (specific, uses the data):
+"**David Kim** was one of only 3 people in the group who picked #3 Illinois over #2 Houston — a bold call that paid off big. He also had #1 Arizona, which everyone got right. But he went with #11 Texas over #2 Purdue and got burned in a close 79-77 game."
+
+Example of BAD writing (generic, ignores the data):
+"David Kim went 2-for-4 and managed to hold onto first place despite a rough day."
+
+The bad example is EXACTLY what you should NOT write. Every paragraph MUST reference specific team names and picks. If you find yourself writing "went X-for-Y" without naming teams, STOP and rewrite it with specifics.
+
+Frame everything from the member's perspective — "PlayerA nailed the #12 upset pick" not "Team X pulled the upset."
 
 Example structure (EACH MEMBER ON ITS OWN LINE, SEQUENTIAL NUMBERS):
 ## Current Standings
@@ -416,7 +484,7 @@ Paragraph about their picks and results...
 ### PlayerB Needs a Miracle
 Paragraph about their struggles and busted picks...
 
-Keep it fun, 4-6 sections with headers. NO game recap paragraphs, NO "Yesterday's Action" sections, NO NBA Prospect Watch sections. Save all of that for the Games tab.
+Keep it fun, 4-6 sections with headers. EVERY section MUST reference specific team names and picks from the per-game breakdown data. NO generic summaries. NO game recap paragraphs, NO "Yesterday's Action" sections, NO NBA Prospect Watch sections. Save all of that for the Games tab.
 
 SECTION 3 (GAMES TAB): This is the tab for recapping yesterday's actual games. All game results, highlights, upsets, blowouts, and NBA prospect performances go HERE (not in the Members tab).
 
@@ -460,7 +528,10 @@ IMPORTANT:
 CRITICAL SECTION BOUNDARIES — READ THIS CAREFULLY:
 - SECTION 2 (MEMBERS) must NEVER contain headers like "Yesterday's Action", "Yesterday's Chaos", "NBA Prospect Watch", "Key Players", game score recaps, or any content that belongs in the Games tab. If you catch yourself writing about game results as standalone sections in Section 2, STOP and move that content to Section 3 instead. Section 2 is ONLY about member picks and standings.
 - SECTION 3 (GAMES) is the ONLY place for game recaps, scores, and prospect performance reviews.
-- SECTION 4 (TODAY) is the ONLY place for today's preview and prospect watch for upcoming games.`;
+- SECTION 4 (TODAY) is the ONLY place for today's preview and prospect watch for upcoming games.${customPrompt ? `
+
+ADDITIONAL INSTRUCTIONS FROM THE LEAGUE ADMIN (follow these carefully):
+${customPrompt}` : ''}`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -483,14 +554,14 @@ CRITICAL SECTION BOUNDARIES — READ THIS CAREFULLY:
 /**
  * Generate and store a daily recap.
  */
-async function generateAndStoreRecap(tournamentId, leagueId, recapDate) {
+async function generateAndStoreRecap(tournamentId, leagueId, recapDate, customPrompt) {
   const data = await gatherRecapData(tournamentId, leagueId, recapDate);
 
   if (data.games.length === 0) {
     throw new Error(`No completed games found for ${recapDate}`);
   }
 
-  const { tldr, fullRecap, membersTab, gamesTab, todayTab } = await generateRecap(data);
+  const { tldr, fullRecap, membersTab, gamesTab, todayTab } = await generateRecap(data, customPrompt);
 
   // Upsert into daily_recaps
   const result = await db.getOne(

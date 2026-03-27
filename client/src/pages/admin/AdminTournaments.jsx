@@ -150,6 +150,7 @@ export default function AdminTournaments() {
   const [recapDateInput, setRecapDateInput] = useState('');
   const [showRecapPanel, setShowRecapPanel] = useState(false);
   const [selectedRecapLeagues, setSelectedRecapLeagues] = useState([]);
+  const [recapLeaguePrompts, setRecapLeaguePrompts] = useState({});
 
   function handleGenerateRecapClick() {
     if (!selectedId || challenges.length === 0) {
@@ -177,7 +178,8 @@ export default function AdminTournaments() {
     let generated = 0;
     try {
       for (const c of challenges.filter(c => selectedRecapLeagues.includes(c.league_id))) {
-        await bracketAPI.generateRecap(selectedId, c.league_id, recapDateInput);
+        const prompt = recapLeaguePrompts[c.league_id]?.trim() || null;
+        await bracketAPI.generateRecap(selectedId, c.league_id, recapDateInput, prompt);
         generated++;
       }
       showToast(`Generated recap for ${generated} league(s) on ${recapDateInput}`, 'success');
@@ -375,16 +377,29 @@ export default function AdminTournaments() {
             </div>
             <div className="space-y-1.5">
               {challenges.map(c => (
-                <label key={c.league_id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-fg/5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedRecapLeagues.includes(c.league_id)}
-                    onChange={() => toggleRecapLeague(c.league_id)}
-                    className="w-4 h-4 rounded accent-emerald-500"
-                  />
-                  <span className="text-sm text-fg">{c.league_name}</span>
-                  <span className="text-sm text-fg/30 ml-auto">{c.bracket_count || 0} brackets</span>
-                </label>
+                <div key={c.league_id} className="rounded-lg hover:bg-fg/5">
+                  <label className="flex items-center gap-2.5 px-3 py-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedRecapLeagues.includes(c.league_id)}
+                      onChange={() => toggleRecapLeague(c.league_id)}
+                      className="w-4 h-4 rounded accent-emerald-500"
+                    />
+                    <span className="text-sm text-fg">{c.league_name}</span>
+                    <span className="text-sm text-fg/30 ml-auto">{c.bracket_count || 0} brackets</span>
+                  </label>
+                  {selectedRecapLeagues.includes(c.league_id) && (
+                    <div className="px-3 pb-2 pl-9">
+                      <textarea
+                        value={recapLeaguePrompts[c.league_id] || ''}
+                        onChange={(e) => setRecapLeaguePrompts(prev => ({ ...prev, [c.league_id]: e.target.value }))}
+                        placeholder="Custom instructions for this league's recap (optional)&#10;e.g. &quot;Be more hopeful about Eunji Kim&quot; or &quot;Highlight the rivalry between David and Brian&quot;"
+                        rows={2}
+                        className="w-full px-3 py-2 bg-fg/10 text-fg rounded-lg text-sm border border-fg/20 placeholder:text-fg/30 resize-y"
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>

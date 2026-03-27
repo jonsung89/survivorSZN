@@ -519,10 +519,10 @@ export const bracketAPI = {
     const res = await authFetch(`/brackets/tournaments/${tournamentId}/recap-dates?leagueId=${leagueId}`);
     return res.json();
   },
-  generateRecap: async (tournamentId, leagueId, date) => {
+  generateRecap: async (tournamentId, leagueId, date, customPrompt) => {
     const res = await authFetch(`/brackets/tournaments/${tournamentId}/generate-recap`, {
       method: 'POST',
-      body: JSON.stringify({ leagueId, date }),
+      body: JSON.stringify({ leagueId, date, customPrompt: customPrompt || undefined }),
     });
     return res.json();
   },

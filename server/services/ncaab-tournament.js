@@ -2011,14 +2011,43 @@ async function syncTournamentFromESPN(season) {
          team2_espn_id = COALESCE(EXCLUDED.team2_espn_id, tournament_games.team2_espn_id),
          espn_event_id = COALESCE(EXCLUDED.espn_event_id, tournament_games.espn_event_id),
          status = EXCLUDED.status, status_detail = EXCLUDED.status_detail,
-         winning_team_espn_id = COALESCE(EXCLUDED.winning_team_espn_id, tournament_games.winning_team_espn_id),
-         losing_team_espn_id = COALESCE(EXCLUDED.losing_team_espn_id, tournament_games.losing_team_espn_id),
-         team1_score = COALESCE(EXCLUDED.team1_score, tournament_games.team1_score),
-         team2_score = COALESCE(EXCLUDED.team2_score, tournament_games.team2_score),
+         -- When the ESPN event changes (different game assigned to this slot),
+         -- clear stale winner/loser/scores so they don't persist from the old game.
+         -- Use COALESCE only when the event hasn't changed.
+         winning_team_espn_id = CASE
+           WHEN EXCLUDED.espn_event_id IS NOT NULL AND tournament_games.espn_event_id IS NOT NULL
+                AND EXCLUDED.espn_event_id != tournament_games.espn_event_id
+           THEN EXCLUDED.winning_team_espn_id
+           ELSE COALESCE(EXCLUDED.winning_team_espn_id, tournament_games.winning_team_espn_id)
+         END,
+         losing_team_espn_id = CASE
+           WHEN EXCLUDED.espn_event_id IS NOT NULL AND tournament_games.espn_event_id IS NOT NULL
+                AND EXCLUDED.espn_event_id != tournament_games.espn_event_id
+           THEN EXCLUDED.losing_team_espn_id
+           ELSE COALESCE(EXCLUDED.losing_team_espn_id, tournament_games.losing_team_espn_id)
+         END,
+         team1_score = CASE
+           WHEN EXCLUDED.espn_event_id IS NOT NULL AND tournament_games.espn_event_id IS NOT NULL
+                AND EXCLUDED.espn_event_id != tournament_games.espn_event_id
+           THEN EXCLUDED.team1_score
+           ELSE COALESCE(EXCLUDED.team1_score, tournament_games.team1_score)
+         END,
+         team2_score = CASE
+           WHEN EXCLUDED.espn_event_id IS NOT NULL AND tournament_games.espn_event_id IS NOT NULL
+                AND EXCLUDED.espn_event_id != tournament_games.espn_event_id
+           THEN EXCLUDED.team2_score
+           ELSE COALESCE(EXCLUDED.team2_score, tournament_games.team2_score)
+         END,
+         completed_at = CASE
+           WHEN EXCLUDED.espn_event_id IS NOT NULL AND tournament_games.espn_event_id IS NOT NULL
+                AND EXCLUDED.espn_event_id != tournament_games.espn_event_id
+           THEN NULL
+           WHEN EXCLUDED.status = 'final' AND tournament_games.completed_at IS NULL THEN NOW()
+           ELSE tournament_games.completed_at
+         END,
          start_time = COALESCE(EXCLUDED.start_time, tournament_games.start_time),
          venue = COALESCE(EXCLUDED.venue, tournament_games.venue),
          broadcast = COALESCE(EXCLUDED.broadcast, tournament_games.broadcast),
-         completed_at = CASE WHEN EXCLUDED.status = 'final' AND tournament_games.completed_at IS NULL THEN NOW() ELSE tournament_games.completed_at END,
          updated_at = NOW()`,
       [tournamentId, slotNum, round, regionIdx, slot.espnEventId || null, team1Id, team2Id, gameStatus, winnerId, loserId, t1Score, t2Score, slot.startDate || null, slot.venue || null, slot.broadcast || null, slot.statusDetail || null]
     );
@@ -2162,16 +2191,19 @@ async function refreshGameFromESPN(tournamentId, gameId) {
 
   // Match ESPN competitors to existing team1/team2 order in the database
   // ESPN returns competitors in home/away order which may differ from bracket order
-  const compA = competitors.find(c => String(c.id) === String(game.team1_espn_id));
-  const compB = competitors.find(c => String(c.id) === String(game.team2_espn_id));
-  // If teams don't match existing order (e.g. teams not yet set), fall back to ESPN order
+  // Check for placeholder team IDs (negative values like -1, -2 used as placeholders)
+  const hasValidTeam1 = game.team1_espn_id && parseInt(game.team1_espn_id) > 0;
+  const hasValidTeam2 = game.team2_espn_id && parseInt(game.team2_espn_id) > 0;
+  const compA = hasValidTeam1 ? competitors.find(c => String(c.id) === String(game.team1_espn_id)) : null;
+  const compB = hasValidTeam2 ? competitors.find(c => String(c.id) === String(game.team2_espn_id)) : null;
+  // If teams don't match existing order (e.g. teams not yet set or placeholders), fall back to ESPN order
   const team1Score = compA ? (compA.score != null ? parseInt(compA.score) : null)
     : (comp1.score != null ? parseInt(comp1.score) : null);
   const team2Score = compB ? (compB.score != null ? parseInt(compB.score) : null)
     : (comp2.score != null ? parseInt(comp2.score) : null);
-  // Keep existing team1/team2 order, only fill in if not already set
-  const team1EspnId = game.team1_espn_id || String(comp1.id);
-  const team2EspnId = game.team2_espn_id || String(comp2.id);
+  // Replace placeholder team IDs (negative values) with actual ESPN team IDs
+  const team1EspnId = hasValidTeam1 ? game.team1_espn_id : String(comp1.id);
+  const team2EspnId = hasValidTeam2 ? game.team2_espn_id : String(comp2.id);
 
   const winnerComp = competitors.find(c => c.winner);
   const loserComp = competitors.find(c => !c.winner);

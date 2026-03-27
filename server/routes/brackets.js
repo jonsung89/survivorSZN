@@ -1159,15 +1159,44 @@ router.post('/update-results', async (req, res) => {
       // Sync to tournament_games if any challenge has tournament_id
       const tournamentId = challenges.find(c => c.tournament_id)?.tournament_id;
       if (tournamentId) {
-        // Build event→slot map and team mapping from tournament_games
+        // Re-sync from ESPN to update team IDs, event-to-slot mappings, and
+        // scores for later rounds as teams advance through the bracket.
+        // This is essential because later-round games (S16, E8, etc.) are
+        // initially created with placeholder team IDs when earlier rounds
+        // haven't completed yet. Without this re-sync, team IDs stay as
+        // placeholders (-1, -2) and event-to-slot mappings can be wrong.
+        try {
+          await syncTournamentFromESPN(parseInt(season));
+        } catch (err) {
+          console.error('[update-results] syncTournamentFromESPN failed:', err.message);
+        }
+
+        // Build event→slot map and team mapping from tournament_games (after sync)
         const tGames = await db.getAll('SELECT slot_number, espn_event_id, team1_espn_id, team2_espn_id FROM tournament_games WHERE tournament_id = $1 AND slot_number IS NOT NULL', [tournamentId]);
         const eventToSlot = {};
         const eventToGame = {};
+        const slotToEvent = {};
         for (const g of tGames) {
           if (g.espn_event_id) {
             eventToSlot[g.espn_event_id] = g.slot_number;
             eventToGame[g.espn_event_id] = g;
+            slotToEvent[g.slot_number] = g.espn_event_id;
           }
+        }
+
+        // Clean up stale bracket_results where the event-to-slot mapping changed
+        // (e.g., when an ESPN event was initially assigned to the wrong slot)
+        for (const challenge of challenges) {
+          await db.run(`
+            DELETE FROM bracket_results
+            WHERE challenge_id = $1
+              AND espn_event_id IS NOT NULL
+              AND slot_number IN (
+                SELECT br.slot_number FROM bracket_results br
+                JOIN tournament_games tg ON tg.tournament_id = $2 AND tg.slot_number = br.slot_number
+                WHERE br.challenge_id = $1 AND tg.espn_event_id != br.espn_event_id
+              )
+          `, [challenge.id, tournamentId]);
         }
 
         let hasFirstGameStarted = false;
@@ -1180,25 +1209,51 @@ router.post('/update-results', async (req, res) => {
             const gameRow = eventToGame[eventId];
             let t1Score = result.winningScore;
             let t2Score = result.losingScore;
-            if (gameRow && result.competitors) {
+            // Also update team IDs if they're still placeholders or missing
+            let team1Id = gameRow?.team1_espn_id;
+            let team2Id = gameRow?.team2_espn_id;
+            if (gameRow && result.competitors && result.competitors.length >= 2) {
               const c1 = result.competitors.find(c => String(c.teamId) === String(gameRow.team1_espn_id));
               const c2 = result.competitors.find(c => String(c.teamId) === String(gameRow.team2_espn_id));
               if (c1) t1Score = c1.score;
               if (c2) t2Score = c2.score;
+              // If team IDs are placeholders (negative or null), populate from competitors
+              if (!team1Id || parseInt(team1Id) < 0 || !team2Id || parseInt(team2Id) < 0) {
+                team1Id = String(result.competitors[0].teamId);
+                team2Id = String(result.competitors[1].teamId);
+                t1Score = result.competitors[0].score;
+                t2Score = result.competitors[1].score;
+              }
             }
             await db.run(`
               UPDATE tournament_games SET
                 winning_team_espn_id = $1, losing_team_espn_id = $2,
                 team1_score = $3, team2_score = $4,
+                team1_espn_id = COALESCE(NULLIF($7, ''), team1_espn_id),
+                team2_espn_id = COALESCE(NULLIF($8, ''), team2_espn_id),
                 status = 'final', completed_at = COALESCE(completed_at, NOW()), updated_at = NOW()
               WHERE tournament_id = $5 AND slot_number = $6
-            `, [result.winningTeamId, result.losingTeamId, t1Score, t2Score, tournamentId, slotNum]);
+            `, [result.winningTeamId, result.losingTeamId, t1Score, t2Score, tournamentId, slotNum, team1Id, team2Id]);
             totalUpdated++;
           } else if (result.status === 'in_progress' && slotNum) {
+            // Also update team IDs for in-progress games with placeholder teams
+            const gameRow = eventToGame[eventId];
+            let team1Id = null;
+            let team2Id = null;
+            if (gameRow && result.competitors && result.competitors.length >= 2) {
+              if (!gameRow.team1_espn_id || parseInt(gameRow.team1_espn_id) < 0 || !gameRow.team2_espn_id || parseInt(gameRow.team2_espn_id) < 0) {
+                team1Id = String(result.competitors[0].teamId);
+                team2Id = String(result.competitors[1].teamId);
+              }
+            }
             await db.run(`
-              UPDATE tournament_games SET status = 'in_progress', updated_at = NOW()
+              UPDATE tournament_games SET
+                status = 'in_progress',
+                team1_espn_id = COALESCE(NULLIF($3, ''), team1_espn_id),
+                team2_espn_id = COALESCE(NULLIF($4, ''), team2_espn_id),
+                updated_at = NOW()
               WHERE tournament_id = $1 AND slot_number = $2 AND status != 'final'
-            `, [tournamentId, slotNum]);
+            `, [tournamentId, slotNum, team1Id, team2Id]);
           }
 
           // Also update by espn_event_id for First Four games (no slot_number)

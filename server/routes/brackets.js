@@ -1502,6 +1502,19 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
       }
     }
 
+    // Calculate actual championship total for tiebreaker comparison
+    const champResult = resultsMap[63];
+    let actualChampTotal = null;
+    if (champResult && champResult.status === 'final' && champResult.winning_score != null && champResult.losing_score != null) {
+      actualChampTotal = parseInt(champResult.winning_score) + parseInt(champResult.losing_score);
+      // Add tiebreaker diff to each entry
+      for (const entry of leaderboard) {
+        if (entry.tiebreakerValue != null) {
+          entry.tiebreakerDiff = Math.abs(entry.tiebreakerValue - actualChampTotal);
+        }
+      }
+    }
+
     // Sort: total points → potential points → correct picks → current round points → tiebreaker
     leaderboard.sort((a, b) => {
       if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
@@ -1512,7 +1525,14 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
       if (bRoundPts !== aRoundPts) return bRoundPts - aRoundPts;
       // Final tiebreaker: closer to actual championship total score
       if (challenge.tiebreaker_type === 'total_score') {
-        return (a.tiebreakerValue || 999) - (b.tiebreakerValue || 999);
+        const champResult = resultsMap[63];
+        if (champResult && champResult.status === 'final' && champResult.winning_score != null && champResult.losing_score != null) {
+          const actualTotal = parseInt(champResult.winning_score) + parseInt(champResult.losing_score);
+          const aDiff = Math.abs((a.tiebreakerValue || 0) - actualTotal);
+          const bDiff = Math.abs((b.tiebreakerValue || 0) - actualTotal);
+          return aDiff - bDiff; // Lower difference (closer prediction) wins
+        }
+        // Championship not final yet — don't use tiebreaker
       }
       return 0;
     });
@@ -1525,7 +1545,8 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
         const isTied = entry.totalScore === prev.totalScore &&
           entry.potentialPoints === prev.potentialPoints &&
           entry.correctPicks === prev.correctPicks &&
-          (entry.roundScores?.[currentRound] || 0) === (prev.roundScores?.[currentRound] || 0);
+          (entry.roundScores?.[currentRound] || 0) === (prev.roundScores?.[currentRound] || 0) &&
+          (entry.tiebreakerDiff ?? 999) === (prev.tiebreakerDiff ?? 999);
         if (isTied) {
           entry.rank = prev.rank; // Same rank for ties
         } else {
@@ -1537,7 +1558,7 @@ router.get('/challenges/:challengeId/leaderboard', authMiddleware, async (req, r
     // Check if tournament has started (to control bracket visibility)
     const tournamentStarted = await checkTournamentStarted(challenge.season);
 
-    res.json({ leaderboard, results: resultsMap, scoringSystem, entryFee: parseFloat(challenge.entry_fee) || 0, tournamentStarted, eliminatedTeamIds });
+    res.json({ leaderboard, results: resultsMap, scoringSystem, entryFee: parseFloat(challenge.entry_fee) || 0, tournamentStarted, eliminatedTeamIds, actualChampTotal });
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
